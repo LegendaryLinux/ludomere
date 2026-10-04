@@ -112,8 +112,10 @@ Adding a game library refreshes installed state and sidebar colors without openi
 Storage separates **Game Files**, **Offline Installers**, and **Goodies & Extras**. Each type supports
 multiple directories and its own default. Only Game Files is required; optional types have no
 implicit fallback. Unsafe library roots (including overlapping paths or inaccessible directories)
-remain blocked with a reason. A partial, corrupt or unrecognized game folder is reported separately
-and does not disable other games in that Game Files library. Storage lists affected folders with
+remain blocked with a reason. Extra root files, unrelated folders, trash directories and foreign
+archives do not disable any library type. Partial or corrupt folders with Ludomere installation or
+operation metadata are reported separately and do not disable other games in that Game Files library.
+Storage lists affected folders with
 Browse Files and, for recognized account games, repair and confirmed file-reset actions. Unmatched
 folders can be inspected but are not adopted or deleted automatically.
 Use separate, nonoverlapping roots, for example sibling `Games`, `Installers`, and `Extras`
@@ -121,8 +123,8 @@ directories. Game Files contains installed game directories and Ludomere's `.lud
 infrastructure. Archive roots use the managed `<game>/installer`, `<game>/patch`, or
 `<game>/extra` category layout, with platform/language subdirectories when provided and
 `<game>/dlc/<dlc>/…` for DLC. Installer components such as language packs belong with Offline
-Installers. Archive libraries still require the matching managed layout; changing configuration does
-not convert mixed contents. No files are automatically moved or deleted.
+Installers. These types determine where Ludomere writes game data and downloads; existing unrelated
+contents do not need to match the managed layout. No files are automatically moved or deleted.
 Installation records are retained while a library is incompatible, and running games are not stopped.
 Already indexed files in configured archive libraries are rematched as game/DLC metadata arrives,
 using unambiguous filename, OS, language and known-size matches. Arbitrary flat folders are not
@@ -402,8 +404,8 @@ games continue. Interrupted operations remain recoverable after signing in. Fact
 automatic-resume records after their writers stop, while keeping downloaded and installed files.
 Reset retains a small identity receipt so incomplete game files remain recognizable without
 restoring automatic resume. Older partial Depot folders can also be recognized when a surviving
-journal matches their files. Unidentified folders and content in the wrong library type still
-require correction before the library can be used.
+journal matches their files. Unidentified folders and content in another library type do not block
+library use; selecting an existing game folder still requires its game-specific safety checks.
 If reset preparation cannot finish, the account stays signed out; use Factory Reset again to retry.
 Progress and full error details appear beside the Factory Reset button. An unavailable system
 credential store does not block local reset: its external login entry may remain, but a durable

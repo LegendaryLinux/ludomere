@@ -1,5 +1,27 @@
 # Project plan
 
+## R110 release 0.3.2 publication
+
+- P318 (complete, library_admission): project version metadata bump only; no dependencies.
+- P319 (complete, storage_audit): independent metadata/change review and isolated release-check
+  harness preparation. Root runs build checks and owns commit/push/new upstream PR.
+- P320 (complete, library_admission): investigate two cleanup test failures exposed by the
+  full release gate; correct only obsolete expectations or report actual safety regressions.
+- P321 (complete, storage_audit): independently review cleanup safety and prepare private
+  focused cleanup checks. Full release gate must pass before publication.
+- Root final tools/check.sh and cargo build --locked PASS; commit/push/new PR pending.
+- New branch fix/library-root-tolerance-0.3.2 starts at upstream f4bee36; upstream squashed PR7,
+  whose final tree equals previous branch HEAD. R109 dirty changes preserved without conflict.
+
+## R109 library admission without content-purity restrictions
+
+- P316 (complete, library_admission): minimal storage admission change, focused regressions,
+  updated README; remove only obsolete admission helpers. Preserve typed routing/deletion safety.
+- P317 (complete for scoped verification, storage_audit): independent source/security review and focused private tests;
+  no product edits. Root manages compile/records, no real profiles/files/helpers/full suite/pub.
+- Fifteen focused tests pass (eleven storage, two related storage UI filesystem helpers and two
+  cleanup tests). Final formatting, all-target Clippy -D warnings, diff check and build pass.
+
 ## R108 release verification and publication
 
 - P314 (complete, archive_refresh): bump project release metadata to 0.3.1; no dependency churn.

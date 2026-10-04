@@ -1,6 +1,47 @@
 # Project status
 
-Last meaningful update: 2026-10-03.
+Last meaningful update: 2026-10-04.
+
+## R110 active — 0.3.2 release and new PR
+
+- User authorizes version bump, commit/push and new upstream PR for R109. PR7 is merged.
+  Fetched upstream f4bee36; its tree equals5f38199 despite squashed history. New branch
+  fix/library-root-tolerance-0.3.2 based directly on upstream/main preserves all R109 changes.
+  P318 version metadata, P319 review; root build/publication. No package work.
+- Version metadata and independent review pass. Full isolated release gate passed formatting
+  and Clippy but found two cleanup test failures (544 library tests passed). P320/P321 investigate
+  old whole-library rejection assumptions versus per-file cleanup guarantees before publication.
+  Evidence: /tmp/ludomere-r110-full-build.log; no user files or profiles used.
+- P320/P321 confirmed obsolete test assumptions, not a production cleanup regression. Tests now
+  distinguish unsafe-root refusal, changed verified-replacement refusal and safe partial cleanup
+  with a protected replaced old file. Fresh-snapshot retry, symlink targets, held originals,
+  installed payloads, preferences and job records are covered. Independent final diff review passes;
+  production cleanup code unchanged. Initial failure retained in /tmp/ludomere-r110-full-build-initial.log.
+  Final isolated tools/check.sh and cargo build --locked PASS on the frozen final source:
+  formatting, all-target Clippy, full Rust tests and Python helper tests. Release publication next.
+
+## R109 implemented and verified — allow unrelated library files and folders
+
+- User supersedes earlier strict library-content policy: root extras/trash must not invalidate
+  configured libraries. P316 implements storage admission/README/tests; P317 independent review.
+  Keep actual path/deletion safety and typed destination selection, leave unrelated files alone.
+  Clean starting tree at5f38199, no version/package/publication requested; focused tests only.
+- Whole-library archive evidence/layout policing removed; obsolete archive traversal helpers
+  removed. Root validation retains identity/location/access and reserved infrastructure checks.
+  Full Game Files diagnostics skip unrelated entries, inspect metadata-associated games only,
+  and cap diagnostic traversal without rejecting a root merely for its entry count.
+- Independent source review passes. Compilation passes; thirteen focused private storage/cleanup
+  regressions pending, including extra/trash preservation and retained unsafe-path rejection.
+  Test-only cleanup expectation updated for new policy; no deletion behavior broadened.
+- Final fifteen focused tests PASS: eleven backend storage tests, two related storage-settings
+  filesystem helpers included by the filter, and two exact cleanup regressions. Extra/trash/foreign
+  root contents accepted and preserved, recognized-game diagnostics and path/deletion guards pass.
+- Independent review has no introduced blocker. Final fmt, all-target Clippy -D warnings,
+  git diff --check and cargo build --locked PASS. Evidence /tmp/ludomere-r109-*.log and
+  /tmp/ludomere-p317-{storage,typed-delete,safe-delete}-tests.log; reports
+  /tmp/ludomere-p316-report.md and /tmp/ludomere-p317-review.md. README updated.
+  Tests use private inert files/profiles only; no actual user library accessed. No full suite,
+  schema/version/package changes, commit or publication performed.
 
 ## R108 complete — 0.3.1 build, commit, push and PR comment
 

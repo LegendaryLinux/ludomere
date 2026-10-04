@@ -1,5 +1,19 @@
 # Project specification
 
+## R110 version 0.3.2 and new PR
+
+User requests bump to 0.3.2, commit/push, and a new PR describing the R109 library-admission changes.
+Previous PR7 is merged. Use a separate branch based on current upstream/main; preserve tested
+changes, validate release, and publish to upstream/main. No package build/install requested.
+
+## R109 tolerate unrelated library contents
+
+User reports extra root files and trash folders invalidate entire libraries and requests removing
+those restrictions: knowing where to place game data is enough. Remove content-purity admission
+checks for the library types; retain destination routing and safeguards for actual managed-file
+operations. Unrelated files must be left alone, not flagged as broken games or deleted. Keep
+genuine managed-game repair diagnostics and directory/path/ownership safety. No publication asked.
+
 ## R108 version 0.3.1 and publication
 
 User requests bump to 0.3.1, successful build verification, then commit/push accumulated changes
