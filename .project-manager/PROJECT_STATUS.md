@@ -2,7 +2,7 @@
 
 Last meaningful update: 2026-10-04.
 
-## R110 active — 0.3.2 release and new PR
+## R110 complete — 0.3.2 release and new PR
 
 - User authorizes version bump, commit/push and new upstream PR for R109. PR7 is merged.
   Fetched upstream f4bee36; its tree equals5f38199 despite squashed history. New branch
@@ -18,7 +18,11 @@ Last meaningful update: 2026-10-04.
   installed payloads, preferences and job records are covered. Independent final diff review passes;
   production cleanup code unchanged. Initial failure retained in /tmp/ludomere-r110-full-build-initial.log.
   Final isolated tools/check.sh and cargo build --locked PASS on the frozen final source:
-  formatting, all-target Clippy, full Rust tests and Python helper tests. Release publication next.
+  formatting, all-target Clippy, 546 library tests, six integration tests and five Python tests.
+  Opt-in ignored tests remain outside the default build gate. No package built or installed.
+- Release commit4612df7 pushed to origin/fix/library-root-tolerance-0.3.2 via existing GitHub CLI
+  HTTPS authentication (SSH unavailable). Tracking points to the fork branch. New upstream/main PR:
+  https://github.com/KonoTyran/ludomere/pull/8. This records-only closeout does not change tested code.
 
 ## R109 implemented and verified — allow unrelated library files and folders
 

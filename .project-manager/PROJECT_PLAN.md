@@ -9,7 +9,8 @@
   full release gate; correct only obsolete expectations or report actual safety regressions.
 - P321 (complete, storage_audit): independently review cleanup safety and prepare private
   focused cleanup checks. Full release gate must pass before publication.
-- Root final tools/check.sh and cargo build --locked PASS; commit/push/new PR pending.
+- Root final tools/check.sh and cargo build --locked PASS; release commit4612df7 pushed
+  to origin/fix/library-root-tolerance-0.3.2 and upstream PR8 opened. Records-only closeout follows.
 - New branch fix/library-root-tolerance-0.3.2 starts at upstream f4bee36; upstream squashed PR7,
   whose final tree equals previous branch HEAD. R109 dirty changes preserved without conflict.
 
