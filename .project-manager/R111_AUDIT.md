@@ -38,6 +38,22 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P398 one-expression GTK stat removal independently reviewed; only Downloads folder-button
+  construction changes. Nonempty missing paths now use existing asynchronous validation/error
+  feedback on explicit click; empty paths remain disabled. No safety/path policy or helper change.
+  Formatting/build PASS; recent P396 private opening/error gate retained, no mirror unit test.
+
+- P393 diagnostic repeats failure (p393-3vm0882h): original menu releases, outer popover remains
+  unparented/unrooted/unmapped with one non-diagnostic reference; its submenu/Manage descendants
+  remain. Native focus is the list row, not the popup. Exact remaining owner not established;
+  possible clientless-display transition retention is a hypothesis only. Temporary diagnostics
+  and candidate removed from main while author investigates; no production scope expansion.
+
+- P396 commit9bcc659 exact post-build PASS (67 built audit commits). P393 temporary fixture-only
+  diagnostics preserve its failed strict release assertion and original production candidate;
+  root rerun pending. P397 frozen operation-log admission and P398 one-expression folder
+  eligibility remain separate, with source review/gates before integration.
+
 - P395 commit7f3a6d8 exact post-build PASS (66 built audit commits). P396 exact private helper
   gate PASS p396-ttu00nkh: current signed-out activation, held-worker heartbeat, error/disconnect,
   account/auth retirement, hidden/closed retained parent and weak destruction. Only one captured

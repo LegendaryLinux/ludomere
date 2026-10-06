@@ -2,12 +2,13 @@
 
 ## R111 interactive audit
 
-- P398 (in_progress, ui_critic; reviewer performance_audit): Downloads folder-button eligibility
+- P398 (complete, ui_critic; reviewer performance_audit): Downloads folder-button eligibility
   uses nonempty path, not a GTK-thread directory stat; existing off-thread validation/launcher
   reports missing/inaccessible paths on explicit click. Own isolated details.rs helper expression
   and any already-existing pertinent fixture only, no new worker/cache/test framework. Empty
   path stays disabled; all path safety preserved. Root accepts actionable error vs silent disabled
   for nonempty missing destinations as bounded R111 feedback/performance improvement.
+  Independent exact one-expression/source-callsite review, formatting and build PASS.
 
 - P397 (in_progress, performance_audit; reviewer file_summary): operation-log refresh registers
   activity before spawn and retains original session through profile I/O/publication. Own

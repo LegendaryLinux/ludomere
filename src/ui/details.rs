@@ -3418,7 +3418,7 @@ pub(super) fn folder_button(
     button.set_halign(gtk::Align::Start);
     button.add_css_class("square-action");
     button.add_css_class("folder-action");
-    button.set_sensitive(!path.as_os_str().is_empty() && path.is_dir());
+    button.set_sensitive(!path.as_os_str().is_empty());
     let path = path.to_owned();
     let window = window.clone();
     button.connect_clicked(move |_| {
