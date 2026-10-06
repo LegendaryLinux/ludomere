@@ -2,11 +2,13 @@
 
 ## R111 interactive audit
 
-- P402 (in_progress, ui_critic; reviewer performance_audit): correct singular file count in
+- P402 (complete, ui_critic; reviewer performance_audit): correct singular file count in
   Properties archive category and its confirmation. Two strings only, preserve count/bytes/
   delete consent and behavior; isolated files.rs, source/fmt/build and root one-file visual gate.
   No new fixture framework or actual deletion. Retired-version copy workaround deferred in
   favor of considering an in-place update, with no implementation authorized yet.
+  Independent source review/fmt/build PASS; actual one-file summary and confirmation verified,
+  confirmation canceled without deleting anything. Multi-file summary remains plural.
 
 - P401 (complete, ui_critic; reviewer performance_audit): generic new Properties window opens
   General first, retaining explicit Cloud Saves access and selected page in an existing window.
@@ -22,7 +24,8 @@
   distinguish authored sections from independent review, no blanket readiness declaration.
   No product edits, actual data/credentials/desktop/helpers/network or Cargo; root handles gates.
   No introduced blocker established; p400-assurance.md records independent vs own coverage and
-  inherited limits, including remaining GTK chooser polling. No exhaustive readiness claim.
+  inherited limits. Review correction: chooser polling already runs on a worker, including at
+  baseline5c0d5cb; the initial GTK-I/O residual statement was incorrect. No readiness claim.
 
 - P399 (complete, ui_critic; reviewer performance_audit): runtime-log folder opening
   failure is overwritten by unrelated periodic reader success. Propose minimal distinct local

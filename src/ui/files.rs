@@ -1002,8 +1002,9 @@ pub(super) fn archive_deletion_group(
                             });
                         } else {
                             row.set_subtitle(&format!(
-                                "{} files · {}{}",
+                                "{} {} · {}{}",
                                 files.count(),
+                                if files.count() == 1 { "file" } else { "files" },
                                 human_size(files.bytes()),
                                 if files.blocked_libraries().is_empty() {
                                     String::new()
@@ -1052,8 +1053,9 @@ pub(super) fn archive_deletion_group(
             content.set_margin_bottom(18);
             content.append(&adw::HeaderBar::new());
             let summary = gtk::Label::new(Some(&format!(
-                "Permanently delete the {} files listed below ({}) for this game and its recorded DLC? Incompatible and unavailable libraries are excluded.",
+                "Permanently delete the {} {} listed below ({}) for this game and its recorded DLC? Incompatible and unavailable libraries are excluded.",
                 files.count(),
+                if files.count() == 1 { "file" } else { "files" },
                 human_size(files.bytes())
             )));
             summary.set_wrap(true);

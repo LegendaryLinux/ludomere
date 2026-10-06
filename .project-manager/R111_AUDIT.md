@@ -43,6 +43,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P402 live one-file summary and confirmation PASS (p402-one-file-summary.png and
+  p402-confirmation-properties.png); three-file category remains plural. Confirmation canceled,
+  all archives preserved, test app normally closed. No panic/Gtk-/GLib-GIO-CRITICAL in
+  app-archive-count-preview.log. Independent two-expression review/fmt/build PASS.
+
+- P400 review correction: chooser polling was already worker-side at baseline5c0d5cb and
+  current5764b79. Earlier claim of GTK SQLite polling was incorrect; assurance report amended.
+  Actual worker profile-lifetime handling is a separate proposal under investigation.
+  P401 commit5764b79 exact post-build PASS,71 built audit commits.
+
 - P401 live General-first PASS: new Gungeon Properties opens General, Cloud remains accessible,
   invoking Properties again preserves Cloud in the same existing window. Screenshots
   p401-general-default.png and p401-existing-cloud-retained.png; app-properties-default-preview.log
