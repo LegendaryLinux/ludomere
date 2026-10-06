@@ -1,5 +1,26 @@
 # Project plan
 
+## R111 interactive audit
+
+- P322 (in_progress, ui_critic): human-oriented UI/control inventory and critique; source and sanitized
+  Ludomere screenshots first, isolated UI interaction later. No real profile/keyring/desktop access.
+  Return reproducible findings, expected behavior, severity and evidence; no product edits initially.
+- P323 (complete for initial findings, performance_audit): inspect UI thread work and large-library bottlenecks; report
+  concrete source evidence and bounded fixes. No real data or source edits until assigned.
+- P324 (complete for initial findings, reliability_audit): inspect downloads/installations/state propagation for defects,
+  especially offline/Depot behavior and stale/busy controls. Read-only source audit first.
+- P325 (verified, performance_audit): preserve search/filter intersections, keep search visible
+  and enabled with active chips; own library.rs/window.rs and focused same-file tests. P322 reviews.
+- P326 (pending, reliability_audit): Downloads featured selection must show active work before
+  paused/failed entries and show full featured errors. Own downloads.rs; begin after P325 build.
+- P327 (pending): Depot cancellation confirmation/background cleanup and terminal failure handling;
+  inspect data impact before assigning minimal implementation. Preserve files on safety refusal.
+- Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
+  task assignments, review and per-change commits. Any implementation gets bounded ownership;
+  other agents independently review changes. Do not duplicate shared-file work or run real helpers.
+- Main fast-forwarded to5c0d5cb; audit branch improvement/interactive-ux-audit-2026-10-06.
+  Start08:13:55 UTC, hard stop20:13:55 UTC. No push/PR/package/version requested.
+
 ## R110 release 0.3.2 publication
 
 - P318 (complete, library_admission): project version metadata bump only; no dependencies.

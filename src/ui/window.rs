@@ -1629,12 +1629,6 @@ pub(super) fn connect_actions(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
                 } else {
                     options.string(selected).map(|value| value.to_string())
                 };
-                if state.language_filter.is_some() {
-                    state.query.clear();
-                }
-            }
-            if selected != 0 && !w.search.text().is_empty() {
-                w.search.set_text("");
             }
             refresh_filters(&w, &model.borrow());
         });

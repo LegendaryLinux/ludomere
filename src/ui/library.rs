@@ -257,12 +257,6 @@ pub(super) fn connect_check_filter(
         {
             let mut state = model.borrow_mut();
             update(&mut state, active);
-            if active {
-                state.query.clear();
-            }
-        }
-        if active && !w.search.text().is_empty() {
-            w.search.set_text("");
         }
         refresh_filters(&w, &model.borrow());
         if active && (model.borrow().cloud_saves_only || model.borrow().achievements_only) {
@@ -1320,6 +1314,174 @@ fn direct_game_filter_preserves_library_preferences_and_unknown_metadata() {
 
 #[test]
 #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+fn filter_controls_preserve_search_and_intersect_in_either_order() {
+    assert!(
+        std::env::var("HOME")
+            .unwrap()
+            .starts_with("/tmp/ludomere-p325-")
+    );
+    adw::init().unwrap();
+    let app = adw::Application::builder()
+        .application_id("io.github.ludomere.FilterSearchTest")
+        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .build();
+    app.register(gio::Cancellable::NONE).unwrap();
+    let w = Rc::new(window::create_widgets(&app, &Config::default()));
+    let mut matching = Game {
+        product_id: 1,
+        title: "Needle match".into(),
+        languages: vec!["English".into()],
+        platforms: crate::domain::Platforms {
+            linux: true,
+            ..Default::default()
+        },
+        ..Game::default()
+    };
+    let term = crate::domain::MetadataTerm {
+        provider_id: None,
+        name: "Adventure".into(),
+        slug: "adventure".into(),
+        source: crate::domain::MetadataSource::GamesDb,
+    };
+    matching.metadata.genres.push(term.clone());
+    matching.metadata.game_modes.push(term.clone());
+    matching.metadata.properties.push(term);
+    let model = Rc::new(RefCell::new(AppModel {
+        games: vec![
+            matching.clone(),
+            Game {
+                product_id: 2,
+                title: "Needle other".into(),
+                ..Game::default()
+            },
+            Game {
+                product_id: 3,
+                title: "Unrelated match".into(),
+                ..matching
+            },
+        ],
+        favorites: HashSet::from([1, 3]),
+        tags: HashMap::from([(1, vec!["Custom".into()]), (3, vec!["Custom".into()])]),
+        section_states: (1..=3)
+            .map(|id| ((id, online::DetailSection::Metadata), SectionState::Ready))
+            .collect(),
+        ..AppModel::default()
+    }));
+    for game in &model.borrow().games {
+        let row = game_row(game, false, false);
+        row.set_widget_name(&game.product_id.to_string());
+        w.game_list.append(&row);
+        let card = game_card(game, false, 140);
+        card.set_widget_name(&game.product_id.to_string());
+        w.home_grid.insert(&card, -1);
+    }
+    update_language_options(&w, &model.borrow());
+    update_metadata_filter_options(&w, &model);
+    organization::rebuild_filters(&w, &model);
+    window::connect_actions(&w, &model);
+    w.window.present();
+    while glib::MainContext::default().iteration(false) {}
+    let original_row = find_list_row(&w, "1").unwrap();
+    let original_card = w.home_grid.first_child().unwrap();
+    let page = w.content.visible_child_name();
+    w.game_list.select_row(Some(&original_row));
+    assert!(w.search.grab_focus());
+    let focused = gtk::prelude::GtkWindowExt::focus(&w.window);
+    let search = |query: &str| {
+        w.search.set_text(query);
+        w.search.emit_by_name::<()>("search-changed", &[]);
+    };
+    let assert_results = |expected: &[i64]| {
+        assert_eq!(w.search.text(), "Needle");
+        assert_eq!(model.borrow().query, "Needle");
+        assert!(w.search.is_visible() && w.search.is_sensitive());
+        assert_eq!(w.count.label(), format!("{} games", expected.len()));
+        for id in 1..=3 {
+            assert_eq!(
+                find_list_row(&w, &id.to_string())
+                    .unwrap()
+                    .is_child_visible(),
+                expected.contains(&id)
+            );
+            assert_eq!(
+                w.home_grid
+                    .child_at_index(id as i32 - 1)
+                    .unwrap()
+                    .is_child_visible(),
+                expected.contains(&id)
+            );
+        }
+        assert_eq!(find_list_row(&w, "1"), Some(original_row.clone()));
+        assert_eq!(w.game_list.selected_row(), Some(original_row.clone()));
+        assert_eq!(w.home_grid.first_child(), Some(original_card.clone()));
+        assert_eq!(w.content.visible_child_name(), page);
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focused);
+    };
+    search("Needle");
+    assert_results(&[1, 2]);
+    for check in [&w.favorite_filter, &w.linux_filter] {
+        check.set_active(true);
+        assert_results(&[1]);
+        assert!(w.filter_chips.is_visible());
+        check.set_active(false);
+        assert_results(&[1, 2]);
+        search("");
+        check.set_active(true);
+        search("Needle");
+        assert_results(&[1]);
+        check.set_active(false);
+    }
+    w.language_filter.set_selected(1);
+    assert_results(&[1]);
+    w.language_filter.set_selected(0);
+    assert_results(&[1, 2]);
+    search("");
+    w.language_filter.set_selected(1);
+    search("Needle");
+    assert_results(&[1]);
+    w.language_filter.set_selected(0);
+    for container in [
+        &w.genre_theme_filter_box,
+        &w.game_mode_filter_box,
+        &w.property_filter_box,
+        &w.organization_filters,
+    ] {
+        let check = std::iter::successors(container.first_child(), |widget| widget.next_sibling())
+            .filter_map(|widget| widget.downcast::<gtk::CheckButton>().ok())
+            .find(|check| matches!(check.label().as_deref(), Some("Adventure" | "Custom")))
+            .unwrap();
+        check.set_active(true);
+        assert_results(&[1]);
+        check.set_active(false);
+        assert_results(&[1, 2]);
+        search("");
+        check.set_active(true);
+        search("Needle");
+        assert_results(&[1]);
+        check.set_active(false);
+        assert_results(&[1, 2]);
+    }
+    w.favorite_filter.set_active(true);
+    w.language_filter.set_selected(1);
+    assert_results(&[1]);
+    w.clear_filters.emit_clicked();
+    assert_results(&[1, 2]);
+    w.favorite_filter.set_active(true);
+    gtk::prelude::WidgetExt::activate_action(
+        &w.window,
+        "win.remove-library-filter",
+        Some(&"favorite".to_variant()),
+    )
+    .unwrap();
+    assert_results(&[1, 2]);
+    assert!(model.borrow().section_queue.is_empty());
+    assert!(model.borrow().section_active.is_empty());
+    assert!(!crate::identity::database().exists());
+    w.window.destroy();
+}
+
+#[test]
+#[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
 fn filter_counts_reuse_matches_without_changing_rows_selection_or_collapsed_sections() {
     assert!(
         std::env::var("HOME")
@@ -1812,8 +1974,6 @@ fn rebuild_filter_chips(w: &Widgets, model: &AppModel) {
         button.set_child(Some(&content));
         w.filter_chips.insert(&button, -1);
     }
-    w.search.set_visible(!active);
-    w.search.set_sensitive(!active);
     w.filter_chips.set_visible(active);
 }
 
@@ -1952,13 +2112,7 @@ pub(super) fn rebuild_metadata_filter_box(
             } else {
                 set.remove(&value);
             }
-            if check.is_active() {
-                state.query.clear();
-            }
             drop(state);
-            if check.is_active() && !widgets.search.text().is_empty() {
-                widgets.search.set_text("");
-            }
             refresh_filters(&widgets, &model.borrow());
             if check.is_active() {
                 request_filter_metadata(&widgets, &model, false);
