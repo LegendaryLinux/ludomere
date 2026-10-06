@@ -4,6 +4,14 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P342 committedbf14e58 exact post-commit build PASS. P340 independent review and private native
+  GTK/accessibility regression plus three existing filter/exit regressions PASS; fixture corrected
+  native focus entry and layout timing, assertions retained. Formatting/all-target Clippy/build PASS.
+- P347 source cross-check found cancellation can block GTK on admission held during journal fsync;
+  P348 assigned before consolidated build gate. Other prioritized auth/session/setup paths had no
+  new material finding. P346 independent review PASS and queued; real Gungeon Depot launch rendered
+  its menu and normal window-close ended the process without touching cloud saves.
+
 - P338 committed2a930e4 exact post-commit build PASS. P342 independent review, private no-write
   regression, formatting/all-target Clippy/build PASS; commit next. Real Gungeon Depot reinstall
   finished with setup success before attempted pause; count as reinstall success, not cancellation.

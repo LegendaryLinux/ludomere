@@ -467,6 +467,7 @@ pub(super) fn rebuild_library(w: &Widgets, model: &Rc<RefCell<AppModel>>) {
                     find_named_descendant(&card, "card-title").and_downcast::<gtk::Label>()
             {
                 title.set_label(&game.title);
+                widget.update_property(&[gtk::accessible::Property::Label(&game.title)]);
             }
         }
     }
@@ -550,15 +551,10 @@ pub(super) fn rebuild_library(w: &Widgets, model: &Rc<RefCell<AppModel>>) {
                 model.borrow().cover_states.get(&game.product_id),
             );
             card.set_widget_name(&game.product_id.to_string());
-            let id = game.product_id;
-            let w2 = w.clone_refs();
-            let model = model.clone();
-            attach_game_context_menu(&card, &w, &model, id);
-            let click = gtk::GestureClick::new();
-            click.set_button(gtk::gdk::BUTTON_PRIMARY);
-            click.connect_released(move |_, _, _, _| show_game(&w2, &model, id, None));
-            card.add_controller(click);
-            w.home_grid.insert(&card, -1);
+            attach_game_context_menu(&card, &w, &model, game.product_id);
+            let child = gtk::FlowBoxChild::builder().child(&card).build();
+            child.update_property(&[gtk::accessible::Property::Label(&game.title)]);
+            w.home_grid.insert(&child, -1);
         }
         glib::ControlFlow::Continue
     });
@@ -659,15 +655,10 @@ pub(super) fn rebuild_home_grid(w: &Widgets, model: &Rc<RefCell<AppModel>>) {
             model.borrow().cover_states.get(&game.product_id),
         );
         card.set_widget_name(&game.product_id.to_string());
-        let id = game.product_id;
-        let widgets = w.clone_refs();
-        attach_game_context_menu(&card, w, model, id);
-        let model = model.clone();
-        let click = gtk::GestureClick::new();
-        click.set_button(gtk::gdk::BUTTON_PRIMARY);
-        click.connect_released(move |_, _, _, _| show_game(&widgets, &model, id, None));
-        card.add_controller(click);
-        w.home_grid.insert(&card, -1);
+        attach_game_context_menu(&card, w, model, game.product_id);
+        let child = gtk::FlowBoxChild::builder().child(&card).build();
+        child.update_property(&[gtk::accessible::Property::Label(&game.title)]);
+        w.home_grid.insert(&child, -1);
     }
     refresh_filters(w, &model.borrow());
 }
@@ -1313,6 +1304,189 @@ fn direct_game_filter_preserves_library_preferences_and_unknown_metadata() {
         }
         assert!(!game_matches_library_filters(&model, 999));
     }
+}
+
+#[test]
+#[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+fn home_native_activation_preserves_filters_and_accessible_titles() {
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR",
+        "TMPDIR",
+    ] {
+        assert!(
+            std::env::var(key)
+                .unwrap()
+                .starts_with("/tmp/ludomere-p340-")
+        );
+    }
+    assert_eq!(std::env::var("GTK_A11Y").unwrap(), "test");
+    adw::init().unwrap();
+    gtk::Settings::default()
+        .unwrap()
+        .set_gtk_enable_animations(false);
+    install_css();
+    fn wait(check: impl Fn() -> bool) {
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while !check() && std::time::Instant::now() < until {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(check());
+    }
+    fn assert_title(child: &gtk::FlowBoxChild, title: &str) {
+        let title = std::ffi::CString::new(title).unwrap();
+        // GTK's test API returns null on equality, otherwise an allocated diagnostic.
+        let mismatch: Option<glib::GString> = unsafe {
+            glib::translate::from_glib_full(gtk::ffi::gtk_test_accessible_check_property(
+                child.as_ptr().cast(),
+                gtk::ffi::GTK_ACCESSIBLE_PROPERTY_LABEL,
+                title.as_ptr(),
+            ))
+        };
+        assert_eq!(mismatch, None);
+        assert_eq!(child.accessible_role(), gtk::AccessibleRole::GridCell);
+    }
+    let app = adw::Application::builder()
+        .application_id("io.github.ludomere.GridKeyboardTest")
+        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .build();
+    app.register(gio::Cancellable::NONE).unwrap();
+    let w = Rc::new(window::create_widgets(&app, &Config::default()));
+    let model = Rc::new(RefCell::new(AppModel {
+        games: [(1, "Target Alpha"), (2, "Other game"), (3, "Target Zeta")]
+            .into_iter()
+            .map(|(product_id, title)| Game {
+                product_id,
+                title: title.into(),
+                ..Game::default()
+            })
+            .collect(),
+        section_states: (1..=3)
+            .flat_map(|id| {
+                [
+                    online::DetailSection::Product,
+                    online::DetailSection::Metadata,
+                    online::DetailSection::Artwork,
+                    online::DetailSection::Acquisition,
+                    online::DetailSection::Builds,
+                ]
+                .into_iter()
+                .map(move |section| ((id, section), SectionState::Ready))
+            })
+            .collect(),
+        ..AppModel::default()
+    }));
+    window::connect_actions(&w, &model);
+    let activations = Rc::new(std::cell::Cell::new(0));
+    w.home_grid.connect_child_activated({
+        let activations = activations.clone();
+        move |_, _| activations.set(activations.get() + 1)
+    });
+    w.window.present();
+    for full_rebuild in [false, true] {
+        if full_rebuild {
+            rebuild_home_grid(&w, &model);
+        } else {
+            rebuild_library(&w, &model);
+        }
+        w.content.set_visible_child_name("home");
+        wait(|| {
+            w.home_grid
+                .child_at_index(2)
+                .is_some_and(|child| child.is_mapped())
+        });
+        assert!(w.home_grid.activates_on_single_click());
+        let children = (0..3)
+            .map(|index| w.home_grid.child_at_index(index).unwrap())
+            .collect::<Vec<_>>();
+        for (child, game) in children.iter().zip(&model.borrow().games) {
+            assert_title(child, &game.title);
+            let card = child.child().unwrap();
+            assert!(!card.is_focusable());
+            let controllers = card.observe_controllers();
+            let clicks = (0..controllers.n_items())
+                .filter_map(|index| controllers.item(index).and_downcast::<gtk::GestureClick>())
+                .collect::<Vec<_>>();
+            assert_eq!(clicks.len(), 1);
+            assert_eq!(clicks[0].button(), gtk::gdk::BUTTON_SECONDARY);
+        }
+        w.search.set_text("Target");
+        w.search.emit_by_name::<()>("search-changed", &[]);
+        assert!(w.search.grab_focus());
+        let focus = gtk::prelude::GtkWindowExt::focus(&w.window);
+        let generation = model.borrow().detail_generation;
+        refresh_filters(&w, &model.borrow());
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focus);
+        assert_eq!(model.borrow().detail_generation, generation);
+        assert_eq!(w.count.text(), "2 games");
+        assert!(!children[1].is_child_visible());
+        let allocated = Rc::new(std::cell::Cell::new(false));
+        w.home_grid.add_tick_callback({
+            let allocated = allocated.clone();
+            move |_, _| {
+                allocated.set(true);
+                glib::ControlFlow::Break
+            }
+        });
+        wait(|| allocated.get() && children[0].width() > 0 && children[2].width() > 0);
+        // Enter through FlowBox's native focus handler so it sets its cursor child.
+        assert!(w.home_grid.child_focus(gtk::DirectionType::TabForward));
+        assert!(children[0].has_focus());
+        w.home_grid.emit_by_name::<bool>(
+            "move-cursor",
+            &[&gtk::MovementStep::VisualPositions, &1_i32, &false, &false],
+        );
+        assert!(
+            children[2].has_focus(),
+            "native cursor movement must skip the filtered tile"
+        );
+        let before = activations.get();
+        // Invoke GtkFlowBoxChild's native activation signal, used by Enter and Space.
+        assert!(gtk::prelude::WidgetExt::activate(&children[2]));
+        assert_eq!(activations.get(), before + 1);
+        assert_eq!(model.borrow().selected, Some(3));
+        assert_eq!(model.borrow().detail_generation, generation + 1);
+        assert_eq!(w.content.visible_child_name().as_deref(), Some("details"));
+        assert_eq!(w.search.text(), "Target");
+        assert!(w.window.visible_dialog().is_none());
+
+        gio::prelude::ActionGroupExt::activate_action(&w.window, "home", None);
+        wait(|| children[0].is_mapped());
+        let generation = model.borrow().detail_generation;
+        w.home_grid
+            .emit_by_name::<()>("child-activated", &[&children[1]]);
+        assert_eq!(model.borrow().detail_generation, generation);
+        model.borrow_mut().logout_pending = true;
+        assert!(gtk::prelude::WidgetExt::activate(&children[0]));
+        assert_eq!(model.borrow().detail_generation, generation);
+        model.borrow_mut().logout_pending = false;
+        model.borrow_mut().games[0].title = "Target Alpha — full updated accessible title".into();
+        rebuild_library(&w, &model);
+        assert_eq!(w.home_grid.child_at_index(0), Some(children[0].clone()));
+        assert_title(&children[0], &model.borrow().games[0].title);
+        while glib::MainContext::default().iteration(false) {}
+        model.borrow_mut().games.remove(0);
+        w.home_grid
+            .emit_by_name::<()>("child-activated", &[&children[0]]);
+        assert_eq!(model.borrow().detail_generation, generation);
+        model.borrow_mut().games.insert(
+            0,
+            Game {
+                product_id: 1,
+                title: "Target Alpha".into(),
+                ..Game::default()
+            },
+        );
+        w.search.set_text("");
+        w.search.emit_by_name::<()>("search-changed", &[]);
+        assert_eq!(w.content.visible_child_name().as_deref(), Some("home"));
+    }
+    w.window.destroy();
 }
 
 #[test]

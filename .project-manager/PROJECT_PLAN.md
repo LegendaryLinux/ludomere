@@ -49,7 +49,7 @@
   preserving canonical identity, latest-record/tie semantics and independent read failures.
 - P339 (complete, file_summary; reviewer performance_audit): label detail/DLC size as Downloaded files, retaining the
   existing live summary replacement contract. Isolated details/mod strings and P329 regression.
-- P340 (in_progress, ui_critic): native Home grid activation, accessible full-title labels and
+- P340 (complete, ui_critic; reviewer performance_audit): native Home grid activation, accessible full-title labels and
   visible keyboard focus. Isolated library/window/narrow CSS; preserve mouse/context/filter behavior.
 - P341 (complete, file_summary; reviewer performance_audit): clear stale archive error styling on
   new preparation and keep active Pause blue with proper terminal Play restoration. Isolated
@@ -65,6 +65,10 @@
   for paused/failed archive restoration; isolated details-only transitions regression.
 - P346 (ready, performance_audit): show full selected library and actual installation folder;
   source-scope Galaxy feedback while preserving generic/offline failures and preparation behavior.
+- P347 (complete for source findings, file_summary): independent auth/session/cancellation/setup
+  assurance found cancellation's GTK admission can wait on another operation's persistence.
+- P348 (proposal, performance_audit): remove that blocking cancellation admission without dropping
+  recovery-generation, profile-activity or ownership safeguards; deterministic held-lock regression.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

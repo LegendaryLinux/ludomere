@@ -210,7 +210,24 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Reject missing/non-directory/symlink leaves in the query boundary. No new mount assumptions or
   folder-creation workflow. Independent review, private no-write regression, formatting/Clippy/build PASS.
 
+### P340 — native Home grid keyboard activation and accessible titles
+
+- Use one native FlowBox activation path for mouse/keyboard, preserve secondary context menus,
+  label each retained grid cell with its full title, and restore visible keyboard focus styling.
+  Reject hidden, detached, stale-model and logout-pending activation without background navigation.
+- Independent review, native activation/cursor/accessibility fixture and three existing filter/
+  empty/exit regressions PASS. Fixture waits for actual layout and enters native focus handling;
+  strict cursor/activation assertions retained. Formatting/all-target Clippy/build PASS.
+- Physical-key and focus-ring live checks remain pending a restart; collection game tiles unchanged.
+
 ## Remaining findings
+
+- Independent cross-check P347 found synchronous cancellation admission can wait on a mutex held
+  during another operation's journal fsync; P348 must remove this GTK wait without weakening
+  recovery/ownership safety before consolidated verification. No new auth/session/setup blocker found.
+- Gungeon Depot launch rendered the actual game menu; normal window-close ended EtG.exe. Details
+  displayed completed setup history and Close remained accessible. Planned/recorded counter totals
+  differ; potential clarification is deferred rather than treating approximate counters as corruption.
 
 - Gungeon's Depot reinstall completed all declared prerequisite setup successfully before the
   attempted cancellation interaction; this is successful reinstall evidence, not a cancellation pass.

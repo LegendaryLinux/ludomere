@@ -1151,6 +1151,7 @@ pub(super) fn create_widgets(app: &adw::Application, config: &Config) -> Widgets
     sidebar.append(&count);
 
     let home_grid = gtk::FlowBox::builder()
+        .activate_on_single_click(true)
         .valign(gtk::Align::Start)
         .halign(gtk::Align::Fill)
         .homogeneous(false)
@@ -1590,6 +1591,29 @@ pub(super) fn connect_actions(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
             model
                 .try_borrow()
                 .map_or(true, |state| game_matches_library_filters(&state, id))
+        });
+    }
+    {
+        let widgets = w.clone();
+        let model = model.clone();
+        w.home_grid.connect_child_activated(move |grid, child| {
+            if !child.is_mapped()
+                || !child.is_child_visible()
+                || child.parent().as_ref() != Some(grid.upcast_ref())
+            {
+                return;
+            }
+            let Some(id) = child
+                .child()
+                .and_then(|card| card.widget_name().parse::<i64>().ok())
+            else {
+                return;
+            };
+            if model.try_borrow().is_ok_and(|state| {
+                !state.logout_pending && game_matches_library_filters(&state, id)
+            }) {
+                show_game(&widgets, &model, id, None);
+            }
         });
     }
     let home_action = gio::SimpleAction::new("home", None);

@@ -855,6 +855,7 @@ const CSS: &str = r#"
 .game-grid flowboxchild:hover,
 .game-grid flowboxchild:active,
 .game-grid flowboxchild:selected { background: transparent; box-shadow: none; outline: none; padding: 0; }
+.game-grid flowboxchild:focus-visible { outline: 2px solid @accent_color; outline-offset: 2px; border-radius: 8px; }
 .game-state-running label { color: #71d28b; }
 .game-state-downloading label { color: #62a8e5; }
 .game-state-installed label { color: #ffffff; }
