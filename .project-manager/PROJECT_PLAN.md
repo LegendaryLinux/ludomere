@@ -25,7 +25,7 @@
 - P331 (complete, reliability_audit; reviewer file_summary): investigate Coffee Talk's official .NET4.5.2
   helper exit194 after successful DirectX setup. Verify Windows-to-Unix exit translation and
   narrowly scoped success/reboot semantics before any implementation; no skipped requirements.
-- P333 (pending integration after P327, ui_critic): bound full Downloads error text in its own
+- P333 (complete, ui_critic; reviewer performance_audit): bound full Downloads error text in its own
   scroller so long real setup diagnostics cannot push controls out of view; preserve complete
   selectable text. Mapped small-window regression required. No new modal or error truncation.
 - P332 (complete, ui_critic; reviewer file_summary): improve setup failure readability observed in real Coffee Talk
@@ -33,12 +33,17 @@
   terminal titles, no retry/execution/focus changes. Private fixtures only; root runs gates.
 - P327 (complete, performance_audit; reviewers file_summary/ui_critic): Depot cancellation confirmation/background cleanup and terminal failure handling;
   inspect data impact before assigning minimal implementation. Preserve files on safety refusal.
-- P334 (review, file_summary; reviewer ui_critic): show zero-result Home feedback in place, retain
+- P334 (complete, file_summary; reviewer ui_critic): show zero-result Home feedback in place, retain
   existing truly empty/account messages and explicit Home navigation. Isolated overlay/widget work;
-  source review PASS, focused GTK/build gates pending. No real-account agent access.
-- P335 (in_progress, file_summary): reuse cached-startup SQLite store and one product reconstruction
+  independent review, two focused GTK tests, formatting/Clippy/build PASS. No real-account agent access.
+- P335 (review, file_summary; reviewer ui_critic): reuse cached-startup SQLite store and one product reconstruction
   for Metadata/Acquisition readiness; preserve TTL/errors/receivers. Isolated online.rs and cached
   worker only; root coordinates integration with P334. No schema or new cache framework.
+- P336 (in_progress, file_summary): prepare a private-profile consolidated build harness only;
+  root reviews and executes later. No real desktop, credentials, games or product edits.
+- P337 (in_progress, ui_critic; reviewer performance_audit): release the mutable model borrow before
+  sidebar filter invalidation after game exit. Live Coffee Talk Stop shows all rows despite query
+  and count. Own isolated details.rs and same-file regression; preserve both sorts and navigation.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

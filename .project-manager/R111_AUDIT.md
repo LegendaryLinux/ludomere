@@ -147,6 +147,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining findings
 
+### P333 — keep Downloads actions visible with long failures
+
+- Full selectable archive/Depot diagnostic labels scroll inside a capped viewport, leaving
+  Retry/Cancel outside. Preserve existing cancellation/session behavior and all diagnostic text.
+- Independent review and four focused GTK tests PASS. Mapped real-CSS fixture at1100x600 kept
+  archive/Depot headers at210/241px for roughly16KB errors; inner scrolling leaves actions and
+  outer scroll fixed. Formatting, all-target Clippy and build PASS.
+
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.
 - Depot cancellation needs confirmation, off-thread cleanup and terminal cleanup error feedback.

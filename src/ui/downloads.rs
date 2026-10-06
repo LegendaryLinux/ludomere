@@ -1047,7 +1047,16 @@ fn active_download_header(job: &DownloadJobRecord, model: &AppModel, w: &Widgets
         message.set_wrap_mode(gtk::pango::WrapMode::WordChar);
         message.set_width_chars(1);
         message.set_selectable(true);
-        details.append(&message);
+        details.append(
+            &gtk::ScrolledWindow::builder()
+                .child(&message)
+                .hscrollbar_policy(gtk::PolicyType::Never)
+                .vscrollbar_policy(gtk::PolicyType::Automatic)
+                .max_content_height(120)
+                .propagate_natural_height(true)
+                .vexpand(false)
+                .build(),
+        );
     }
     let eta = estimated_remaining(model, total.saturating_sub(job.bytes_downloaded));
     let footer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -1198,7 +1207,16 @@ fn active_depot_header(
         message.set_wrap_mode(gtk::pango::WrapMode::WordChar);
         message.set_width_chars(1);
         message.set_selectable(true);
-        details.append(&message);
+        details.append(
+            &gtk::ScrolledWindow::builder()
+                .child(&message)
+                .hscrollbar_policy(gtk::PolicyType::Never)
+                .vscrollbar_policy(gtk::PolicyType::Automatic)
+                .max_content_height(120)
+                .propagate_natural_height(true)
+                .vexpand(false)
+                .build(),
+        );
     }
     let footer_text = operation.download_total_bytes.and_then(|total| {
         estimated_remaining(model, total.saturating_sub(operation.bytes_downloaded))
@@ -2121,6 +2139,195 @@ mod active_transfer_tests {
         let mut new = old.clone();
         new.error = Some("Updated failure".into());
         assert!(download_job_structure_changed(&[old], &[new]));
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn long_featured_errors_scroll_without_hiding_actions() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p333-")
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.DownloadErrorLayoutTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(
+            &app,
+            &Config {
+                window_width: 1280,
+                window_height: 600,
+                ..Config::default()
+            },
+        );
+        widgets.content.set_visible_child_name("downloads");
+        widgets.window.present();
+        let outer = widgets
+            .downloads
+            .ancestor(gtk::ScrolledWindow::static_type())
+            .and_downcast::<gtk::ScrolledWindow>()
+            .unwrap();
+        let mut model = AppModel {
+            account_token: Some(auth::Token {
+                access_token: "inert-fixture-token".into(),
+                refresh_token: "inert-fixture-refresh".into(),
+                user_id: "fixture".into(),
+                expires_at: i64::MAX,
+            }),
+            ..AppModel::default()
+        };
+        let long_error = format!(
+            "Setup could not finish.\n{}\nFinal diagnostic line: restore access and retry.",
+            "Synthetic error with a long unbroken path-like-token/".repeat(300)
+        );
+        for depot in [false, true] {
+            for error in [long_error.as_str(), "Restore access and retry."] {
+                model.download_jobs.clear();
+                model.depot_operations.clear();
+                if depot {
+                    model
+                        .depot_operations
+                        .push(crate::installation::DepotOperationSnapshot {
+                            setup: None,
+                            operation_id: "layout-fixture".into(),
+                            product_id: 43,
+                            state: "failed".into(),
+                            bytes_completed: 10,
+                            bytes_downloaded: 10,
+                            bytes_written: 10,
+                            total_write_bytes: 100,
+                            total_bytes: 100,
+                            download_total_bytes: Some(100),
+                            error: Some(error.into()),
+                        });
+                } else {
+                    let mut failed = job();
+                    failed.state = DownloadState::Failed;
+                    failed.error = Some(error.into());
+                    model.download_jobs.push(failed);
+                }
+                rebuild_downloads_page(&widgets, &model);
+                let header = find_named_descendant(
+                    widgets.downloads.upcast_ref(),
+                    if depot {
+                        "active-depot-layout-fixture"
+                    } else {
+                        "active-download-fixture"
+                    },
+                )
+                .unwrap();
+                let message = find_named_descendant(
+                    &header,
+                    if depot {
+                        "active-depot-message"
+                    } else {
+                        "active-download-message"
+                    },
+                )
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+                let scroll = message
+                    .ancestor(gtk::ScrolledWindow::static_type())
+                    .and_downcast::<gtk::ScrolledWindow>()
+                    .unwrap();
+                let footer = header.last_child().unwrap().last_child().unwrap();
+                let cancel = footer
+                    .last_child()
+                    .unwrap()
+                    .downcast::<gtk::Button>()
+                    .unwrap();
+                let retry = cancel
+                    .prev_sibling()
+                    .unwrap()
+                    .downcast::<gtk::Button>()
+                    .unwrap();
+                wait(|| {
+                    cancel.is_mapped()
+                        && header.height() > 0
+                        && scroll.vadjustment().page_size() > 0.0
+                });
+                outer.vadjustment().set_value(0.0);
+                update_depot_page_progress(&widgets, &model);
+                eprintln!(
+                    "depot={depot}, error bytes={}, header={}px, error viewport={}px, window={}x{}",
+                    error.len(),
+                    header.height(),
+                    scroll.height(),
+                    widgets.window.width(),
+                    widgets.window.height()
+                );
+                assert_eq!(message.text(), error);
+                assert!(message.is_selectable());
+                assert_eq!(message.ellipsize(), gtk::pango::EllipsizeMode::None);
+                assert_ne!(scroll, outer);
+                assert!(scroll.height() <= 120);
+                assert!(
+                    header.height() <= 400,
+                    "Header expanded to {}px",
+                    header.height()
+                );
+                assert!(widgets.window.height() <= 600);
+                assert_eq!(
+                    retry.tooltip_text().as_deref(),
+                    Some(if depot { "Resume" } else { "Retry download" })
+                );
+                assert_eq!(cancel.tooltip_text().as_deref(), Some("Cancel permanently"));
+                let bounds = [retry.clone(), cancel.clone()].map(|button| {
+                    assert!(button.is_sensitive() && button.is_mapped());
+                    let bounds = button.compute_bounds(&outer).unwrap();
+                    assert!(bounds.x() >= 0.0 && bounds.y() >= 0.0);
+                    assert!(bounds.x() + bounds.width() <= outer.width() as f32);
+                    assert!(bounds.y() + bounds.height() <= outer.height() as f32);
+                    bounds
+                });
+                if error == long_error.as_str() {
+                    assert!(scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+                    scroll.vadjustment().set_value(scroll.vadjustment().upper());
+                    wait(|| {
+                        message
+                            .compute_bounds(&scroll)
+                            .is_some_and(|bounds| bounds.y() < 0.0)
+                    });
+                    assert!(scroll.vadjustment().value() > 0.0);
+                    assert_eq!(retry.compute_bounds(&outer).unwrap(), bounds[0]);
+                    assert_eq!(cancel.compute_bounds(&outer).unwrap(), bounds[1]);
+                    assert_eq!(outer.vadjustment().value(), 0.0);
+                } else {
+                    assert!(scroll.height() < 120);
+                }
+                assert_eq!(
+                    widgets.content.visible_child_name().as_deref(),
+                    Some("downloads")
+                );
+                assert!(widgets.window.visible_dialog().is_none());
+            }
+        }
+        widgets.window.destroy();
     }
 
     #[test]

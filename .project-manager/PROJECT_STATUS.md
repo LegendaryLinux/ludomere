@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P333 bounded full-error scrollers independently reviewed; mapped long/short archive and Depot
+  errors plus three existing error/cancel regressions PASS. Controls stay visible at600px height;
+  formatting, all-target Clippy and build PASS. Separate commit next.
+
+- P327 committed7e07ff8 and P334 committed3fd570b; exact post-commit builds PASS. P334 adds
+  empty-search guidance with independent review and two focused GTK regressions plus fmt/Clippy.
+  Coffee Talk Stop completed and Play restored; no game remains running. The live exit exposed
+  sidebar/search inconsistency assigned P337. P333/P335 reviews PASS, integration pending;
+  P336 prepares the isolated consolidated build gate.
+
 - User interview authorizes twelve hours, real root-only wallet/UI/download/install testing,
   repair/reinstall of existing managed test games, normal cloud sync but no deliberate cloud deletion,
   under2 GB additional games and total under40 GB. New branch and separate local commits per fix.
