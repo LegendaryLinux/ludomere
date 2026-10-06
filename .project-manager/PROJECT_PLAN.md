@@ -193,7 +193,7 @@
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
-- P379 (in_progress implementation, performance_audit; reviewer file_summary): Cloud save-folder override still opens/
+- P379 (complete, performance_audit; reviewer file_summary): Cloud save-folder override still opens/
   writes SQLite on GTK and can race metadata discovery's stale locations. Source-only bounded
   proposal for responsive save and preserving current explicit overrides across all discovery
   writers. Trace transaction/session/reset semantics; no actual cloud/data/keyring access,
@@ -214,6 +214,9 @@
   initial detail-only native tab viewport/local hhomogeneous=false; require measured action-row
   reachability before acceptance, stop for review if more layout is needed. Own isolated details.rs;
   no real profile/desktop/other screenshots/dependency/backend/global stack changes.
+  Independently approved follow-up owns files.rs header parenting only: title/count/folder top
+  row, four existing filter controls individually in a native wrapping FlowBox. No callback or
+  filter changes; root settled narrow/wide and native keyboard gates remain required.
   Verification refinement: full synthetic detail renderer starts unrelated workers. Do not extract
   production action assembly or add a broad test controller only for this presentation change.
   Root will test actual narrow/wide action/tab reachability before commit; retain proportional
@@ -224,7 +227,9 @@
   account policy, destructive actions or broader styling changes before review.
   P382a(in_progress, ui_critic): independently approved idle-fallback positive-network-or-disk
   sample predicate only, existing renderer variants; own isolated downloads.rs. Preserve featured
-  active/paused/error controls and sampling/history. P382b modal change remains unimplemented.
+  active/paused/error controls and sampling/history. P382b implementation authorized in isolated
+  details.rs manual-update presentation: hide unavailable terminal actions and stopped spinner;
+  preserve offer-before-enable and cleanup-before-reentry ordering. Root runtime, independent review.
 - P378 (complete, ui_critic; reviewer file_summary): human-style critique of root-approved app-only
   downloads-real-history.png plus Downloads source. Assess idle/history readability, spacing,
   action affordances and keyboard/accessibility. Proposed scoped natural-thickness dividers,

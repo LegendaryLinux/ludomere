@@ -33,11 +33,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P379 corrected private GTK and retained P372 gates PASS (p379-hauwyn4h, p372-u_3e4cm_),
+  with final fmt/Clippy PASS. Existing SQLite/backend/P369 gates passed earlier. New Choose
+  destruction and stale-result/activity assertions pass. Whole-page retention remains unresolved:
+  both never-clicked baseline and completed-save detached pages remain retained; no cause proven.
+  This does not claim a global Properties lifetime fix. Independent review and scoped guarantees
+  retained; current override persistence no longer blocks GTK or loses newer choices to discovery.
+
 - P380 missing-fixture-status diagnosis confirmed: production initialize_library_loading was not
   called in P325. Independently reviewed one-line fixture initialization retains every assertion;
   final exact P325 PASS (/tmp/ludomere-p325-s1h1rbzf). Prior P340/P334/P337 remain PASS.
+  Final fmt/Clippy and commit3bd6d20 exact post-build PASS;51 separate local audit commits built.
 - Gungeon macOS archive completes (~261MB actual), giving3local installers/900.7MB total archives
-  and Extras. Active-download capture shows additional action-row width pressure. By the next
+  and Extras. Active-download capture preceded settled window resize, so additional action-row
+  clipping is not yet established from that frame. By the next
   attempted Pause click transfer had completed and button had changed to Play, launching the
   already-authorized native Gungeon. Root closes its game window normally; no macOS install
   occurred. Screenshot detail-width-paused-download.png is actually running-game state, not Pause.

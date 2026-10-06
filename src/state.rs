@@ -862,7 +862,31 @@ impl StateStore {
         &self,
         product_id: i64,
         discovery: &CloudSaveDiscovery,
-    ) -> Result<()> {
+    ) -> Result<CloudSaveDiscovery> {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let locations = transaction
+            .query_row(
+                "SELECT locations_json FROM cloud_save_settings WHERE product_id = ?1",
+                [product_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|_| anyhow::anyhow!("Could not read saved cloud-save locations. No cloud-save settings were changed."))?
+            .map(|json| serde_json::from_str::<Vec<crate::domain::CloudSaveLocation>>(&json))
+            .transpose()
+            .map_err(|_| anyhow::anyhow!("Saved cloud-save locations are unreadable. No cloud-save settings were changed."))?
+            .unwrap_or_default();
+        let overrides = locations
+            .into_iter()
+            .filter(|location| location.user_override)
+            .collect::<Vec<_>>();
+        let mut discovery = discovery.clone();
+        if !overrides.is_empty() {
+            discovery.locations = overrides;
+        }
         let availability = serde_json::to_value(discovery.availability)?
             .as_str()
             .unwrap_or("unknown")
@@ -871,7 +895,7 @@ impl StateStore {
             .reason
             .as_deref()
             .map(|value| value.chars().take(500).collect::<String>());
-        self.connection.execute(
+        transaction.execute(
             "INSERT INTO cloud_save_settings(
                 product_id, availability, locations_json, metadata_build_id,
                 metadata_checked_at, metadata_error, updated_at)
@@ -892,7 +916,8 @@ impl StateStore {
                 reason,
             ],
         )?;
-        Ok(())
+        transaction.commit()?;
+        Ok(discovery)
     }
 
     pub fn set_cloud_save_preference(
@@ -5990,6 +6015,201 @@ mod tests {
         assert_eq!(record.metadata_build_id.as_deref(), Some("build-1"));
         assert_eq!(record.metadata_checked_at, Some(123));
         assert!(record.metadata_error.is_none());
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn cloud_discovery_preserves_current_overrides_after_writer_admission() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        thread_local! {
+            static BUSY: std::cell::RefCell<Option<mpsc::Sender<()>>> = const { std::cell::RefCell::new(None) };
+        }
+        let path = std::env::temp_dir().join(format!(
+            "ludomere-cloud-override-{}.sqlite3",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = StateStore::open_at(&path).unwrap();
+        let location = |name: &str, user_override| CloudSaveLocation {
+            name: name.into(),
+            path: PathBuf::from(format!("/synthetic/{name}")),
+            remote_namespace: format!("namespace-{name}"),
+            user_override,
+        };
+        let candidate = CloudSaveDiscovery {
+            availability: CloudSaveAvailability::Supported,
+            locations: vec![location("stale", true)],
+            metadata_build_id: Some("new-build".into()),
+            checked_at: 123,
+            reason: None,
+        };
+        store
+            .set_cloud_save_locations(42, &candidate.locations)
+            .unwrap();
+        store
+            .set_cloud_save_preference(42, CloudSavePreference::Enabled)
+            .unwrap();
+        store.connection.execute("UPDATE cloud_save_settings SET status='error',error='keep-error',last_successful_sync=99 WHERE product_id=42", []).unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO cloud_save_baselines(product_id,files_json) VALUES(42,'[]')",
+                [],
+            )
+            .unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO cloud_save_conflicts(product_id,conflicts_json) VALUES(42,'[]')",
+                [],
+            )
+            .unwrap();
+        let other = StateStore::open_at(&path).unwrap();
+        let reservation = rusqlite::Transaction::new_unchecked(
+            &store.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .unwrap();
+        let current = vec![
+            location("fresh-b", true),
+            location("default", false),
+            location("fresh-c", true),
+        ];
+        store.set_cloud_save_locations(42, &current).unwrap();
+        let (busy_sender, busy_receiver) = mpsc::channel();
+        let (result_sender, result_receiver) = mpsc::channel();
+        let stale = candidate.clone();
+        let worker = std::thread::spawn(move || {
+            BUSY.with(|busy| *busy.borrow_mut() = Some(busy_sender));
+            other
+                .connection
+                .busy_handler(Some(|attempt| {
+                    BUSY.with(|busy| {
+                        let _ = busy.borrow().as_ref().unwrap().send(());
+                    });
+                    std::thread::sleep(Duration::from_millis(5));
+                    attempt < 1000
+                }))
+                .unwrap();
+            result_sender
+                .send(other.set_cloud_save_discovery(42, &stale))
+                .unwrap();
+        });
+        busy_receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(
+            result_receiver.try_recv().is_err(),
+            "discovery must wait for writer admission"
+        );
+        reservation.commit().unwrap();
+        let effective = result_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        worker.join().unwrap();
+        let expected = vec![current[0].clone(), current[2].clone()];
+        assert_eq!(effective.locations, expected);
+        assert_eq!(store.cloud_save_record(42).unwrap().locations, expected);
+        for availability in [
+            CloudSaveAvailability::Supported,
+            CloudSaveAvailability::Unsupported,
+            CloudSaveAvailability::Unavailable,
+            CloudSaveAvailability::Unknown,
+        ] {
+            let discovery = CloudSaveDiscovery {
+                availability,
+                reason: Some("metadata reason".into()),
+                ..candidate.clone()
+            };
+            let saved = store.set_cloud_save_discovery(42, &discovery).unwrap();
+            assert_eq!(
+                saved,
+                CloudSaveDiscovery {
+                    locations: expected.clone(),
+                    ..discovery
+                }
+            );
+            let record = store.cloud_save_record(42).unwrap();
+            assert_eq!(record.availability, availability);
+            assert_eq!(record.preference, CloudSavePreference::Enabled);
+            assert_eq!(record.metadata_build_id.as_deref(), Some("new-build"));
+            assert_eq!(record.metadata_checked_at, Some(123));
+            assert_eq!(record.metadata_error.as_deref(), Some("metadata reason"));
+            assert_eq!(record.error.as_deref(), Some("keep-error"));
+            assert_eq!(record.status, CloudSaveStatus::Error);
+            assert_eq!(record.last_successful_sync, Some(99));
+            assert_eq!(
+                store.cloud_save_baseline(42).unwrap().as_deref(),
+                Some("[]")
+            );
+            let conflict: String = store
+                .connection
+                .query_row(
+                    "SELECT conflicts_json FROM cloud_save_conflicts WHERE product_id=42",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(conflict, "[]");
+        }
+        let newest = vec![location("after-discovery", true)];
+        store.set_cloud_save_locations(42, &newest).unwrap();
+        assert_eq!(store.cloud_save_record(42).unwrap().locations, newest);
+        assert_eq!(
+            store.set_cloud_save_discovery(43, &candidate).unwrap(),
+            candidate
+        );
+        store
+            .set_cloud_save_locations(44, &[location("old-default", false)])
+            .unwrap();
+        assert_eq!(
+            store.set_cloud_save_discovery(44, &candidate).unwrap(),
+            candidate
+        );
+        for invalid in [
+            rusqlite::types::Value::Text("{private-path-secret".into()),
+            rusqlite::types::Value::Text("{}".into()),
+            rusqlite::types::Value::Text("null".into()),
+            rusqlite::types::Value::Text("[123]".into()),
+            rusqlite::types::Value::Blob(b"private-path-secret".to_vec()),
+        ] {
+            store.connection.execute("UPDATE cloud_save_settings SET locations_json=?1,updated_at=7 WHERE product_id=42", [invalid]).unwrap();
+            let snapshot = || -> Vec<rusqlite::types::Value> {
+                store
+                    .connection
+                    .query_row(
+                        "SELECT * FROM cloud_save_settings WHERE product_id=42",
+                        [],
+                        |row| {
+                            (0..row.as_ref().column_count())
+                                .map(|column| row.get(column))
+                                .collect()
+                        },
+                    )
+                    .unwrap()
+            };
+            let before = snapshot();
+            let error = store
+                .set_cloud_save_discovery(42, &candidate)
+                .unwrap_err()
+                .to_string();
+            assert!(matches!(
+                error.as_str(),
+                "Could not read saved cloud-save locations. No cloud-save settings were changed."
+                    | "Saved cloud-save locations are unreadable. No cloud-save settings were changed."
+            ));
+            assert!(!error.contains("private-path-secret"));
+            assert_eq!(snapshot(), before);
+        }
+        store.set_cloud_save_locations(42, &newest).unwrap();
+        assert_eq!(
+            store.cloud_save_record(42).unwrap().locations,
+            newest,
+            "an explicit user choice can replace unreadable locations"
+        );
         drop(store);
         std::fs::remove_file(path).unwrap();
     }
