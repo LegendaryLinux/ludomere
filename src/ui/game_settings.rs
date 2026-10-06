@@ -933,12 +933,15 @@ fn populate_cloud_settings(
     check_inventory.set_margin_top(10);
     check_inventory.set_sensitive(supported);
     let inventory_game = installed_game.clone();
-    let inventory_status = inventory_row.clone();
+    let inventory_status = inventory_row.downgrade();
     let origin = cloud_session.clone();
     check_inventory.connect_clicked(move |button| {
+        let Some(inventory_status) = inventory_status.upgrade() else {
+            return;
+        };
         load_cloud_inventory(
             inventory_game.clone(),
-            inventory_status.clone(),
+            inventory_status,
             button.clone(),
             origin.clone(),
         );
@@ -1067,11 +1070,16 @@ fn populate_cloud_settings(
         let game = installed_game.clone();
         let locations = locations_state.clone();
         let status = cloud_status.clone();
-        let parent = window.clone();
-        let popover = popover.clone();
+        let parent = window.downgrade();
+        let popover = popover.downgrade();
         let origin = cloud_session.clone();
         button.connect_clicked(move |button| {
-            popover.popdown();
+            let Some(parent) = parent.upgrade() else {
+                return;
+            };
+            if let Some(popover) = popover.upgrade() {
+                popover.popdown();
+            }
             confirm_force_cloud_action(
                 &parent,
                 button,
@@ -3605,6 +3613,166 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "private p386 HOME/all XDG/TMP, GTK and D-Bus; no cloud actions"]
+    fn cloud_components_release_after_detachment() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p386-"),
+                "{key}"
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        adw::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(8);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn nodes(root: &gtk::Widget) -> Vec<gtk::Widget> {
+            let mut result = vec![root.clone()];
+            for child in std::iter::successors(root.first_child(), |child| child.next_sibling()) {
+                result.extend(nodes(&child));
+            }
+            result
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.CloudComponentLifetimeTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        for opened in [false, true] {
+            let window = adw::ApplicationWindow::builder()
+                .application(&app)
+                .default_width(900)
+                .default_height(1000)
+                .build();
+            let page = adw::PreferencesPage::new();
+            let game = serde_json::from_value(serde_json::json!({
+                "product_id": 9386001, "library_id": "inert",
+                "installation_directory": std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("absent-game"),
+                "installer_files": [], "installer_complete": true, "installer_operating_system": "windows",
+                "launch_arguments": [], "state": "installed", "playtime_seconds": 0, "created_at": 1, "updated_at": 1
+            })).unwrap();
+            let origin = CloudActionSession {
+                auth: auth::session(),
+                online: online::account_session(),
+                epoch: model.borrow().account_epoch,
+                model: Rc::downgrade(&model),
+            };
+            populate_cloud_settings(
+                &window,
+                &model,
+                &page,
+                &game,
+                crate::state::CloudSaveRecord {
+                    preference: crate::domain::CloudSavePreference::Undecided,
+                    availability: crate::domain::CloudSaveAvailability::Supported,
+                    locations: Vec::new(),
+                    metadata_build_id: None,
+                    metadata_checked_at: None,
+                    metadata_error: None,
+                    last_successful_sync: None,
+                    status: crate::domain::CloudSaveStatus::NeverSynced,
+                    error: None,
+                    conflicts: Vec::new(),
+                },
+                &origin,
+            );
+            window.set_content(Some(&page));
+            window.present();
+            wait(|| page.is_mapped());
+            let inventory = nodes(page.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<adw::ActionRow>().ok())
+                .find(|row| row.title() == "GOG Cloud storage")
+                .unwrap();
+            let check = nodes(inventory.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some("Check now"))
+                .unwrap();
+            let group = inventory
+                .ancestor(adw::PreferencesGroup::static_type())
+                .and_downcast::<adw::PreferencesGroup>()
+                .unwrap();
+            // Ordinary detach/reinsert retains the same live controls.
+            group.remove(&inventory);
+            group.add(&inventory);
+            wait(|| check.is_mapped());
+            assert!(check.is_sensitive());
+            let weak_inventory = inventory.downgrade();
+            let weak_check = check.downgrade();
+            group.remove(&inventory);
+            drop(check);
+            drop(inventory);
+            wait(|| weak_inventory.upgrade().is_none() && weak_check.upgrade().is_none());
+            assert!(window.is_visible() && page.is_mapped());
+
+            let advanced = nodes(page.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::MenuButton>().ok())
+                .find(|button| button.label().as_deref() == Some("Advanced…"))
+                .unwrap();
+            let popover = advanced.popover().unwrap();
+            let force = nodes(popover.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .filter(|button| {
+                    matches!(
+                        button.label().as_deref(),
+                        Some("Force download" | "Force upload")
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(force.len(), 2);
+            if opened {
+                for _ in 0..2 {
+                    advanced.popup();
+                    wait(|| popover.is_mapped() && force.iter().all(|button| button.is_mapped()));
+                    assert!(force.iter().all(|button| button.is_sensitive()));
+                    advanced.popdown();
+                    wait(|| !popover.is_mapped());
+                }
+            }
+            let weak_popover = popover.downgrade();
+            let weak_force = force
+                .iter()
+                .map(|button| button.downgrade())
+                .collect::<Vec<_>>();
+            advanced.set_popover(gtk::Popover::NONE);
+            drop(force);
+            drop(popover);
+            wait(|| {
+                weak_popover.upgrade().is_none()
+                    && weak_force.iter().all(|button| button.upgrade().is_none())
+            });
+            assert!(window.is_visible() && page.is_mapped());
+            assert!(window.visible_dialog().is_none());
+            window.set_content(gtk::Widget::NONE);
+            window.close();
+            window.destroy();
+            // Whole-page retention is a separate unresolved observation, not this proof.
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(crate::profile_reset::reserve().is_ok());
+    }
 
     #[test]
     #[ignore = "private p384 HOME/all XDG/TMP, GTK and D-Bus; captured directory launches only"]

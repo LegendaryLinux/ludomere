@@ -5,15 +5,15 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADb2922a9 before P385. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEAD99eeb3d. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered57 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered58 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
-- Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
-  572 library tests, six integration tests, five Python helper tests and build.80 library tests
+- Latest consolidated private build PASS at99eeb3d: fmt, all-target Clippy-Dwarnings,
+  574 library tests, six integration tests, five Python helper tests and build.86 library tests
   ignored by default; affected GTK gates run separately. Log:
-  /tmp/ludomere-r111-full-build-vcdb940n/build.log. No real account/helpers/network in gate.
+  /tmp/ludomere-r111-full-build-ufr3s228/build.log. No real account/helpers/network in gate.
 - Latest verified fixes: P365a narrow launch-preference persistence; P366 Account spacing;
   P367 repair chooser layout; P368 tracked repair inspection; P369 asynchronous cached Cloud
   settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound
@@ -21,7 +21,7 @@ Last meaningful update: 2026-10-06.
   Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
 - Active: P378–P384 committed with focused gates and exact builds PASS; responsive details
   now retain primary/alternate/gear/favorite controls, including completed-download status.
-  P385 popup handoff passes private and real pointer gates, ready to commit. P386 component
+  P385 popup handoff committed, private and real pointer gates PASS. P386 component
   reference cycles and P387 singular copy correction are isolated worker tasks. P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.

@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At99eeb3d consolidated private build PASS: fmt, all-target Clippy with warnings denied,
+  574 library tests, six integration tests, five Python helper tests and build.86 library tests
+  ignored by default; affected GTK tests separately passed.58 exact post-commit builds PASS.
+  Log /tmp/ludomere-r111-full-build-ufr3s228/build.log. No actual profile/helpers/network exposed.
+
 - Ata3641c1 consolidated private build gate PASS: formatting, all-target Clippy, default Rust
   tests, five Python helper tests and build. Log /tmp/ludomere-r111-full-build-vcdb940n/build.log.
   All47 commits have exact post-commit build PASS; affected ignored GTK tests separately passed.
@@ -32,6 +37,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P386 private actual-component lifetime PASS (p386-g0thah12): inventory row/button and
+  Advanced popup/force buttons release after ordinary detachment while host remains mapped.
+  Retained P267/P369/P372/P379/P384 PASS (p267-9l7q8joe,p369-djwfcbfv,p372-8nrw9w17,
+  p379-oy6idog7,p384-g3yo6mpj). No actual cloud operations; whole-page retention still true.
+  Independent source review, fmt/Clippy/compile PASS. Scope is two proven strong-capture cycles.
 
 - P385 actual pointer handoff PASS: wallpaper File actions closes before destination chooser;
   first Download click closes chooser and reports existing files. Reopened menu/Delete closes

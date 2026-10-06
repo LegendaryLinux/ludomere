@@ -2,15 +2,23 @@
 
 ## R111 interactive audit
 
+- P388 (in_progress, performance_audit; reviewer ui_critic): make detail-tab overflow visibly
+  discoverable with native non-overlay horizontal scrolling only on this local scroller.
+  Source candidate approved within R111; no custom controls/key handlers/navigation semantics.
+  Root actual narrow/wide scrolling and existing control gates; stop if native cue is inadequate.
+  Isolated details.rs property only, no standalone fixture warranted for this presentation flag.
+
 - P387 (in_progress, file_summary): correct observed single-part file metadata to1 part,
   preserving None/multipart/grouping semantics. Isolated files.rs expression only; no new fixture
   for this copy change. Independent source review, formatting and exact build are proportional.
-- P386 (in_progress implementation, performance_audit; reviewer ui_critic): inspect concrete Properties/Cloud ownership
+- P386 (complete, performance_audit; reviewer ui_critic): inspect concrete Properties/Cloud ownership
   cycles behind retained detached-page diagnostics; source-only bounded proposal before changes.
   No inferred RSS diagnosis, whole-window refactor or actual account data. P322 critic reviews
   only newly authorized app screenshots for remaining presentation observations.
   Independent GO for two component weak-capture corrections only: inventory row and Advanced
   popover/ancestor window. Exact private component-lifetime fixture, no whole-page release claim.
+  Private component retirement and retained P267/P369/P372/P379/P384 regressions PASS;
+  fmt/Clippy/compile PASS. Whole-page retention diagnostic remains true as expected.
 
 - P385 (complete, file_summary; proposal/reviewer performance_audit): close the selected
   Files popover before forwarding its retained source action, preserving direct/unmounted proxies.
