@@ -57,17 +57,17 @@
 - P342 (complete, file_summary; reviewer performance_audit): remove chooser-open directory creation; query existing valid
   destinations only and retain Unavailable state. Explicit missing-folder creation remains deferred
   because libraries do not retain mount identity. Isolated chooser/helper regression only.
-- P343 (in_progress, ui_critic): normal uninstall hides irrelevant Retry and collapses alternative
+- P343 (complete, ui_critic; reviewer file_summary): normal uninstall hides irrelevant Retry and collapses alternative
   removal methods, expanding recovery after failure. Preserve Browse, all warnings and consent.
 - P344 (complete, ui_critic; reviewer file_summary): four existing uninstaller status strings explain following prompts in
   the uninstaller window. No process, focus, detection or execution changes.
-- P345 (in_progress, file_summary): synchronize idle download-state class and reuse existing helper
+- P345 (complete, file_summary; reviewer ui_critic): synchronize idle download-state class and reuse existing helper
   for paused/failed archive restoration; isolated details-only transitions regression.
 - P346 (ready, performance_audit): show full selected library and actual installation folder;
   source-scope Galaxy feedback while preserving generic/offline failures and preparation behavior.
 - P347 (complete for source findings, file_summary): independent auth/session/cancellation/setup
   assurance found cancellation's GTK admission can wait on another operation's persistence.
-- P348 (proposal, performance_audit): remove that blocking cancellation admission without dropping
+- P348 (review, performance_audit; reviewer file_summary): remove that blocking cancellation admission without dropping
   recovery-generation, profile-activity or ownership safeguards; deterministic held-lock regression.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;

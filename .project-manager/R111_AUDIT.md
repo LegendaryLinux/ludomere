@@ -218,7 +218,10 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Independent review, native activation/cursor/accessibility fixture and three existing filter/
   empty/exit regressions PASS. Fixture waits for actual layout and enters native focus handling;
   strict cursor/activation assertions retained. Formatting/all-target Clippy/build PASS.
-- Physical-key and focus-ring live checks remain pending a restart; collection game tiles unchanged.
+- Live restarted app: Tab/Shift-Tab shows a clear card focus ring; Enter and Space each open the
+  focused Gungeon detail, preserving its search; grid right-click retains the normal action menu.
+  Private screenshots home-keyboard-focus5, home-keyboard-enter, home-keyboard-space-confirmed,
+  home-context-menu under the audit evidence directory. Collection game tiles remain unchanged.
 
 ### P344 — explain external uninstaller prompts
 
@@ -226,7 +229,29 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   the uninstaller window. This addresses the real Gungeon Yes/No/OK prompts without detecting
   windows, stealing focus or altering helper execution. Independent review/fmt/Clippy/build PASS.
 
+### P343 — simplify normal uninstall confirmation
+
+- Hide Retry until a removal check fails; collapse alternative file-reset choices for healthy
+  installations and expand them on failure. Browse, prefix/save warnings, optional archive cleanup,
+  default Cancel and explicit destructive consent stay visible and unchanged.
+- Independent review, two private mapped recovery/preview regressions, formatting/Clippy/build PASS.
+  Initial fixture compilation used private marker APIs and an incorrect label return type; corrected
+  fixture only before execution. No protection or destructive-confirmation assertion weakened.
+
+### P345 — restore idle colors and subsequent transfer controls
+
+- Synchronize Download/Install/Update versus Play container styling for both main and arrow buttons;
+  reuse the idle helper on paused/failed archives. Completed archive resets its active visual latch,
+  allowing a later download to show Pause instead of retaining idle content.
+- The expanded strict repeated-operation test first failed, proving that existing latch defect.
+  Minimal correction, independent re-review and the unchanged six-case regression now PASS;
+  formatting/all-target Clippy/build PASS. No timers, execution or download states changed.
+
 ## Remaining findings
+
+- P345 expanded regression exposed an existing Complete→Downloading stale visual-state latch:
+  completion restores idle content without clearing the active-state cell, so a later transfer
+  skips rendering Pause. Minimal reset approved; retain the strict repeated-operation regression.
 
 - Independent cross-check P347 found synchronous cancellation admission can wait on a mutex held
   during another operation's journal fsync; P348 must remove this GTK wait without weakening

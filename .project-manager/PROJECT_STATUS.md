@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P343 two private GTK regressions PASS after fixture-only public-API corrections. P345 failed
+  regression established a real stale completed-transfer visual latch; minimal reset and independent
+  re-review now PASS, same strict regression PASS. Combined fmt/Clippy/build PASS; separate commits.
+  Live Home keyboard Enter/Space/focus ring/context menu verified. No product game operations here.
+
+- At10:22 UTC: P344 committedcfca221 and exact post-commit build PASS. P345 source review,
+  formatting/Clippy/build passed, but its expanded GTK regression failed a wait assertion;
+  owner diagnosing before commit. P343 reviewed delta entering integration; P346 reviewed and
+  queued. P348 cancellation admission implementation frozen for independent final review.
+
 - P340 committed7967045 exact post-commit build PASS; live client restarted on that build for
   physical keyboard checks. P344 four-string guidance independently reviewed, formatting/all-target
   Clippy/build PASS, separate commit next. No new test for a wording-only change.
