@@ -207,7 +207,7 @@ impl Viewer {
         self.folder.set_sensitive(false);
         self.follow.set_sensitive(false);
         self.status
-            .set_label("Account changed. Reopen this game to view logs.");
+            .set_label("Account changed. Go to Home, then reopen this game to view logs.");
     }
 }
 

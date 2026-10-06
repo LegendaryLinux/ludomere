@@ -3065,7 +3065,7 @@ fn refresh_product_logs(
     }
     if online::account_session() != session {
         container.append(&gtk::Label::new(Some(
-            "Account changed. Reopen the game to view its operation logs.",
+            "Account changed. Go to Home, then reopen this game.",
         )));
         return;
     }
@@ -3164,7 +3164,7 @@ fn monitor_product_logs(
                 container.remove(&child);
             }
             container.append(&gtk::Label::new(Some(
-                "Account changed. Reopen the game to view its operation logs.",
+                "Account changed. Go to Home, then reopen this game.",
             )));
             return glib::ControlFlow::Break;
         }

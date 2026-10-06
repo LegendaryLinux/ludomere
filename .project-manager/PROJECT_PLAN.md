@@ -26,9 +26,10 @@
   in isolated checkout; retain backend/session guards, parent-busy refusal and tag semantics.
   No actual tag changes by agents; root focused gates/build. Source-backed R111 UI no-op finding.
   Actual private editor/SQLite regression p270-o18ygr8z PASS; fmt/Clippy/compile PASS.
-- P395 (in_progress, file_summary; reviewer ui_critic): clarify retired Achievements/Logs guidance to Home then reopen, matching
+- P395 (complete, file_summary; reviewer ui_critic): clarify retired Achievements/Logs guidance to Home then reopen, matching
   actual detail identity reset. Copy only, no automatic navigation or account rebinding.
-  Isolated achievements.rs/logs.rs strings and necessary exact expectation only; no extra fixture.
+  Four literals in achievements.rs/logs.rs/details.rs only; no extra fixture or behavior change.
+  Both operation-log entry/result messages shortened to avoid additional unwrapped width.
 
 - P393 (review, file_summary; reviewer performance_audit): source-audit game-management popup strong
   captures in close handlers (files.rs main/manage action loops) after unparented context use.

@@ -38,6 +38,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P394 commitf6a1264 exact post-build PASS (65 built audit commits). P395 independent final
+  source GO: four recovery strings now name Home→reopen, matching actual detail identity reset;
+  no backend/navigation/guard change. Two unwrapped operation-log labels shortened, original
+  Achievements/Logs labels already wrap. Copy-only scope warrants formatting/build, no new fixture.
+
 - P394 private actual editor/SQLite gate PASS p270-o18ygr8z: empty/whitespace/cleared eligibility,
   Entry activation trims and saves once, effective parent sensitivity blocks programmatic duplicate
   signals, refusal restores correct eligibility and preserves tags. Prior Manage/visibility/session
