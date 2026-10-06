@@ -2,16 +2,22 @@
 
 ## R111 interactive audit
 
-- P386 (in_progress assessment, performance_audit): inspect concrete Properties/Cloud ownership
+- P387 (in_progress, file_summary): correct observed single-part file metadata to1 part,
+  preserving None/multipart/grouping semantics. Isolated files.rs expression only; no new fixture
+  for this copy change. Independent source review, formatting and exact build are proportional.
+- P386 (in_progress implementation, performance_audit; reviewer ui_critic): inspect concrete Properties/Cloud ownership
   cycles behind retained detached-page diagnostics; source-only bounded proposal before changes.
   No inferred RSS diagnosis, whole-window refactor or actual account data. P322 critic reviews
   only newly authorized app screenshots for remaining presentation observations.
+  Independent GO for two component weak-capture corrections only: inventory row and Advanced
+  popover/ancestor window. Exact private component-lifetime fixture, no whole-page release claim.
 
-- P385 (in_progress, file_summary; proposal/reviewer performance_audit): close the selected
+- P385 (complete, file_summary; proposal/reviewer performance_audit): close the selected
   Files popover before forwarding its retained source action, preserving direct/unmounted proxies.
   Root observed first confirmation click dismissing the old popup; cause is not yet proven.
   Own isolated files.rs builder and existing private handoff fixtures only; weak popover capture,
-  no focus/delay workaround or callback policy changes. Root actual pointer verification required.
+  no focus/delay workaround or callback policy changes. Private gates and actual first-pointer
+  Download/Delete confirmation gates PASS; wallpaper restored, game/three installers preserved.
 
 - P383 (complete, file_summary; proposal/reviewer performance_audit): move Files completion
   plausibility checks off GTK without changing the predicate, transfer events or unmounted proxy

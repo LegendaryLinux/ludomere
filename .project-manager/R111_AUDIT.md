@@ -33,6 +33,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P385 actual pointer handoff PASS: wallpaper File actions closes before destination chooser;
+  first Download click closes chooser and reports existing files. Reopened menu/Delete closes
+  popup; first confirmation Delete removes only wallpaper, restoring single Download and totals.
+  Direct Download restores1,732,183B wallpaper and900.7MB total; game/three installers preserved.
+  Screenshots p385-{chooser,first-download-click,delete-confirm,first-delete-click,restored}.png.
+  Exact private builder p385-y36qpfty, archive completion/delete p296-j4hilar1, retained proxy
+  p296-bpjt14e6 all PASS; fmt/Clippy/compile/build PASS. Independent source review GO.
+  This resolves the observed two-click Files dialog handoff, not deferred P375's warning.
+
+- P384 commitb2922a9 exact post-build PASS;57 separate built audit commits before P385.
+
 - P384 new actual-control fixture PASS (p384-qe7bjzdg), retained P369/P372/P379 PASS
   (p369-p_o635lf,p372-3p1ewhvt,p379-7_xamkxt), final fmt/Clippy/compile PASS. Real mkdir
   failures and activity/origin/launcher guards exercised under private roots; no real file

@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD4de6019. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEADb2922a9 before P385. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered56 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered57 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
   572 library tests, six integration tests, five Python helper tests and build.80 library tests
@@ -19,11 +19,10 @@ Last meaningful update: 2026-10-06.
   settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound
   metadata Retry; P373 temporary Windows-check feedback; P374 consistent Downloads counters.
   Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
-- Active: P378 Downloads spacing/labels correction passes private geometry gates and build.
-  P379 Cloud folder override persistence fix committed; focused gates and exact build PASS.
-  P380 copy fix committed/built; P381 header/keyboard pass but completion status still clips actions.
-  P382a/P382b committed/built; P383 reviewed and in focused gates. P384 worker owns
-  backup-folder UI I/O fixes in isolation. P375 synthetic handoff passes after
+- Active: P378–P384 committed with focused gates and exact builds PASS; responsive details
+  now retain primary/alternate/gear/favorite controls, including completed-download status.
+  P385 popup handoff passes private and real pointer gates, ready to commit. P386 component
+  reference cycles and P387 singular copy correction are isolated worker tasks. P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
@@ -37,12 +36,14 @@ Last meaningful update: 2026-10-06.
   files; corrected repair consent fits, cancelled before work. Extras-only Gungeon wallpaper
   download lands in correct root, updates row/totals/notifications; local deletion restores single
   Download and preserves game/two installers. First Delete click was ignored, repeat succeeded;
-  cause remains unknown. Livea3641c1 fresh BIT.TRIP reinstall/title/exit succeeds; screenshot
-  keyboard navigation and Gungeon achievement refresh succeed. Narrow detail layout clips actions.
+  corrected by P385 popup dismissal; actual first-click confirmations now pass. Livea3641c1
+  fresh BIT.TRIP reinstall/title/exit succeeds; screenshot keyboard navigation and achievement
+  refresh succeed. Latest live responsive layout and archive restoration pass.
 - Open evidence/limits: one repeated nonfatal GTK ancestor critical around Repair-to-components
   transition (P375); earlier paused archive first trash click unexplained (P358); full stale
   Properties installed identity deferred beyond P365a; malformed preference JSON recovery
-  deferred (P360); cloud path override/discovery race not solved by P369/P372. No blanket claim
+  deferred (P360); whole Cloud Properties page retention remains diagnostic (P386 only fixes
+  proven component cycles). P379 resolves override/discovery persistence race. No blanket claim
   that all GTK warnings are absent. Private harness GSettings schema warnings remain nonfatal.
 - Use normal game windowquit and app tray Close, not X11 windowclose. Agents never see actual
   private profile/game data or raw diagnostic logs; specifically approved app-only screenshots

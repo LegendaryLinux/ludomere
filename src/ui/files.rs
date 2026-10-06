@@ -2399,8 +2399,20 @@ fn build_file_action_menu(actions: &gtk::Box) -> gtk::Box {
                 .bind_property("sensitive", proxy, "sensitive")
                 .sync_create()
                 .build();
+        }
+        {
             let source = source.clone();
-            proxy.connect_clicked(move |_| source.emit_clicked());
+            direct.connect_clicked(move |_| source.emit_clicked());
+        }
+        {
+            let source = source.clone();
+            let popover = popover.downgrade();
+            menu_entry.connect_clicked(move |_| {
+                if let Some(popover) = popover.upgrade() {
+                    popover.popdown();
+                }
+                source.emit_clicked();
+            });
         }
         source
             .bind_property("visible", &menu_entry, "visible")
@@ -5942,8 +5954,11 @@ mod unified_row_tests {
             .find(|button| button.tooltip_text().as_deref() == Some("Delete downloaded files"))
             .unwrap();
         assert!(delete.get_visible() && delete.is_sensitive());
+        menu.popup();
+        wait(|| popover.is_mapped() && delete.is_mapped());
         delete.emit_clicked();
         wait(|| window.visible_dialog().is_some());
+        wait(|| !popover.is_mapped());
         respond(&window, "Cancel");
         wait(|| window.visible_dialog().is_none());
         assert!(file.exists());
@@ -5952,8 +5967,11 @@ mod unified_row_tests {
         let mut invalid = config.clone();
         invalid.offline_libraries.clear();
         invalid.save().unwrap();
+        menu.popup();
+        wait(|| popover.is_mapped() && delete.is_mapped());
         delete.emit_clicked();
         wait(|| window.visible_dialog().is_some());
+        wait(|| !popover.is_mapped());
         respond(&window, "Delete");
         wait(|| notice.text().contains("Could not delete downloaded files"));
         assert!(status.has_css_class("error"));
@@ -5962,8 +5980,11 @@ mod unified_row_tests {
         assert!(menu.is_visible());
         config.save().unwrap();
         wait(|| window.visible_dialog().is_none());
+        menu.popup();
+        wait(|| popover.is_mapped() && delete.is_mapped());
         delete.emit_clicked();
         wait(|| window.visible_dialog().is_some());
+        wait(|| !popover.is_mapped());
         respond(&window, "Delete");
         wait(|| notice.text().contains("Downloaded files deleted."));
         assert!(!file.exists());
@@ -6395,9 +6416,42 @@ mod unified_row_tests {
     }
 
     #[test]
-    #[ignore = "requires private GTK"]
+    #[ignore = "private p385 HOME/all XDG/TMP, GTK and D-Bus; inert action handoffs only"]
     fn action_content_changes_preserve_single_or_menu_layout() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p385-"),
+                "{key}"
+            );
+        }
+        assert!(!crate::identity::database().exists());
         adw::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn nodes(root: &gtk::Widget) -> Vec<gtk::Widget> {
+            let mut result = vec![root.clone()];
+            for child in std::iter::successors(root.first_child(), |child| child.next_sibling()) {
+                result.extend(nodes(&child));
+            }
+            result
+        }
         let sources = gtk::Box::new(gtk::Orientation::Vertical, 0);
         let first = gtk::Button::from_icon_name("folder-open-symbolic");
         let second = gtk::Button::with_label("Download to another library");
@@ -6415,6 +6469,102 @@ mod unified_row_tests {
         second.set_visible(false);
         assert!(direct.is_visible());
         assert!(!menu.is_visible());
+        let menu = menu.downcast::<gtk::MenuButton>().unwrap();
+        let direct = direct.downcast::<gtk::Button>().unwrap();
+        let popover = menu.popover().unwrap();
+        let entry = nodes(popover.upcast_ref())
+            .into_iter()
+            .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+            .find(|button| button.tooltip_text().as_deref() == Some("Download all required parts"))
+            .unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.FileMenuHandoffTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::new(&app);
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        content.append(&row);
+        window.set_content(Some(&content));
+        window.present();
+        wait(|| row.is_mapped());
+        let calls = Rc::new(std::cell::Cell::new(0));
+        let detach = Rc::new(std::cell::Cell::new(false));
+        first.connect_clicked({
+            let calls = calls.clone();
+            let detach = detach.clone();
+            let popover = popover.downgrade();
+            let row = row.downgrade();
+            let content = content.downgrade();
+            let window = window.downgrade();
+            move |source| {
+                assert!(
+                    source.root().is_none(),
+                    "source remains deliberately unmounted"
+                );
+                if let Some(popover) = popover.upgrade() {
+                    assert!(
+                        !popover.get_visible(),
+                        "dismissal must precede source dispatch"
+                    );
+                }
+                calls.set(calls.get() + 1);
+                if detach.get() {
+                    content.upgrade().unwrap().remove(&row.upgrade().unwrap());
+                }
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Inert file action")
+                    .body("No file operation will be performed.")
+                    .build();
+                dialog.add_response("close", "Close");
+                dialog.present(Some(&window.upgrade().unwrap()));
+            }
+        });
+        let close = || {
+            let dialog = window.visible_dialog().unwrap();
+            let button = nodes(dialog.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some("Close"))
+                .unwrap();
+            wait(|| button.is_mapped() && button.is_sensitive());
+            button.emit_clicked();
+            wait(|| window.visible_dialog().is_none());
+        };
+        second.set_visible(true);
+        for should_detach in [false, true] {
+            detach.set(should_detach);
+            menu.popup();
+            wait(|| popover.is_mapped() && entry.is_mapped());
+            let before = calls.get();
+            entry.emit_clicked();
+            assert_eq!(calls.get(), before + 1);
+            wait(|| !popover.is_mapped() && window.visible_dialog().is_some());
+            if should_detach {
+                assert!(row.parent().is_none());
+            }
+            close();
+            assert_eq!(calls.get(), before + 1);
+            if should_detach {
+                content.append(&row);
+            }
+        }
+        detach.set(false);
+        second.set_visible(false);
+        wait(|| direct.is_mapped() && !menu.is_mapped());
+        direct.emit_clicked();
+        assert_eq!(calls.get(), 3);
+        close();
+        // Holding an entry must not retain its former popup through the new callback.
+        let weak_popover = popover.downgrade();
+        menu.set_popover(gtk::Popover::NONE);
+        drop(popover);
+        wait(|| weak_popover.upgrade().is_none());
+        entry.emit_clicked();
+        assert_eq!(calls.get(), 4);
+        close();
+        assert!(!crate::identity::database().exists());
+        window.destroy();
     }
 
     #[test]
