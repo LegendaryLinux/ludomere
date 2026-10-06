@@ -8,21 +8,22 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified79 separate audit commits through17939d1, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified80 separate audit commits through927556d, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
-- Latest consolidated private build PASS at26e8c50: fmt, all-target Clippy-Dwarnings,
+- Latest consolidated private build PASS at927556d: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.95 library tests
   ignored by default; affected GTK gates run separately. Log:
-  /tmp/ludomere-r111-full-build-mppzqivn/build.log. No real account/helpers/network in gate.
+  /tmp/ludomere-r111-full-build-_ihxotmp/build.log. No real account/helpers/network in gate.
 - Latest verified fixes: responsive detail controls, first-click archive popups, tray startup/
   shutdown and session admission, Maintenance progress, tag keyboard/validation, folder-origin
   guards, operation-log activity, persistent log-folder errors, General-first Properties and
   singular archive copy. P404 removes explicit unopened-menu capture cycles: same strict test
   fails before/passes after, and mapped actions retain behavior. Each task's evidence is in plan/audit.
-- Active: P407 Cloud basic-controls-first ordering committed/built after private loader and
-  real Windows/native presentation gates. P403 chooser polling lifecycle committed/built after strict private gates; I/O was
-  already worker-side. P405 full-path Properties row committed/built with normal/minimum-width
-  visual and selection gates. P406 neutral log success copy passes retained reader regression.
+- Active: P411 isolates the recurring repair-to-components GTK critical with a current-source,
+  root-pointer diagnostic. No production fix authorized without evidence. P408 exact completed-
+  batch feedback passes strict failing-before/passing-after and live deletion gates. P409 idle
+  graph explanation and P410 Proton Cancel wording pass focused/live gates and builds. P407
+  Cloud ordering, P403 chooser lifecycle and P405 full-path row are committed and verified.
   P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic
   code removed. P404 is a separately approved narrower fix, not a pass of that old gate.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
@@ -32,13 +33,12 @@ Last meaningful update: 2026-10-06.
   offline reinstall writes correct schema1 and retains two archives; Coffee Depot repair succeeds.
   No broad gameplay/controller/cold-wallet-start assertion. Saved-login discovery fixed P330;
   user unlocked the already-advertised KDE provider, no wallet settings changed.
-- Recent live5a05fe8: saved Cloud page loads correctly and read-only inventory returns0 remote
-  files; corrected repair consent fits, cancelled before work. Extras-only Gungeon wallpaper
-  download lands in correct root, updates row/totals/notifications; local deletion restores single
-  Download and preserves game/two installers. First Delete click was ignored, repeat succeeded;
-  corrected by P385 popup dismissal; actual first-click confirmations now pass. Livea3641c1
-  fresh BIT.TRIP reinstall/title/exit succeeds; screenshot keyboard navigation and achievement
-  refresh succeed. Latest live responsive layout and archive restoration pass.
+- Recent live: Coffee Audit Test profile created in an empty slot, opening scene reached,
+  normal exit uploaded one28KB save; Properties records successful18:29UTC sync. Preserve it.
+  Gungeon archive pause/cancel first click passes; all three installers restored900.7MB.
+  Exact completed archive deletion now clears stale detail feedback without leaving the page.
+  Native manual update reports no update and preserves Play; Proton metadata loads normally.
+  Current repair review repeats one nonfatal GTK critical, canceled before component execution.
 - Open evidence/limits: one repeated nonfatal GTK ancestor critical around Repair-to-components
   transition (P375); earlier paused archive first trash click unexplained (P358); full stale
   Properties installed identity deferred beyond P365a; malformed preference JSON recovery

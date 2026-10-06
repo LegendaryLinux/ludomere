@@ -2,6 +2,22 @@
 
 ## R111 interactive audit
 
+- P412 (complete, ui_critic; reviewer performance_audit): show Preparing reset… on the
+  recovery window's disabled Retry button while its existing worker validates/schedules reset;
+  restore Retry reset before re-enabling on error/disconnect. Three main.rs button label setters
+  only; keep original diagnostics and Close available. No actual reset, new fixture, state/
+  deletion/policy change or regular Settings reset change. Independent source/fmt/build gates.
+  Exact three-line independent source GO; fmt/build PASS. No real reset executed or claimed.
+
+- P411 (in_progress diagnostic, file_summary; reviewers performance_audit/UI harness ui_critic):
+  current live927556d repeats P375 gtk_widget_is_ancestor critical after repair Start and before
+  component consent; canceled, no component/game mutation. Port only fail-closed old diagnostic
+  seams to isolated current source and genuine root-pointer staged X11 fixture/private profile/bus.
+  Require no DB/queue/helper/network, admission refusal even accidental consent Confirm, normal
+  animations and unique synthetic window. No production timing/focus patch or main integration
+  authorized before evidence. Root alone handles explicit display/auth path, actual pointer input
+  and screenshots; agents never inspect desktop/profile/auth material. Stop if scope grows.
+
 - P410 (complete, ui_critic; reviewer file_summary): relabel shared Proton release-lookup/
   download cancel button to Cancel, since root observed misleading Cancel download before any
   runtime transfer. One literal in isolated proton.rs; no Comet change (its existing label is

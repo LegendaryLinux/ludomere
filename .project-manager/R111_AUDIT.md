@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At927556d consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library tests,
+  six integration tests, five Python helper tests and build.95 library entries ignored by default;
+  affected GTK gates separately run.80 exact post-commit builds PASS. Evidence
+  /tmp/ludomere-r111-full-build-_ihxotmp/build.log. Actual profile/helpers/network excluded.
+
 - At26e8c50 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library tests,
   six integration tests, five Python helper tests and build.95 library entries ignored by default;
   affected GTK gates separately run.77 exact post-commit builds PASS. Evidence
@@ -52,6 +57,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P412 source/fmt/build PASS: recovery Retry now reads Preparing reset… while its existing
+  validation/scheduling worker runs; error/disconnect restore Retry reset before re-enabling.
+  Exact three-label-setter independent review; no reset/credential or policy change/test run.
+  Closing source assessment found no introduced blocker within reviewed P401–P410; cfg(test)
+  accounts for about75% of net Rust growth. P408 steady completion check adds O(K×J) borrowed
+  ID comparisons, no measured stall; typicalK1 and existing scans noted, no speculative refactor.
+
+- Current927556d live P375 repeats: nested Coffee Manage→Repair shows corrected confirmation
+  with no warning; Start→required-components emits one gtk_widget_is_ancestor invalid-widget
+  critical at15:01:31 local. Consent and Cancel work; canceled before component execution, game/
+  prefix/save untouched. Screenshots repair-late-*; only exact safe GTK line examined. P411
+  authorizes isolated current-source real-pointer diagnostic proposal with fail-closed backend
+  seams; no product fix/debugger or toolkit attribution. P410 exact post-build PASS,80 commits.
 
 - P409 commit17939d1 exact post-build PASS;79 built audit commits. Final Gungeon archive
   restoration returns3/3 and900.7MB; app-download-feedback-preview.log contains zero Gtk-CRITICAL,
