@@ -1435,6 +1435,17 @@ fn depot_stage_label(state: &str) -> &'static str {
 fn completed_transfer_history_header(model: &AppModel) -> gtk::Box {
     let header = gtk::Box::new(gtk::Orientation::Vertical, 0);
     header.add_css_class("completed-transfer-history");
+    let status = gtk::Label::new(Some(
+        "No transfers are running. Recent transfer history is shown below.",
+    ));
+    status.set_widget_name("idle-transfer-history-status");
+    status.set_xalign(0.0);
+    status.set_wrap(true);
+    status.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    status.set_margin_start(18);
+    status.set_margin_end(18);
+    status.set_margin_top(12);
+    header.append(&status);
     let overlay = gtk::Overlay::new();
     overlay.set_size_request(-1, 174);
     overlay.set_child(Some(&transfer_history_graph(model)));
@@ -2340,8 +2351,23 @@ mod active_transfer_tests {
                     .filter(|widget| widget.has_css_class("completed-transfer-history"))
                     .collect::<Vec<_>>();
                 assert_eq!(headers.len(), usize::from(visible));
+                let status = find_named_descendant(
+                    widgets.downloads.upcast_ref(),
+                    "idle-transfer-history-status",
+                )
+                .and_downcast::<gtk::Label>();
+                assert_eq!(status.is_some(), visible);
                 if let Some(header) = headers.first() {
                     assert!(header.is_mapped());
+                    let status = status.unwrap();
+                    assert_eq!(status.parent().as_ref(), Some(header));
+                    assert_eq!(
+                        status.text(),
+                        "No transfers are running. Recent transfer history is shown below."
+                    );
+                    assert!(status.wraps());
+                    readable(&status);
+                    assert_eq!(status.next_sibling().unwrap().height_request(), 174);
                 }
                 let page = widgets.downloads.first_child().unwrap();
                 assert_eq!(
@@ -2366,6 +2392,31 @@ mod active_transfer_tests {
             }
 
             model.download_jobs.clear();
+            let mut queued = job();
+            queued.job_id = "queued-idle-fixture".into();
+            queued.state = DownloadState::Queued;
+            queued.destination = destination.clone();
+            model.download_jobs.push(queued);
+            rebuild_downloads_page(&widgets, &model);
+            let status = find_named_descendant(
+                widgets.downloads.upcast_ref(),
+                "idle-transfer-history-status",
+            )
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+            wait(|| status.is_mapped() && status.width() > 0);
+            readable(&status);
+            let queue_heading = heading(&widgets.downloads, "Up Next (1)");
+            assert_eq!(
+                queue_heading.next_sibling().unwrap().widget_name(),
+                "queued-idle-fixture"
+            );
+            assert!(
+                !nodes(&widgets.downloads)
+                    .iter()
+                    .any(|widget| widget.has_css_class("downloads-empty-queue"))
+            );
+            model.download_jobs.clear();
             rebuild_downloads_page(&widgets, &model);
             let completed_empty = label(&widgets.downloads, "Completed downloads will appear here");
             wait(|| completed_empty.is_mapped() && completed_empty.height() > 0);
@@ -2387,8 +2438,8 @@ mod active_transfer_tests {
 
             // A second paused record is featured, leaving the first in the actual paused-card list.
             *model.transfer_history.borrow_mut() = [TransferHistorySample {
-                download_bytes_per_second: 0.0,
-                disk_bytes_per_second: 0.0,
+                download_bytes_per_second: 1_000.0,
+                disk_bytes_per_second: 2_000.0,
             }]
             .into();
             for resumable in [false, true] {
@@ -2414,6 +2465,13 @@ mod active_transfer_tests {
                 rebuild_downloads_page(&widgets, &model);
                 let queued_title = label(&widgets.downloads, "Up Next (1)");
                 wait(|| queued_title.is_mapped() && queued_title.height() > 0);
+                assert!(
+                    find_named_descendant(
+                        widgets.downloads.upcast_ref(),
+                        "idle-transfer-history-status"
+                    )
+                    .is_none()
+                );
                 let queued_heading = heading(&widgets.downloads, "Up Next (1)");
                 assert_eq!(
                     queued_heading.next_sibling().unwrap().widget_name(),
@@ -2457,6 +2515,13 @@ mod active_transfer_tests {
                 rebuild_downloads_page(&widgets, &model);
                 let message = label(&widgets.downloads, "Synthetic retained failure");
                 wait(|| message.is_mapped());
+                assert!(
+                    find_named_descendant(
+                        widgets.downloads.upcast_ref(),
+                        "idle-transfer-history-status"
+                    )
+                    .is_none()
+                );
                 assert!(message.is_selectable());
                 let featured = find_named_descendant(
                     widgets.downloads.upcast_ref(),

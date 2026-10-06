@@ -19,12 +19,14 @@
   expected disappearance wait p408-e7zxpkbe and passes reviewed production p408-gimihv_q.
   Formatting/compilation/all-target Clippy PASS. No new backend or GTK I/O; live repeat pending.
 
-- P409 (in_progress, ui_critic; reviewer performance_audit): explain retained historical
+- P409 (complete, ui_critic; reviewer performance_audit): explain retained historical
   Downloads graph when no featured transfer exists. One wrapping label in existing header,
   keep graph/rates/queue/actions. Existing actual renderer fixture extends idle/paused/failed
   assertions. No success/empty-queue claim, redesign or new framework; root visual gate.
   Isolated downloads.rs only. Independent proposal GO; paused/failed precedence gate retains
   positive history and queued-only positive-history case retains row/count. Root gates.
+  Independent implementation GO; actual renderer p378-_o_stb4z PASS normal/enlarged fonts.
+  Live history paragraph visible with zero current rates; graph/queue/actions retained.
 
 - P407 (complete, ui_critic; reviewer file_summary): place basic cloud enable/status/sync
   controls before Export/manage in Properties. Root actual screenshot and bounded proposal

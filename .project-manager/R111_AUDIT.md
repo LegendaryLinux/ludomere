@@ -53,6 +53,19 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P408 live PASS: observed Windows archive downloading/completion, then deleted that exact
+  one file without leaving detail. DOWNLOAD COMPLETE disappeared in place; native Play,
+  Linux/macOS archives and remaining counts retained. Screenshots p408-live-completed/cleared.
+  P409 live PASS p409-live-idle-history: explicit idle/history paragraph visible above graph,
+  current network/disk0, historical peak retained, queue/completed controls reachable. Windows
+  archive restoration pending; no other game files touched. No target GTK critical observed.
+
+- P408 commit4eba7fb exact post-build PASS;78 built audit commits. P409 retained actual renderer
+  gate p378-_o_stb4z PASS19.04s, normal/enlarged text, history variants and positive-history
+  paused/failed/queued precedence; known private GSettings warnings only. Root reserves another
+  1GB (total16GB/40) for exact Gungeon archive deletion/reacquisition state and historical-graph
+  visual gates. No new game or installer execution; native payload/other archives remain protected.
+
 - P408 fixed-production identical actual-panel gate p408-gimihv_q PASS3.82s: tracked deletion,
   unrelated retention/removal, partial Paused, multi-job batch, subsequent batch and no-managed
   invalidation retain native Play and widget identity. Known private GSettings warnings only.
