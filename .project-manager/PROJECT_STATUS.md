@@ -8,7 +8,7 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified75 separate audit commits through0c6152e, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified76 separate audit commits through0bf8c27, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS at37aa551: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.93 library tests
@@ -25,7 +25,7 @@ Last meaningful update: 2026-10-06.
   P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic
   code removed. P404 is a separately approved narrower fix, not a pass of that old gate.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
-- Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve14GB of40GB, covering
+- Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve15GB of40GB, covering
   payloads/prefixes/cache/staging/repeats; BIT.TRIP official requirement100MB, measured payload
   56.7MB/prefix409MB. All three rendered game screens and exited normally. Gungeon native
   offline reinstall writes correct schema1 and retains two archives; Coffee Depot repair succeeds.

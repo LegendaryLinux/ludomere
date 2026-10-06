@@ -2,6 +2,15 @@
 
 ## R111 interactive audit
 
+- P407 (complete, ui_critic; reviewer file_summary): place basic cloud enable/status/sync
+  controls before Export/manage in Properties. Root actual screenshot and bounded proposal
+  confirm discoverability issue. Move only final management-group attachment and existing
+  fixture's expected order in isolated game_settings.rs. Preserve callbacks, visibility,
+  hidden-page focus, consent and cloud operations. No new fixture/framework or actual data
+  access by agents; root runs focused loader gate and actual Windows/native presentation checks.
+  Independent source GO; private retained loader gate p369-_nplom9x PASS and root actual
+  Coffee basic-first/management-below plus native Gungeon explanation PASS; fmt/build PASS.
+
 - P406 (complete, ui_critic; reviewer file_summary): replace misleading success text claiming
   live updates after forced Refresh with Follow off. One logs.rs literal: Saved launch output.
   Preserve Follow/Refresh/read/paused/error semantics and P399 folder feedback. No new fixture

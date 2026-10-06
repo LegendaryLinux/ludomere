@@ -877,7 +877,6 @@ fn populate_cloud_settings(
     let supported = record.availability == crate::domain::CloudSaveAvailability::Supported;
     let management = cloud_management::cloud_management_group(window, model, installed_game);
     management.set_visible(supported);
-    cloud_page.add(&management);
     let locations_state = Rc::new(RefCell::new(record.locations.clone()));
     #[cfg(test)]
     if TEST_CLOUD_PICKERS.with(|requests| requests.borrow().is_some()) {
@@ -1749,6 +1748,7 @@ fn populate_cloud_settings(
     }
     cloud_group.add(&cloud_status);
     cloud_page.add(&cloud_group);
+    cloud_page.add(&management);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -6172,7 +6172,7 @@ mod control_tests {
             .collect::<Vec<_>>();
         assert_eq!(
             groups,
-            ["Export and manage remote saves", "GOG Cloud Saves"]
+            ["GOG Cloud Saves", "Export and manage remote saves"]
         );
         assert_eq!(
             StateStore::open()

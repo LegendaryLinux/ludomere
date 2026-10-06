@@ -48,6 +48,43 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P407 actual preview PASS: Coffee Cloud basic enable/status/locations/sync controls appear
+  first; scrolling reaches unchanged Export/Manage warnings and actions. Native Gungeon retains
+  managed-UMU-only explanation. No cloud action/settings change. Screenshots p407-cloud-basic-first,
+  p407-cloud-management-below and p407-native-cloud. Focused loader/fmt/build PASS; source reviewed.
+  Gungeon cancellation restoration completed3/3 archives900.7MB; native Play remains available.
+
+- On0bf8c27 Gungeon Windows archive deletion restores a single Download/count2 in place,
+  preserving native Play and Linux/macOS archives. First reacquisition finished before Pause;
+  the subsequent primary click therefore launched the native game, which was normally exited.
+  Second transfer was promptly paused at8.7MB; Downloads trash opened confirmation on its
+  first click and confirmed cancellation removed that queue entry. Earlier P358 first-click
+  failure did not reproduce; no causal fix claimed. Restoration transfer is now running.
+  Total reservation remains15GB. Screenshots gungeon-*-retest/timed/cancel under evidence root.
+  Deletion leaves a stale DOWNLOAD COMPLETE status while unrelated archives remain; delegated
+  bounded source investigation before implementation. No cloud deletion or installer execution.
+
+- P407 Cloud group-order patch independently source-reviewed; existing full loader/hidden-tab
+  focus regression p369-_nplom9x PASS2.63s, known private GSettings warnings only. Native/basic
+  and supported management behavior otherwise unchanged; root actual visual gate pending.
+  Bounded disconnected-worker review found no additional concrete busy-forever defect in
+  reviewed file/log/settings receivers; scope limits retained in busy-worker-assurance report.
+
+- On0bf8c27 Coffee Talk launches through configured GE-Proton11-7, sidebar turns green and
+  primary becomes Stop. Root created an explicitly named Audit Test profile in an empty game
+  slot and reached the opening scene. This newly creates test save data (unlike earlier title-only
+  runs); normal sync is authorized. Logs show the saved run; Follow off/Refresh gives paused
+  guidance, Follow restored. Normal game windowquit triggers visible Uploading cloud saves then
+  Play/white name and playtime12min in place, preserving coffee search. Properties records last
+  successful sync18:29 UTC; read-only inventory reports one remote save/28.0KB. No forced sync,
+  cloud deletion or export. Named coffee-*-audit.png evidence; app still running for next test.
+  P406 commit0bf8c27 exact post-build PASS,76 separately built audit commits.
+
+- Next live transfer gate reserves an additional1GB within the allowed40GB (total conservative
+  reservation15GB), for deleting/reacquiring only Gungeon's test Windows installer and exercising
+  paused-transfer cancellation. Native installed payload and Linux/macOS archives stay intact.
+  Root alone owns actual actions; no deliberate cloud/save deletion or new game introduction.
+
 - P406 one-literal log status correction independently reviewed; forced Refresh no longer
   promises live following when Follow is off. Existing actual-reader/folder/Follow/Refresh
   regression p399-1jkhg1gq PASS; fmt/compile PASS, known private schema warnings only. No reader
