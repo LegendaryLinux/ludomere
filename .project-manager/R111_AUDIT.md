@@ -220,6 +220,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   strict cursor/activation assertions retained. Formatting/all-target Clippy/build PASS.
 - Physical-key and focus-ring live checks remain pending a restart; collection game tiles unchanged.
 
+### P344 — explain external uninstaller prompts
+
+- All existing uninstall stage-message writers and UI fallback now say to follow any prompts in
+  the uninstaller window. This addresses the real Gungeon Yes/No/OK prompts without detecting
+  windows, stealing focus or altering helper execution. Independent review/fmt/Clippy/build PASS.
+
 ## Remaining findings
 
 - Independent cross-check P347 found synchronous cancellation admission can wait on a mutex held

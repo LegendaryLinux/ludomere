@@ -59,7 +59,7 @@
   because libraries do not retain mount identity. Isolated chooser/helper regression only.
 - P343 (in_progress, ui_critic): normal uninstall hides irrelevant Retry and collapses alternative
   removal methods, expanding recovery after failure. Preserve Browse, all warnings and consent.
-- P344 (review, ui_critic): four existing uninstaller status strings explain following prompts in
+- P344 (complete, ui_critic; reviewer file_summary): four existing uninstaller status strings explain following prompts in
   the uninstaller window. No process, focus, detection or execution changes.
 - P345 (in_progress, file_summary): synchronize idle download-state class and reuse existing helper
   for paused/failed archive restoration; isolated details-only transitions regression.

@@ -3737,7 +3737,7 @@ fn start_queued_uninstallation(plan: PersistedUninstallationPlan, session: u64) 
     persist_existing_operation(
         product_id,
         "running",
-        Some("Running native uninstaller"),
+        Some("Follow any prompts in the uninstaller window"),
         None,
         None,
     );
@@ -3748,7 +3748,7 @@ fn start_queued_uninstallation(plan: PersistedUninstallationPlan, session: u64) 
             InstallationOperationSnapshot {
                 product_id,
                 state: crate::domain::InstallationState::Uninstalling,
-                message: Some("Running native uninstaller".into()),
+                message: Some("Follow any prompts in the uninstaller window".into()),
                 percentage: None,
                 queued: false,
             },
@@ -4460,7 +4460,7 @@ fn update_uninstallation_snapshot(product_id: i64, event: &UninstallationEvent) 
     let (state, message) = match event {
         UninstallationEvent::Started => (
             crate::domain::InstallationState::Uninstalling,
-            Some("Running native uninstaller".into()),
+            Some("Follow any prompts in the uninstaller window".into()),
         ),
         UninstallationEvent::Complete => (
             crate::domain::InstallationState::Pending,

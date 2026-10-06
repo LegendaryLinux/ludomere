@@ -4,6 +4,10 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P340 committed7967045 exact post-commit build PASS; live client restarted on that build for
+  physical keyboard checks. P344 four-string guidance independently reviewed, formatting/all-target
+  Clippy/build PASS, separate commit next. No new test for a wording-only change.
+
 - P342 committedbf14e58 exact post-commit build PASS. P340 independent review and private native
   GTK/accessibility regression plus three existing filter/exit regressions PASS; fixture corrected
   native focus entry and layout timing, assertions retained. Formatting/all-target Clippy/build PASS.

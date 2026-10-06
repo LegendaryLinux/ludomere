@@ -2630,7 +2630,11 @@ fn installation_status_panel(
                     progress.set_fraction(f64::from(percentage) / 100.0);
                     determinate.set(true);
                 } else {
-                    detail.set_label(message.as_deref().unwrap_or("Running native uninstaller"));
+                    detail.set_label(
+                        message
+                            .as_deref()
+                            .unwrap_or("Follow any prompts in the uninstaller window"),
+                    );
                     determinate.set(false);
                 }
                 progress.set_visible(true);
