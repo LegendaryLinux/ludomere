@@ -528,19 +528,45 @@ fn confirm_depot_plan(
     dialog.set_title("Required game components");
     dialog.set_content_width(600);
     dialog.set_content_height(440);
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let header = adw::HeaderBar::new();
+    header.set_widget_name("component-consent-header");
+    root.append(&header);
     let body = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    body.set_vexpand(true);
     body.set_margin_start(18);
     body.set_margin_end(18);
+    body.set_margin_top(18);
     body.set_margin_bottom(18);
-    body.append(&adw::HeaderBar::new());
     let introduction = gtk::Label::new(Some(
         "Install the components this game needs to run. Missing files will be downloaded and setup will run in this game's Windows environment.",
     ));
+    introduction.set_widget_name("component-consent-introduction");
+    introduction.set_xalign(0.0);
     introduction.set_wrap(true);
     introduction.set_visible(needs_review);
     body.append(&introduction);
     let label = gtk::Label::builder()
+        .name("component-consent-description")
         .label(&description)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
+        .selectable(true)
+        .xalign(0.0)
+        .yalign(0.0)
+        .valign(gtk::Align::Start)
+        .build();
+    body.append(
+        &gtk::ScrolledWindow::builder()
+            .name("component-consent-description-scroll")
+            .child(&label)
+            .vexpand(true)
+            .min_content_height(32)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .build(),
+    );
+    let status = gtk::Label::builder()
+        .name("component-consent-status")
         .wrap(true)
         .wrap_mode(gtk::pango::WrapMode::WordChar)
         .selectable(true)
@@ -548,31 +574,25 @@ fn confirm_depot_plan(
         .build();
     body.append(
         &gtk::ScrolledWindow::builder()
-            .child(&label)
-            .vexpand(true)
-            .min_content_height(100)
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .build(),
-    );
-    let status = gtk::Label::builder()
-        .wrap(true)
-        .wrap_mode(gtk::pango::WrapMode::WordChar)
-        .selectable(true)
-        .build();
-    body.append(
-        &gtk::ScrolledWindow::builder()
+            .name("component-consent-status-scroll")
             .child(&status)
             .max_content_height(140)
             .propagate_natural_height(true)
             .hscrollbar_policy(gtk::PolicyType::Never)
             .build(),
     );
-    let admission_progress = gtk::ProgressBar::builder().visible(false).build();
+    let admission_progress = gtk::ProgressBar::builder()
+        .name("component-consent-admission-progress")
+        .visible(false)
+        .build();
     body.append(&admission_progress);
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let cancel = gtk::Button::with_label("Cancel");
+    cancel.set_widget_name("component-consent-cancel");
     let offline = gtk::Button::with_label("Offline installers…");
+    offline.set_widget_name("component-consent-offline");
     let confirm = gtk::Button::with_label("Install required components");
+    confirm.set_widget_name("component-consent-confirm");
     confirm.add_css_class("suggested-action");
     if !needs_review {
         confirm.set_label("Retry");
@@ -582,7 +602,8 @@ fn confirm_depot_plan(
     }
     body.append(&actions);
     actions.set_visible(needs_review);
-    dialog.set_child(Some(&body));
+    root.append(&body);
+    dialog.set_child(Some(&root));
     cancel.connect_clicked({
         let dialog = dialog.clone();
         move |_| {
@@ -6150,6 +6171,281 @@ mod archive_poll_tests {
 #[cfg(test)]
 mod installer_version_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "private p370a HOME/all XDG/TMP, GTK and D-Bus; consent layout only, no admission"]
+    fn component_consent_aligns_text_and_keeps_actions_visible() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p370a-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        #[track_caller]
+        fn inside(widget: &gtk::Widget, container: &gtk::Widget) {
+            assert!(widget.is_mapped());
+            let bounds = widget.compute_bounds(container).unwrap();
+            assert!(bounds.width() > 0.0 && bounds.height() > 0.0);
+            assert!(bounds.x() >= 0.0 && bounds.y() >= 0.0, "{bounds:?}");
+            assert!(
+                bounds.x() + bounds.width() <= container.width() as f32 + 1.0,
+                "{bounds:?}"
+            );
+            assert!(
+                bounds.y() + bounds.height() <= container.height() as f32 + 1.0,
+                "{bounds:?}"
+            );
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.ComponentConsentTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(900)
+            .default_height(400)
+            .build();
+        let original = gtk::Label::new(Some("Original page"));
+        window.set_content(Some(&original));
+        window.present();
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        let directory = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join("inert-game");
+        let installed: crate::domain::InstalledGame = serde_json::from_value(serde_json::json!({
+            "product_id": 9370001, "library_id": "synthetic", "installation_directory": directory,
+            "installer_files": [], "installer_complete": true, "installer_operating_system": "windows",
+            "launch_arguments": [], "state": "installed", "playtime_seconds": 0, "created_at": 0, "updated_at": 0
+        })).unwrap();
+        let authentication = crate::gog::depot_service::DepotSession::new(
+            auth::Token {
+                access_token: "inert-never-used".into(),
+                refresh_token: String::new(),
+                user_id: "synthetic".into(),
+                expires_at: chrono::Utc::now().timestamp() + 3600,
+            },
+            (online::account_session(), auth::session()),
+        )
+        .unwrap();
+        for long in [false, true] {
+            let plan = crate::gog::dependencies::Plan {
+                version: 1,
+                catalog_build: "synthetic".into(),
+                entries: (0..if long { 24 } else { 3 })
+                    .map(|index| crate::gog::dependencies::Dependency {
+                        id: format!("fixture-{index}"),
+                        name: if long {
+                            format!(
+                                "{} FinalComponent{index}",
+                                "LongUnbrokenComponentName".repeat(12)
+                            )
+                        } else {
+                            format!("Fixture component {index}")
+                        },
+                        manifest_id: String::new(),
+                        manifest_bytes: vec![],
+                        method: crate::gog::dependencies::Method::GameFiles,
+                    })
+                    .collect(),
+            };
+            let expected = crate::installation::dependency_setup::describe(&plan);
+            assert!(
+                !plan.entries.is_empty(),
+                "never enter automatic no-review admission"
+            );
+            let operation_id = format!("p370a-inert-{long}");
+            let request = crate::installation::DepotOperationRequest {
+                account_session: online::account_session(),
+                recovery_generation: crate::installation::recovery::generation(
+                    installed.product_id,
+                ),
+                operation_id: operation_id.clone(),
+                product_id: installed.product_id,
+                build_id: "synthetic".into(),
+                branch: None,
+                kind: crate::domain::DepotOperationKind::Repair,
+                sources: vec![],
+                current_sources: vec![],
+                current_manifest_json: None,
+                library_id: "synthetic".into(),
+                dependencies: vec![],
+                dependency_plan: Some(plan),
+                entitlement_dlc: vec![],
+                library_root: directory.parent().unwrap().to_owned(),
+                slug: "inert-game".into(),
+                destination: directory.clone(),
+                staging_path: directory.join("unused-staging"),
+                target_marker: crate::installation::installation_marker_from_game(
+                    &installed,
+                    vec![],
+                ),
+                access_token: "inert-never-used".into(),
+            };
+            let dialog = adw::Dialog::new();
+            confirm_depot_plan(&window, &model, request, authentication.clone(), &dialog);
+            dialog.present(Some(&window));
+            let root = dialog.child().unwrap();
+            let header = find_named_descendant(&root, "component-consent-header").unwrap();
+            let introduction = find_named_descendant(&root, "component-consent-introduction")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let description = find_named_descendant(&root, "component-consent-description")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let scroll = find_named_descendant(&root, "component-consent-description-scroll")
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let status = find_named_descendant(&root, "component-consent-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let status_scroll = find_named_descendant(&root, "component-consent-status-scroll")
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let buttons = ["cancel", "offline", "confirm"].map(|name| {
+                find_named_descendant(&root, &format!("component-consent-{name}"))
+                    .and_downcast::<gtk::Button>()
+                    .unwrap()
+            });
+            wait(|| {
+                description.is_mapped()
+                    && description.width() > 0
+                    && buttons[2].height() > 0
+                    && root.height() > 0
+            });
+            assert_eq!(
+                (dialog.content_width(), dialog.content_height()),
+                (600, 440)
+            );
+            assert_eq!(dialog.title(), "Required game components");
+            assert!(root.height() <= 400 && root.width() <= 600);
+            assert_eq!(description.text(), expected);
+            assert!(description.wraps() && description.is_selectable());
+            assert_eq!(description.ellipsize(), gtk::pango::EllipsizeMode::None);
+            assert_eq!(buttons[0].label().as_deref(), Some("Cancel"));
+            assert_eq!(buttons[1].label().as_deref(), Some("Offline installers…"));
+            assert_eq!(
+                buttons[2].label().as_deref(),
+                Some("Install required components")
+            );
+            for button in &buttons {
+                assert!(button.is_sensitive());
+                inside(button.upcast_ref(), &root);
+            }
+            // Libadwaita gives headerbar a -1px margin on each side for adjoining borders.
+            let header_origin = header
+                .compute_point(&root, &gtk::graphene::Point::new(0.0, 0.0))
+                .unwrap();
+            assert!(header.is_mapped() && header.height() > 0);
+            assert_eq!(header.parent().as_ref(), Some(&root));
+            assert_eq!((header.margin_start(), header.margin_end()), (0, 0));
+            assert!((-1.0..=0.0).contains(&header_origin.x()));
+            let right = header_origin.x() + header.width() as f32;
+            assert!((root.width() as f32..=root.width() as f32 + 1.0).contains(&right));
+            assert!(header_origin.y() >= 0.0);
+            assert!(header_origin.y() + header.height() as f32 <= root.height() as f32);
+            let header_bounds = header.compute_bounds(&root).unwrap();
+            // Pango origins detect centered text even when label bounds appear aligned.
+            let intro_bounds = introduction.compute_bounds(&root).unwrap();
+            let description_bounds = description.compute_bounds(&root).unwrap();
+            let (intro_x, intro_y) = introduction.layout_offsets();
+            let (text_x, text_y) = description.layout_offsets();
+            let intro_extent = introduction.layout().pixel_extents().1;
+            let text_extent = description.layout().pixel_extents().1;
+            assert!(
+                (intro_bounds.x() + intro_x as f32 + intro_extent.x() as f32
+                    - description_bounds.x()
+                    - text_x as f32
+                    - text_extent.x() as f32)
+                    .abs()
+                    <= 1.0
+            );
+            let gap = description_bounds.y() + text_y as f32 + text_extent.y() as f32
+                - (intro_bounds.y()
+                    + intro_y as f32
+                    + intro_extent.y() as f32
+                    + intro_extent.height() as f32);
+            assert!(
+                (8.0..=24.0).contains(&gap),
+                "paragraph-to-component text gap {gap}px"
+            );
+            if long {
+                wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+                scroll.vadjustment().set_value(scroll.vadjustment().upper());
+                wait(|| {
+                    description
+                        .compute_bounds(&scroll)
+                        .is_some_and(|bounds| bounds.y() < 0.0)
+                });
+                let bounds = description.compute_bounds(&scroll).unwrap();
+                assert!(bounds.y() + bounds.height() <= scroll.height() as f32 + 1.0);
+                assert!(description.text().contains("FinalComponent23"));
+            } else {
+                inside(description.upcast_ref(), scroll.upcast_ref());
+            }
+            for button in &buttons {
+                inside(button.upcast_ref(), &root);
+            }
+            assert_eq!(header.compute_bounds(&root).unwrap(), header_bounds);
+            // An admission error must coexist with the component list and action row.
+            let error = format!(
+                "{}Final admission error",
+                "Synthetic admission failure detail. ".repeat(90)
+            );
+            status.set_label(&error);
+            wait(|| {
+                status_scroll.vadjustment().upper() > status_scroll.vadjustment().page_size()
+                    && status_scroll.height() > 0
+            });
+            assert!(root.height() <= 400);
+            assert!(scroll.height() >= 32);
+            for button in &buttons {
+                inside(button.upcast_ref(), &root);
+            }
+            assert_eq!(status.text(), error);
+            status_scroll
+                .vadjustment()
+                .set_value(status_scroll.vadjustment().upper());
+            wait(|| {
+                status.compute_bounds(&status_scroll).is_some_and(|bounds| {
+                    bounds.y() < 0.0
+                        && bounds.y() + bounds.height() <= status_scroll.height() as f32 + 1.0
+                })
+            });
+            let bounds = status.compute_bounds(&status_scroll).unwrap();
+            assert!(bounds.y() + bounds.height() <= status_scroll.height() as f32 + 1.0);
+            assert!(dialog.can_close());
+            assert!(crate::installation::depot_operation_snapshot(&operation_id).is_none());
+            assert_eq!(window.content().as_ref(), Some(original.upcast_ref()));
+            // Only Cancel is exercised, never confirmation, navigation or setup.
+            buttons[0].emit_clicked();
+            wait(|| window.visible_dialog().is_none());
+        }
+        assert!(!crate::identity::database().exists());
+        window.destroy();
+    }
 
     #[test]
     #[ignore = "requires isolated HOME/all XDG/TMP under /tmp/ludomere-p355-"]

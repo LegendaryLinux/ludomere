@@ -172,10 +172,29 @@
   private reader-lock/heartbeat, errors/retry/missing/offline/native/session/activity/lifetime
   fixtures plus existing cloud regression required. No metadata/network/policy/override changes.
   Separate discovery/override races and smaller feedback findings await bounded follow-up review.
-- P370 (in_progress diagnosis, ui_critic): review real Coffee Talk required-component consent
-  layout and completed repair Details counters. Only root-named app screenshots and source;
-  no product edits or actual profile/desktop. Distinguish cosmetic gaps from misleading completed
-  work totals; propose bounded fixes with actual geometry/counter tests before implementation.
+- P370a (complete, ui_critic; reviewer performance_audit): independently approved required-
+  component consent layout only, isolated chooser. Header outside padded body, matching left
+  alignment/top-aligned list; preserve consent/actions/admission. Actual short/long text origin,
+  scrolling and400px parent controls fixture, no helper/queue/network/realdata execution.
+- P370b (ready after P370a, ui_critic; reviewer performance_audit): approved setup Details
+  counter wording only. Separate actual payload writes/full estimate, explain potential reuse,
+  scoped known-zero Depot downloads; dependencies/unknown-origin amounts are processed data, not
+  necessarily network traffic. No backend counter, completion, policy or inferred reuse changes.
+- P371 (complete diagnosis, no change, performance_audit): root BIT.TRIP consent lists MSVC2010 and
+  MSVC2010_x64 both mapped to vcrun2010. Source-only determine whether same recipe redundantly
+  executes and whether safe existing receipt semantics already avoid it. Exact prefix Winetricks
+  history already skips duplicate recipe while retaining separate required vendor receipts.
+  Root aggregate fresh-install log check confirms one vcrun2010 command. No speculative backend
+  deduplication, dependency skipping, actual agent data/helper access, source edits or tests.
+- P372 (in_progress diagnosis, performance_audit): refine bounded P369 finding2 metadata Retry
+  lifecycle proposal, separate from local loader and override race. Capture original authenticated
+  session before work, tracked activity, weak feedback and safe inert fixtures; no source edits,
+  actual account/cloud/profile/desktop/helper access. Implementation waits for P369 and review.
+- P373 (in_progress diagnosis, performance_audit): root live Notifications shows repeated Checking
+  Windows requirements/Ready despite results-only history policy. Source-only inspect
+  proton::with_windows_components transient progress routing and propose narrow feedback fix
+  preserving terminal errors, pending indicators and unrelated footer activity. No source edits,
+  actual profile/desktop/helper access or architectural UMU changes.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

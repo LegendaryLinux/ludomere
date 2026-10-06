@@ -24,6 +24,28 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P370a consent spacing independently reviewed; final actual mapped short/long text,400px footer
+  and error scrolling fixture PASS (/tmp/ludomere-p370a-5o79fn4z). Compile/fmt/Clippy PASS.
+  Two earlier fixture failures assumed flush HeaderBar bounds; installed libadwaita stylesheet
+  explicitly uses-1px side margins. Final header-only assertions permit only that outward extent
+  while requiring full coverage/no inset; actual text/action/scroll assertions unchanged. No
+  consent/admission callbacks changed; full source and corrective review retained in p370a reports.
+
+- Additional authorized under2GB test selected: BIT.TRIP Runner. GOG's official product page
+  https://www.gog.com/en/game/bittrip_runner lists100MB Windows storage; chooser defaults to
+  Windows Depot. Conservatively raise reservation from9GB to13GB of40GB for payload, prefix,
+  staging and prerequisites before download. No other new test game admitted.
+- BIT.TRIP Runner fresh Windows Depot install succeeds onb2629ce. Observed game-file download
+  progress, clicked Run in background, then observed DirectX stage2/4 with visible in-place progress
+  and disabled primary action. Completion restores Play/white list title without navigation or
+  a background modal. Required OpenAL/MSVC2010/DirectX/MSVC2010_x64 setup did not fail. Launch
+  renders the title screen. Measured payload56,697,541B and prefix409,323,147B (about466MB);
+  conservative13GB total reservation retained for caches/staging/repeated tests.
+- P371 duplicate MSVC consent diagnosis needs no backend fix: source already checks exact recipe
+  history in the same prefix before each helper and retains separate vendor/provenance receipts.
+  Root read-only aggregate log check confirms exactly one vcrun2010 command for the two entries;
+  no raw logs or credential values shared with agents. Missing history remains deliberately pending.
+
 - P368 independent review and final private actual-worker lifecycle fixture PASS
   (/tmp/ludomere-p368-dgo76u9m); existing P367 geometry fixture PASS
   (/tmp/ludomere-p367-p0fiwve5). Inspection registers activity before dispatch and checks original

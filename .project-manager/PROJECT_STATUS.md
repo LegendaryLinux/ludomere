@@ -5,23 +5,29 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADb2629ce. Root alone uses real wallet/profile/
-  desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
-  test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered40 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+  improvement/interactive-ux-audit-2026-10-06; HEAD620e6e2. Root alone uses real wallet/profile/
+  desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve13GB of40GB
+  test allowance for Gungeon/Coffee Talk plus under2GB BIT.TRIP Runner (official100MB requirement).
+  No push, PR, package, version or schema change.
+- Delivered41 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
   admission; no raw marker rewrite, prefix deletion or relaxed no-follow/bounds checks.
 - P367 committed/build PASS: independent presentation review, mapped constrained chooser
   geometry and existing destination/source fixture PASS; compile/fmt/Clippy PASS after equivalent
-  test-type alias correction. P368 lifecycle proposal independently approved, starts after this
-  commit/build. P369 source-only Cloud Properties loading/control diagnosis underway.
+  test-type alias correction. Live native chooser and Coffee Talk Depot repair also pass;
+  repaired Coffee Talk renders title screen and normal exit restores Play in place.
 - P368 independent review, delayed actual-worker admission/session/reset/close/error test and
   unchanged P367 presentation test PASS; compile/fmt/Clippy PASS. Test-exposed double-close
   corrected with independently approved early return; final log has no Adwaita close warning.
   P369 initial local Cloud loading implementation approved, isolated game_settings.rs; P370
   source/sanitized-screenshot consent layout and completed repair counter diagnosis underway.
+- P370a final geometry fixture and independent review, compile/fmt/Clippy PASS. Two incorrect
+  HeaderBar fixture assumptions corrected using verified stock negative CSS margins, without
+  weakening text/actions. P369 source-review PASS after strict receiver retirement/reentrant
+  Retry correction; awaiting integration/runtime. P371 duplicate recipe needs no backend change:
+  exact prefix history already prevents second helper; root actual log confirms one invocation.
 - Live P352 on c9f5b99: existing native Gungeon launches/rendered intro, normal quit ends process
   and restores Play/search in place; original marker hash unchanged. Earlier real Windows offline/
   Depot Gungeon and Coffee Talk launches passed. Collections/Home keyboard activation, archive
