@@ -573,7 +573,12 @@ pub(super) fn rebuild_downloads_page(w: &Widgets, model: &AppModel) {
         page.append(&active_depot_header(operation, model, &w.window));
     } else if let Some(job) = featured_job {
         page.append(&active_download_header(job, model, w));
-    } else if !model.transfer_history.borrow().is_empty() {
+    } else if model
+        .transfer_history
+        .borrow()
+        .iter()
+        .any(|sample| sample.download_bytes_per_second > 0.0 || sample.disk_bytes_per_second > 0.0)
+    {
         page.append(&completed_transfer_history_header(model));
     }
 
@@ -2235,18 +2240,16 @@ mod active_transfer_tests {
         enlarged.set_size((enlarged.size().max(11 * gtk::pango::SCALE) as f64 * 1.3) as i32);
         let enlarged = enlarged.to_string();
         let mut model = AppModel::default();
-        model
-            .transfer_history
-            .borrow_mut()
-            .push_back(TransferHistorySample {
-                download_bytes_per_second: 1_000_000.0,
-                disk_bytes_per_second: 2_000_000.0,
-            });
         let destination =
             std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("absent-downloads");
         let now = chrono::Utc::now().timestamp();
         for font in [ordinary.as_str(), enlarged.as_str()] {
             settings.set_gtk_font_name(Some(font));
+            *model.transfer_history.borrow_mut() = [TransferHistorySample {
+                download_bytes_per_second: 1_000_000.0,
+                disk_bytes_per_second: 2_000_000.0,
+            }]
+            .into();
             model.download_jobs = [1, 3, 2]
                 .into_iter()
                 .map(|order| {
@@ -2315,6 +2318,53 @@ mod active_transfer_tests {
                         <= widgets.downloads.width() as f32
             );
 
+            for (samples, visible) in [
+                (vec![], false),
+                (vec![(0.0, 0.0), (0.0, 0.0)], false),
+                (vec![(1_000.0, 0.0)], true),
+                (vec![(0.0, 2_000.0)], true),
+                (vec![(1_000.0, 2_000.0), (0.0, 0.0)], true),
+            ] {
+                *model.transfer_history.borrow_mut() = samples
+                    .iter()
+                    .map(|&(network, disk)| TransferHistorySample {
+                        download_bytes_per_second: network,
+                        disk_bytes_per_second: disk,
+                    })
+                    .collect();
+                rebuild_downloads_page(&widgets, &model);
+                let queue = label(&widgets.downloads, "Up Next (0)");
+                wait(|| queue.is_mapped() && queue.height() > 0);
+                let headers = nodes(&widgets.downloads)
+                    .into_iter()
+                    .filter(|widget| widget.has_css_class("completed-transfer-history"))
+                    .collect::<Vec<_>>();
+                assert_eq!(headers.len(), usize::from(visible));
+                if let Some(header) = headers.first() {
+                    assert!(header.is_mapped());
+                }
+                let page = widgets.downloads.first_child().unwrap();
+                assert_eq!(
+                    std::iter::successors(page.first_child(), |child| child.next_sibling())
+                        .map(|child| child.widget_name().to_string())
+                        .filter(|name| name.starts_with("history-"))
+                        .collect::<Vec<_>>(),
+                    ["history-1", "history-2", "history-3"]
+                );
+                assert_eq!(
+                    model
+                        .transfer_history
+                        .borrow()
+                        .iter()
+                        .map(|sample| (
+                            sample.download_bytes_per_second,
+                            sample.disk_bytes_per_second
+                        ))
+                        .collect::<Vec<_>>(),
+                    samples
+                );
+            }
+
             model.download_jobs.clear();
             rebuild_downloads_page(&widgets, &model);
             let completed_empty = label(&widgets.downloads, "Completed downloads will appear here");
@@ -2336,6 +2386,11 @@ mod active_transfer_tests {
             );
 
             // A second paused record is featured, leaving the first in the actual paused-card list.
+            *model.transfer_history.borrow_mut() = [TransferHistorySample {
+                download_bytes_per_second: 0.0,
+                disk_bytes_per_second: 0.0,
+            }]
+            .into();
             for resumable in [false, true] {
                 let mut queued = job();
                 queued.job_id = "queued-fixture".into();
@@ -2385,6 +2440,41 @@ mod active_transfer_tests {
                     .find(|button| button.tooltip_text().as_deref() == Some("Resume download"))
                     .unwrap();
                 assert_eq!(resume.is_sensitive(), resumable);
+                let featured = find_named_descendant(
+                    widgets.downloads.upcast_ref(),
+                    "active-download-featured-paused-fixture",
+                )
+                .unwrap();
+                assert!(featured.is_mapped());
+                assert!(
+                    nodes(&featured)
+                        .iter()
+                        .any(|widget| widget.tooltip_text().as_deref() == Some("Resume"))
+                );
+                model.download_jobs.last_mut().unwrap().state = DownloadState::Failed;
+                model.download_jobs.last_mut().unwrap().error =
+                    Some("Synthetic retained failure".into());
+                rebuild_downloads_page(&widgets, &model);
+                let message = label(&widgets.downloads, "Synthetic retained failure");
+                wait(|| message.is_mapped());
+                assert!(message.is_selectable());
+                let featured = find_named_descendant(
+                    widgets.downloads.upcast_ref(),
+                    "active-download-featured-paused-fixture",
+                )
+                .unwrap();
+                for tooltip in ["Retry download", "Cancel permanently"] {
+                    let button = nodes(&featured)
+                        .into_iter()
+                        .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                        .find(|button| button.tooltip_text().as_deref() == Some(tooltip))
+                        .unwrap();
+                    assert!(button.is_mapped());
+                    assert_eq!(
+                        button.is_sensitive(),
+                        tooltip == "Cancel permanently" || resumable
+                    );
+                }
                 assert!(widgets.window.visible_dialog().is_none());
             }
         }

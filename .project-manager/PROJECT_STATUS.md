@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD3bd6d20. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEAD44f13da. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered51 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered52 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
   572 library tests, six integration tests, five Python helper tests and build.80 library tests
@@ -20,7 +20,7 @@ Last meaningful update: 2026-10-06.
   metadata Retry; P373 temporary Windows-check feedback; P374 consistent Downloads counters.
   Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
 - Active: P378 Downloads spacing/labels correction passes private geometry gates and build.
-  P379 performance_audit implements reviewed Cloud folder override persistence fix in isolation.
+  P379 Cloud folder override persistence fix committed; focused gates and exact build PASS.
   P380 copy fix committed/built; P381 tab preview needs Files header follow-up and keyboard gate.
   P382a idle blank graph fix independently reviewed, integration pending. P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning

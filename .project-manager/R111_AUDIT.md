@@ -33,6 +33,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P379 commit44f13da exact build PASS. P382a idle graph predicate passes the extended actual
+  Downloads renderer (p378-99n30h98), fmt/Clippy and compile. Initial private display startup
+  was sandbox-blocked before tests; rerun with authorized private socket creation passed.
+  Zero-only completed history hides the graph; disk/network history and active/error controls
+  remain covered. No sample/history or transfer policy changed.
+
 - P379 corrected private GTK and retained P372 gates PASS (p379-hauwyn4h, p372-u_3e4cm_),
   with final fmt/Clippy PASS. Existing SQLite/backend/P369 gates passed earlier. New Choose
   destruction and stale-result/activity assertions pass. Whole-page retention remains unresolved:
