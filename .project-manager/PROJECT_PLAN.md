@@ -2,6 +2,30 @@
 
 ## R111 interactive audit
 
+- P410 (in_progress, ui_critic; reviewer file_summary): relabel shared Proton release-lookup/
+  download cancel button to Cancel, since root observed misleading Cancel download before any
+  runtime transfer. One literal in isolated proton.rs; no Comet change (its existing label is
+  accurate), tests or callback/policy change. Source/fmt/build and root loading screenshot gate.
+
+- P408 (complete, performance_audit; reviewer file_summary): invalidate observed
+  download-completion feedback when its exact completed jobs disappear/change after managed
+  archive deletion. R111 real stale-status finding while another archive remains. details.rs
+  only, in-memory IDs plus existing actual-panel fixture; preserve installed Play, status
+  priority, automatic-install copy, unrelated jobs and page identity. No backend mutation or
+  GTK file/DB work; isolated source only, root gates. Independent proposal GO: invalidate whole
+  claim on any missing/noncomplete same-product ID, replace per new batch, preserve resets.
+  Actual timer fixture must retain product membership and test visible claim, not hidden text.
+  Frozen implementation independently GO; identical actual-panel fixture fails baseline at
+  expected disappearance wait p408-e7zxpkbe and passes reviewed production p408-gimihv_q.
+  Formatting/compilation/all-target Clippy PASS. No new backend or GTK I/O; live repeat pending.
+
+- P409 (in_progress, ui_critic; reviewer performance_audit): explain retained historical
+  Downloads graph when no featured transfer exists. One wrapping label in existing header,
+  keep graph/rates/queue/actions. Existing actual renderer fixture extends idle/paused/failed
+  assertions. No success/empty-queue claim, redesign or new framework; root visual gate.
+  Isolated downloads.rs only. Independent proposal GO; paused/failed precedence gate retains
+  positive history and queued-only positive-history case retains row/count. Root gates.
+
 - P407 (complete, ui_critic; reviewer file_summary): place basic cloud enable/status/sync
   controls before Export/manage in Properties. Root actual screenshot and bounded proposal
   confirm discoverability issue. Move only final management-group attachment and existing

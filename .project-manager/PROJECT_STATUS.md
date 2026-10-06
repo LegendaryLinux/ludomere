@@ -8,18 +8,19 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified76 separate audit commits through0bf8c27, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified77 separate audit commits through26e8c50, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
-- Latest consolidated private build PASS at37aa551: fmt, all-target Clippy-Dwarnings,
-  574 library tests, six integration tests, five Python helper tests and build.93 library tests
+- Latest consolidated private build PASS at26e8c50: fmt, all-target Clippy-Dwarnings,
+  574 library tests, six integration tests, five Python helper tests and build.95 library tests
   ignored by default; affected GTK gates run separately. Log:
-  /tmp/ludomere-r111-full-build-9gwc2kj3/build.log. No real account/helpers/network in gate.
+  /tmp/ludomere-r111-full-build-mppzqivn/build.log. No real account/helpers/network in gate.
 - Latest verified fixes: responsive detail controls, first-click archive popups, tray startup/
   shutdown and session admission, Maintenance progress, tag keyboard/validation, folder-origin
   guards, operation-log activity, persistent log-folder errors, General-first Properties and
   singular archive copy. P404 removes explicit unopened-menu capture cycles: same strict test
   fails before/passes after, and mapped actions retain behavior. Each task's evidence is in plan/audit.
-- Active: P403 chooser polling lifecycle committed/built after strict private gates; I/O was
+- Active: P407 Cloud basic-controls-first ordering committed/built after private loader and
+  real Windows/native presentation gates. P403 chooser polling lifecycle committed/built after strict private gates; I/O was
   already worker-side. P405 full-path Properties row committed/built with normal/minimum-width
   visual and selection gates. P406 neutral log success copy passes retained reader regression.
   P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic

@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At26e8c50 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library tests,
+  six integration tests, five Python helper tests and build.95 library entries ignored by default;
+  affected GTK gates separately run.77 exact post-commit builds PASS. Evidence
+  /tmp/ludomere-r111-full-build-mppzqivn/build.log. Actual profile/helpers/network excluded.
+
 - At37aa551 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library
   tests, six integration tests, five Python helper tests and build.93 ignored library entries;
   affected GTK gates run separately.72 exact post-commit builds PASS. Evidence
@@ -47,6 +52,25 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P408 fixed-production identical actual-panel gate p408-gimihv_q PASS3.82s: tracked deletion,
+  unrelated retention/removal, partial Paused, multi-job batch, subsequent batch and no-managed
+  invalidation retain native Play and widget identity. Known private GSettings warnings only.
+  Independent implementation GO, fmt/compile/all-target Clippy PASS; actual repeat pending.
+
+- Live26e8c50 native Gungeon manual Check for Updates returns explicit no-update/keep-playing
+  result; no update applied. Downloads actions remain reachable at enforced1150x720 minimum;
+  restored1330x850 afterward. Proton Refresh retains configured GE-Proton11-7, runtime reports
+  found with disabled download action; Load releases visibly loads then offers its list without
+  downloading/selecting a different runtime. Loading used misleading Cancel download copy,
+  delegated a separate literal-only proposal. No preference change or new game data.
+
+- P408 exact new actual-panel fixture on unchanged production fails at expected stale visible
+  completion after tracked job deletion (p408-e7zxpkbe, details.rs4534); unrelated job and
+  downloaded-product membership retained. Same fixture now being gated with reviewed ID fix.
+  P409 paragraph/renderer test independently reviewed GO; runtime pending. Synchronous logo
+  decode assessment is deferred: normal cached logos already bounded360x125, no measured stall,
+  safe async reuse requires separate contain-mode queue design. No rushed card-crop substitution.
 
 - P407 actual preview PASS: Coffee Cloud basic enable/status/locations/sync controls appear
   first; scrolling reaches unchanged Export/Manage warnings and actions. Native Gungeon retains

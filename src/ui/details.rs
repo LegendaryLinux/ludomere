@@ -2082,7 +2082,7 @@ fn installation_status_panel(
     let detail_generation = model.borrow().detail_generation;
     let depot_rate = Rc::new(RefCell::new(SmoothedTransferRate::default()));
     let mut depot_operation_id = None::<String>;
-    let mut download_completed = false;
+    let mut completed_download_ids = HashSet::new();
     let mut active_download_ids = HashSet::new();
     glib::timeout_add_local(Duration::from_millis(100), move || {
         if panel_for_poll.root().is_none() || model.borrow().detail_generation != detail_generation
@@ -2128,8 +2128,17 @@ fn installation_status_panel(
                 .filter(|(id, _)| *id == product_id)
                 .and_then(|(_, parent)| parent);
             refresh_detail_alternate_actions(&action_group, &state, product_id, parent);
-            if download_completed && !state.downloaded_products.contains(&product_id) {
-                download_completed = false;
+            if !completed_download_ids.is_empty()
+                && (!state.downloaded_products.contains(&product_id)
+                    || !completed_download_ids.iter().all(|id| {
+                        state.download_jobs.iter().any(|job| {
+                            &job.job_id == id
+                                && job.product_id == product_id
+                                && job.state == DownloadState::Complete
+                        })
+                    }))
+            {
+                completed_download_ids.clear();
             }
         }
         if model.borrow().account_epoch != account_epoch {
@@ -2195,7 +2204,7 @@ fn installation_status_panel(
             };
             if event_product_id == product_id {
                 failure.borrow_mut().take();
-                download_completed = false;
+                completed_download_ids.clear();
                 depot_operation_id = None;
                 *pending_snapshot.borrow_mut() =
                     crate::installation::installation_operation_snapshot(product_id);
@@ -2393,7 +2402,7 @@ fn installation_status_panel(
                         | crate::domain::InstallationState::Uninstalling
                 )
         }) {
-            download_completed = false;
+            completed_download_ids.clear();
             depot_operation_id = None;
         }
         if installation_snapshot.is_none() || archive_active || was_downloading.get() {
@@ -2415,7 +2424,7 @@ fn installation_status_panel(
                 })
                 .collect::<Vec<_>>();
             if !active.is_empty() {
-                download_completed = false;
+                completed_download_ids.clear();
                 depot_operation_id = None;
                 active_download_ids.extend(active.iter().map(|job| job.job_id.clone()));
                 view_error.set_visible(false);
@@ -2485,12 +2494,17 @@ fn installation_status_panel(
                 return glib::ControlFlow::Continue;
             }
             if was_downloading.replace(false) {
-                download_completed = !active_download_ids.is_empty()
+                if !active_download_ids.is_empty()
                     && active_download_ids.iter().all(|id| {
                         jobs.iter()
                             .any(|job| &job.job_id == id && job.state == DownloadState::Complete)
-                    });
-                active_download_ids.clear();
+                    })
+                {
+                    completed_download_ids = std::mem::take(&mut active_download_ids);
+                } else {
+                    completed_download_ids.clear();
+                    active_download_ids.clear();
+                }
                 view_error.set_visible(false);
                 refresh_after_install();
             }
@@ -2580,7 +2594,7 @@ fn installation_status_panel(
             determinate.set(true);
             return glib::ControlFlow::Continue;
         }
-        if download_completed
+        if !completed_download_ids.is_empty()
             && installation_snapshot.as_ref().is_none_or(|snapshot| {
                 !snapshot.queued && snapshot.state != crate::domain::InstallationState::Installing
             })
@@ -4461,6 +4475,95 @@ mod installation_progress_tests {
             assert!(button.is_sensitive());
             assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
         }
+        let heading = panel
+            .first_child()
+            .unwrap()
+            .first_child()
+            .unwrap()
+            .downcast::<gtk::Label>()
+            .unwrap();
+        let detail = heading
+            .next_sibling()
+            .unwrap()
+            .downcast::<gtk::Label>()
+            .unwrap();
+        let completed_job = model.borrow().download_jobs[0].clone();
+        model
+            .borrow_mut()
+            .installed_games
+            .insert(1, installed.clone());
+        model
+            .borrow_mut()
+            .local_actions
+            .get_mut(&1)
+            .unwrap()
+            .installed = Some(installed.clone());
+        model.borrow_mut().downloaded_products.insert(1);
+        for (scenario, batch_size) in [
+            ("tracked", 1),
+            ("unrelated", 1),
+            ("partial", 1),
+            ("batch", 2),
+        ] {
+            let mut unrelated = completed_job.clone();
+            unrelated.job_id = format!("unrelated-{scenario}");
+            model.borrow_mut().download_jobs = vec![unrelated];
+            for index in 0..batch_size {
+                let mut active = completed_job.clone();
+                active.job_id = format!("tracked-{scenario}-{index}");
+                active.state = DownloadState::Downloading;
+                model.borrow_mut().download_jobs.push(active);
+            }
+            wait(|| button.tooltip_text().as_deref() == Some("Pause"));
+            for job in &mut model.borrow_mut().download_jobs {
+                job.state = DownloadState::Complete;
+            }
+            wait(|| {
+                panel.is_visible()
+                    && heading.text() == "DOWNLOAD COMPLETE"
+                    && detail.text() == "Downloaded files are ready."
+            });
+            assert_eq!(button.tooltip_text().as_deref(), Some("Play"));
+            if scenario == "unrelated" {
+                model.borrow_mut().download_jobs.remove(0);
+                // Observe another timer delivery, not the already-true completion predicate.
+                let deadline = std::time::Instant::now() + Duration::from_millis(250);
+                while std::time::Instant::now() < deadline {
+                    while glib::MainContext::default().iteration(false) {}
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                assert!(panel.is_visible());
+                assert_eq!(heading.text(), "DOWNLOAD COMPLETE");
+                assert_eq!(detail.text(), "Downloaded files are ready.");
+                model.borrow_mut().download_jobs.clear();
+            } else {
+                assert!(model.borrow().downloaded_products.contains(&1));
+                if scenario == "partial" {
+                    model.borrow_mut().download_jobs[1].state = DownloadState::Paused;
+                    wait(|| panel.is_visible() && heading.text() == "DOWNLOAD PAUSED");
+                }
+                // Managed deletion removes this exact job; an unrelated complete job survives.
+                model.borrow_mut().download_jobs.remove(1);
+            }
+            wait(|| !panel.is_visible());
+            assert!(model.borrow().downloaded_products.contains(&1));
+            assert_eq!(button.tooltip_text().as_deref(), Some("Play"));
+            assert!(button.is_sensitive());
+            assert!(alternate.is_sensitive());
+            assert!(!actions.has_css_class("operational-state"));
+            assert!(!actions.has_css_class("download-state"));
+            assert_eq!(alternate.popover(), Some(popover.clone()));
+            assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
+            assert_eq!(panel.parent().as_ref(), Some(page.upcast_ref()));
+            assert_eq!(model.borrow().installed_games.get(&1), Some(&installed));
+        }
+        model.borrow_mut().download_jobs[0].state = DownloadState::Downloading;
+        wait(|| button.tooltip_text().as_deref() == Some("Pause"));
+        model.borrow_mut().download_jobs[0].state = DownloadState::Complete;
+        wait(|| panel.is_visible() && heading.text() == "DOWNLOAD COMPLETE");
+        model.borrow_mut().downloaded_products.remove(&1);
+        wait(|| !panel.is_visible());
+        assert_eq!(button.tooltip_text().as_deref(), Some("Play"));
         model.borrow_mut().detail_generation += 1;
         for action in [
             GamePrimaryAction::Download,
