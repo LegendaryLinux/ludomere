@@ -1,4 +1,311 @@
 use super::*;
+use std::path::{Path, PathBuf};
+
+struct PreparedFileGroup {
+    group: ArtifactGroup,
+    managed_paths: Vec<PathBuf>,
+    saved_job: Option<DownloadJobRecord>,
+    existing_files: Vec<PathBuf>,
+    invalid_download: bool,
+    completed_folder: Option<PathBuf>,
+    downloaded: bool,
+    represented: Vec<PathBuf>,
+}
+
+struct PreparedProductFiles {
+    installers: Vec<LibraryFile>,
+    patches: Vec<LibraryFile>,
+    extras: Vec<LibraryFile>,
+    groups: Vec<PreparedFileGroup>,
+    retired: Vec<RemoteArtifact>,
+    historical: HashMap<PathBuf, RemoteArtifact>,
+    summary: (usize, u64),
+}
+
+struct PreparedFilesPage {
+    products: HashMap<i64, PreparedProductFiles>,
+    directories: HashSet<PathBuf>,
+}
+
+struct InitialFilesResult {
+    game: DetailPageModel,
+    config: Config,
+    statuses: Vec<crate::storage::LibraryStatus>,
+    prepared: PreparedFilesPage,
+}
+
+#[cfg(test)]
+struct InitialFilesProbe {
+    gtk_thread: std::thread::ThreadId,
+    started: mpsc::Sender<()>,
+    permit: std::sync::Mutex<mpsc::Receiver<()>>,
+    ready: mpsc::Sender<()>,
+    publish: std::sync::Mutex<mpsc::Receiver<()>>,
+    opens: std::sync::atomic::AtomicUsize,
+    jobs: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(test)]
+static INITIAL_FILES_PROBE: std::sync::Mutex<Option<std::sync::Arc<InitialFilesProbe>>> =
+    std::sync::Mutex::new(None);
+
+fn prepare_files_page(
+    game: &DetailPageModel,
+    config: &Config,
+    statuses: &[crate::storage::LibraryStatus],
+) -> anyhow::Result<PreparedFilesPage> {
+    #[cfg(test)]
+    if let Some(probe) = INITIAL_FILES_PROBE.lock().unwrap().as_ref() {
+        assert_ne!(std::thread::current().id(), probe.gtk_thread);
+        probe
+            .opens
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    let store = StateStore::open()?;
+    let mut ids = vec![game.product_id];
+    ids.extend(
+        game.dlcs
+            .iter()
+            .filter(|dlc| dlc.owned)
+            .map(|dlc| dlc.product_id),
+    );
+    let managed = store.managed_files_for_products(&ids)?;
+    #[cfg(test)]
+    if let Some(probe) = INITIAL_FILES_PROBE.lock().unwrap().as_ref() {
+        probe.jobs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    let jobs = store.download_jobs()?;
+    let mut result = PreparedFilesPage {
+        products: HashMap::new(),
+        directories: HashSet::from([
+            game.location.clone(),
+            game.location.join("patches"),
+            game.location.join("extras"),
+        ]),
+    };
+    for id in ids {
+        let dlc = game.dlcs.iter().find(|dlc| dlc.product_id == id);
+        let remote = dlc.map_or(game.remote_artifacts.as_slice(), |dlc| {
+            &dlc.remote_artifacts
+        });
+        let local = |kind| {
+            let files = managed
+                .iter()
+                .filter(|file| {
+                    file.product_id == id
+                        && file.kind == kind
+                        && if dlc.is_some() {
+                            file.path.is_file()
+                        } else {
+                            file.present
+                        }
+                })
+                .map(|file| LibraryFile {
+                    name: file.filename.clone(),
+                    path: file.path.clone(),
+                    size: file.size,
+                })
+                .collect::<Vec<_>>();
+            if files.is_empty() && dlc.is_none() {
+                match kind {
+                    ArtifactKind::Installer => game.installers.clone(),
+                    ArtifactKind::Patch => game.patches.clone(),
+                    ArtifactKind::Extra => game.extras.clone(),
+                }
+            } else {
+                files
+            }
+        };
+        let installers = local(ArtifactKind::Installer);
+        let patches = local(ArtifactKind::Patch);
+        let extras = local(ArtifactKind::Extra);
+        let mut historical = HashMap::new();
+        for file in installers.iter().chain(&patches).chain(&extras) {
+            if let Some(parent) = file.path.parent() {
+                result.directories.insert(parent.to_owned());
+            }
+            if let Some(artifact) = store.retired_artifact_for_file(&file.path)? {
+                historical.insert(file.path.clone(), artifact);
+            }
+        }
+        if let Some(dlc) = dlc {
+            let folder = config
+                .default_library(crate::config::LibraryKind::OfflineInstallers)
+                .map(|library| library.path.as_path())
+                .unwrap_or_else(|| Path::new(""))
+                .join(&game.slug)
+                .join("dlc")
+                .join(&dlc.slug);
+            for kind in [
+                ArtifactKind::Installer,
+                ArtifactKind::Patch,
+                ArtifactKind::Extra,
+            ] {
+                result.directories.insert(folder.join(kind.as_str()));
+            }
+        }
+        let mut groups = Vec::new();
+        // Match the existing per-collection grouping boundary, even when provider IDs overlap.
+        for group in [
+            ArtifactKind::Installer,
+            ArtifactKind::Patch,
+            ArtifactKind::Extra,
+        ]
+        .into_iter()
+        .flat_map(|kind| {
+            download_selection::group_artifacts(
+                &remote
+                    .iter()
+                    .filter(|artifact| artifact.kind == kind)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+        }) {
+            let refs = group.artifacts.iter().collect::<Vec<_>>();
+            let requested_id = download::job_id(&refs);
+            let saved_job = jobs
+                .iter()
+                .filter(|job| {
+                    !job.artifacts.is_empty()
+                        && download::job_id(&job.artifacts.iter().collect::<Vec<_>>())
+                            == requested_id
+                })
+                .max_by_key(|job| job.updated_at)
+                .cloned();
+            let mut copies = std::collections::BTreeMap::<PathBuf, Vec<PathBuf>>::new();
+            for path in store.current_managed_paths(&refs)? {
+                copies
+                    .entry(path.parent().unwrap_or(&path).to_owned())
+                    .or_default()
+                    .push(path);
+            }
+            let copies = if copies.is_empty() {
+                vec![Vec::new()]
+            } else {
+                copies.into_values().collect()
+            };
+            for managed_paths in copies {
+                let existing_files = if managed_paths.is_empty() {
+                    saved_job
+                        .as_ref()
+                        .filter(|job| job.state == "complete")
+                        .map(|job| job.completed_files.clone())
+                        .unwrap_or_default()
+                } else {
+                    managed_paths.clone()
+                };
+                let usable = existing_files.iter().all(|path| {
+                    matches!(
+                        crate::storage::path_status(statuses, path),
+                        Some(crate::storage::LibraryCompatibility::Compatible)
+                    )
+                });
+                let invalid_download = !existing_files.is_empty()
+                    && (!usable || !artifact_download_is_plausible(&refs, &existing_files));
+                let completed_folder = (!invalid_download)
+                    .then(|| {
+                        managed_paths
+                            .first()
+                            .and_then(|path| path.parent())
+                            .map(Path::to_owned)
+                            .or_else(|| {
+                                saved_job.as_ref().and_then(|job| {
+                                    (job.state == "complete"
+                                        && !job.completed_files.is_empty()
+                                        && job.completed_files.iter().all(|path| path.is_file()))
+                                    .then(|| job.destination.clone())
+                                })
+                            })
+                    })
+                    .flatten();
+                let downloaded = if !managed_paths.is_empty() {
+                    !invalid_download
+                } else {
+                    saved_job.as_ref().is_some_and(|job| {
+                        job.completed_files.iter().all(|path| {
+                            matches!(
+                                crate::storage::path_status(statuses, path),
+                                Some(crate::storage::LibraryCompatibility::Compatible)
+                            )
+                        }) && download_job_is_complete(job)
+                            && artifact_download_is_plausible(&refs, &job.completed_files)
+                    })
+                };
+                let represented = if !managed_paths.is_empty() {
+                    managed_paths.clone()
+                } else {
+                    saved_job
+                        .as_ref()
+                        .filter(|job| download_job_is_complete(job))
+                        .map(|job| job.completed_files.clone())
+                        .unwrap_or_default()
+                };
+                groups.push(PreparedFileGroup {
+                    group: group.clone(),
+                    managed_paths,
+                    saved_job: saved_job.clone(),
+                    existing_files,
+                    invalid_download,
+                    completed_folder,
+                    downloaded,
+                    represented,
+                });
+            }
+        }
+        let mut summary = managed_detail_summary(&managed, &jobs, id);
+        if dlc.is_none() {
+            summary.0 = summary.0.max(installers.len());
+            if summary.1 == 0 {
+                summary.1 = game.disk_usage;
+            }
+        }
+        result.products.insert(
+            id,
+            PreparedProductFiles {
+                installers,
+                patches,
+                extras,
+                groups,
+                historical,
+                retired: if config.show_retired_artifacts {
+                    store
+                        .artifact_catalog(id)?
+                        .into_iter()
+                        .filter(|entry| !entry.currently_offered)
+                        .map(|entry| entry.artifact)
+                        .collect()
+                } else {
+                    Vec::new()
+                },
+                summary,
+            },
+        );
+    }
+    result
+        .directories
+        .retain(|path| !path.as_os_str().is_empty() && path.is_dir());
+    Ok(result)
+}
+
+fn prepared_folder_button(
+    label: &str,
+    path: &Path,
+    window: &adw::ApplicationWindow,
+    available: bool,
+) -> gtk::Button {
+    let button = gtk::Button::from_icon_name("folder-open-symbolic");
+    button.set_tooltip_text(Some(label));
+    button.set_halign(gtk::Align::Start);
+    button.add_css_class("square-action");
+    button.add_css_class("folder-action");
+    button.set_sensitive(available);
+    let path = path.to_owned();
+    let window = window.clone();
+    button.connect_clicked(move |_| {
+        super::widgets::file_open::open_directory(&path, &window, "folder")
+    });
+    button
+}
 
 /// A read-only recovery affordance: damaged metadata must not prevent inspecting the folder.
 pub(super) fn browse_game_files(
@@ -1344,6 +1651,285 @@ pub(super) fn build_files_page(
     window: &adw::ApplicationWindow,
     options: FilesPageOptions<'_>,
 ) -> gtk::Box {
+    let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    page.set_widget_name("initial-files-page");
+    let loading = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let spinner = gtk::Spinner::new();
+    spinner.start();
+    loading.append(&spinner);
+    let message = gtk::Label::new(Some("Inspecting downloaded files…"));
+    message.set_widget_name("initial-files-status");
+    message.set_xalign(0.0);
+    message.set_wrap(true);
+    message.set_selectable(true);
+    loading.append(&message);
+    let retry = gtk::Button::with_label("Retry");
+    retry.set_widget_name("initial-files-retry");
+    retry.set_visible(false);
+    loading.append(&retry);
+    page.append(&loading);
+    let request = Rc::new(std::cell::Cell::new(1_u64));
+    let requested = Rc::new(std::cell::Cell::new(true));
+    retry.connect_clicked({
+        let request = request.clone();
+        let requested = requested.clone();
+        move |_| {
+            request.set(request.get().wrapping_add(1));
+            requested.set(true);
+        }
+    });
+    let session = (online::account_session(), auth::session());
+    let epoch = options.model.borrow().account_epoch;
+    let generation = options.model.borrow().detail_generation;
+    let target = (game.product_id, game.parent_id);
+    let model = Rc::downgrade(options.model);
+    let weak_page = page.downgrade();
+    let window = window.downgrade();
+    let spinner = spinner.downgrade();
+    let message = message.downgrade();
+    let retry = retry.downgrade();
+    let management = options.management.map(|management| {
+        (
+            management.menu.downgrade(),
+            management.status.downgrade(),
+            management.progress.downgrade(),
+        )
+    });
+    let mut attached = false;
+    let mut pending = None;
+    glib::timeout_add_local(Duration::from_millis(50), move || {
+        let (Some(model), Some(page), Some(window), Some(spinner), Some(message), Some(retry)) = (
+            model.upgrade(),
+            weak_page.upgrade(),
+            window.upgrade(),
+            spinner.upgrade(),
+            message.upgrade(),
+            retry.upgrade(),
+        ) else {
+            return glib::ControlFlow::Break;
+        };
+        let state = model.borrow();
+        if state.account_epoch != epoch
+            || state.logout_pending
+            || state.detail_generation != generation
+            || state.detail_target != Some(target)
+        {
+            return glib::ControlFlow::Break;
+        }
+        if session != (online::account_session(), auth::session()) {
+            if page.is_ancestor(&window) {
+                spinner.stop();
+                spinner.set_visible(false);
+                retry.set_sensitive(false);
+                retry.set_visible(false);
+                message.set_label(
+                    "Your sign-in session changed. Go to Home, then reopen this game to inspect downloaded files.",
+                );
+            }
+            return glib::ControlFlow::Break;
+        }
+        if !page.is_ancestor(&window) {
+            return if attached {
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
+            };
+        }
+        attached = true;
+        if !window.is_visible() || !page.is_mapped() {
+            return glib::ControlFlow::Continue;
+        }
+        if let Some((revision, active_request, receiver)) = pending.as_ref() {
+            let receiver: &mpsc::Receiver<anyhow::Result<InitialFilesResult>> = receiver;
+            let result = match receiver.try_recv() {
+                Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => Err(anyhow::anyhow!(
+                    "File inspection stopped. Retry to inspect downloaded files."
+                )),
+                Ok(result) => result,
+            };
+            let current = *revision == state.local_revision && *active_request == request.get();
+            pending = None;
+            if !current {
+                requested.set(true);
+            } else {
+                match result {
+                    Ok(InitialFilesResult {
+                        game,
+                        config,
+                        statuses,
+                        prepared,
+                    }) => {
+                        // A changed library choice must be inspected before exposing file actions.
+                        if current_detail(&state, target.0, target.1).is_none_or(|current| {
+                            current.remote_artifacts != game.remote_artifacts
+                                || current.dlcs != game.dlcs
+                                || current.slug != game.slug
+                                || current.location != game.location
+                                || current.title != game.title
+                                || current.disk_usage != game.disk_usage
+                                || current.installers != game.installers
+                                || current.patches != game.patches
+                                || current.extras != game.extras
+                        }) || config != state.config
+                            || statuses != state.library_statuses
+                        {
+                            requested.set(true);
+                        } else {
+                            let installed = state.installed_games.get(&target.0).cloned();
+                            let token = state
+                                .account_token
+                                .as_ref()
+                                .map(|token| token.access_token.clone());
+                            drop(state);
+                            let management =
+                                management.as_ref().and_then(|(menu, status, progress)| {
+                                    Some(DetailFileManagement {
+                                        menu: menu.upgrade()?,
+                                        status: status.upgrade()?,
+                                        progress: progress.upgrade()?,
+                                    })
+                                });
+                            let defaults = InstallerFilterDefaults {
+                                language: config.installer_language.clone(),
+                                windows: config.installer_windows,
+                                linux: config.installer_linux,
+                                macos: config.installer_macos,
+                            };
+                            let content = render_files_page(
+                                &game,
+                                &window,
+                                FilesPageOptions {
+                                    model: &model,
+                                    access_token: token.as_deref(),
+                                    config: &config,
+                                    library_statuses: &statuses,
+                                    installer_defaults: &defaults,
+                                    show_retired_artifacts: config.show_retired_artifacts,
+                                    management: management.as_ref(),
+                                    installed: installed.as_ref(),
+                                },
+                                &prepared,
+                            );
+                            // Update the existing header from the same inspection, without another worker.
+                            if let Some(subtitle) = find_named_descendant(
+                                window.upcast_ref(),
+                                &format!("managed-product-subtitle-{}", target.0),
+                            )
+                            .and_downcast::<gtk::Label>()
+                            {
+                                let text = subtitle.text();
+                                let prefix = text
+                                    .rsplit_once(" · ")
+                                    .map_or(text.as_str(), |(prefix, _)| prefix);
+                                subtitle.set_label(&format!(
+                                    "{prefix} · Downloaded files: {}",
+                                    human_size(prepared.products[&target.0].summary.1)
+                                ));
+                            }
+                            while let Some(child) = page.first_child() {
+                                page.remove(&child);
+                            }
+                            page.append(&content);
+                            return glib::ControlFlow::Break;
+                        }
+                    }
+                    Err(error) => {
+                        spinner.stop();
+                        spinner.set_visible(false);
+                        message.set_label(&notifications::failure_message(
+                            "Could not inspect downloaded files",
+                            &format!("{error:#}"),
+                        ));
+                        retry.set_visible(true);
+                        retry.set_sensitive(true);
+                    }
+                }
+            }
+        }
+        if !requested.replace(false) {
+            return glib::ControlFlow::Continue;
+        }
+        let Some(game) = current_detail(&state, target.0, target.1) else {
+            return glib::ControlFlow::Break;
+        };
+        let config = state.config.clone();
+        let statuses = state.library_statuses.clone();
+        let revision = state.local_revision;
+        drop(state);
+        let activity =
+            match crate::profile_reset::begin_activity("loading initial downloaded files") {
+                Ok(activity) => activity,
+                Err(error) => {
+                    spinner.stop();
+                    spinner.set_visible(false);
+                    message.set_label(&notifications::failure_message(
+                        "Could not inspect downloaded files",
+                        &format!("{error:#}"),
+                    ));
+                    retry.set_visible(true);
+                    retry.set_sensitive(true);
+                    return glib::ControlFlow::Continue;
+                }
+            };
+        spinner.set_visible(true);
+        spinner.start();
+        message.set_label("Inspecting downloaded files…");
+        retry.set_sensitive(false);
+        retry.set_visible(false);
+        let (sender, receiver) = mpsc::channel();
+        pending = Some((revision, request.get(), receiver));
+        std::thread::spawn(move || {
+            let _activity = activity;
+            #[cfg(test)]
+            let probe = INITIAL_FILES_PROBE.lock().unwrap().clone();
+            let result = (|| {
+                #[cfg(test)]
+                if let Some(probe) = &probe {
+                    let _ = probe.started.send(());
+                    probe
+                        .permit
+                        .lock()
+                        .unwrap()
+                        .recv()
+                        .map_err(|_| anyhow::anyhow!("Synthetic inspection stopped"))?;
+                }
+                anyhow::ensure!(
+                    session == (online::account_session(), auth::session()),
+                    "Account changed before file inspection"
+                );
+                let prepared = prepare_files_page(&game, &config, &statuses)?;
+                anyhow::ensure!(
+                    session == (online::account_session(), auth::session()),
+                    "Account changed during file inspection"
+                );
+                Ok(InitialFilesResult {
+                    game,
+                    config,
+                    statuses,
+                    prepared,
+                })
+            })();
+            #[cfg(test)]
+            if let Some(probe) = &probe {
+                let _ = probe.ready.send(());
+                if probe.publish.lock().unwrap().recv().is_err() {
+                    return;
+                }
+            }
+            let _ = sender.send(result);
+        });
+        glib::ControlFlow::Continue
+    });
+    page
+}
+
+fn render_files_page(
+    game: &DetailPageModel,
+    window: &adw::ApplicationWindow,
+    options: FilesPageOptions<'_>,
+    prepared: &PreparedFilesPage,
+) -> gtk::Box {
     let FilesPageOptions {
         model,
         access_token,
@@ -1402,46 +1988,15 @@ pub(super) fn build_files_page(
         .map(|library| library.path.as_path())
         .unwrap_or_else(|| std::path::Path::new(""));
 
-    let managed = StateStore::open()
-        .and_then(|store| store.managed_files())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|file| file.product_id == game.product_id && file.present)
-        .collect::<Vec<_>>();
-    let local_files = |kind| {
-        managed
-            .iter()
-            .filter(|file| file.kind == kind)
-            .map(|file| LibraryFile {
-                name: file.filename.clone(),
-                path: file.path.clone(),
-                size: file.size,
-            })
-            .collect::<Vec<_>>()
-    };
-    let installers = match local_files(ArtifactKind::Installer) {
-        files if files.is_empty() => game.installers.clone(),
-        files => files,
-    };
-    let patches = match local_files(ArtifactKind::Patch) {
-        files if files.is_empty() => game.patches.clone(),
-        files => files,
-    };
-    let extras = match local_files(ArtifactKind::Extra) {
-        files if files.is_empty() => game.extras.clone(),
-        files => files,
-    };
-    let managed_disk_usage = managed.iter().map(|file| file.size).sum::<u64>();
-    let disk_usage = if managed_disk_usage == 0 {
-        game.disk_usage
-    } else {
-        managed_disk_usage
-    };
+    let product = &prepared.products[&game.product_id];
+    let installers = &product.installers;
+    let patches = &product.patches;
+    let extras = &product.extras;
     let summary = gtk::Label::new(Some(&format!(
         "{} files available  ·  {} local installers  ·  {} on disk",
         game.remote_artifacts.len(),
-        installers.len(),
-        human_size(disk_usage)
+        product.summary.0,
+        human_size(product.summary.1)
     )));
     summary.set_widget_name(&format!("managed-files-summary-{}", game.product_id));
     summary.set_xalign(0.0);
@@ -1492,8 +2047,9 @@ pub(super) fn build_files_page(
         "Offline Installers",
         "folder-download-symbolic",
         &remote_installers,
-        &installers,
+        installers,
         &installer_context,
+        prepared,
     ));
     if !remote_patches.is_empty() {
         let patch_folder = game.location.join("patches");
@@ -1518,8 +2074,9 @@ pub(super) fn build_files_page(
             "Patches",
             "view-refresh-symbolic",
             &remote_patches,
-            &patches,
+            patches,
             &patch_context,
+            prepared,
         ));
     }
     if !remote_extras.is_empty() {
@@ -1545,26 +2102,31 @@ pub(super) fn build_files_page(
             "Goodies & Extras",
             "folder-documents-symbolic",
             &remote_extras,
-            &extras,
+            extras,
             &extras_context,
+            prepared,
         ));
     }
     if remote_patches.is_empty() && !patches.is_empty() {
         page.append(&file_collection(
             "Patches",
             "view-refresh-symbolic",
-            &patches,
+            patches,
             &game.location.join("patches"),
             window,
+            prepared
+                .directories
+                .contains(&game.location.join("patches")),
         ));
     }
     if remote_extras.is_empty() && !extras.is_empty() {
         page.append(&file_collection(
             "Goodies & Extras",
             "folder-documents-symbolic",
-            &extras,
+            extras,
             &game.location.join("extras"),
             window,
+            prepared.directories.contains(&game.location.join("extras")),
         ));
     }
     let owned_dlcs = game.dlcs.iter().filter(|dlc| dlc.owned).collect::<Vec<_>>();
@@ -1586,6 +2148,7 @@ pub(super) fn build_files_page(
                 library_statuses,
                 installer_defaults,
                 show_retired_artifacts,
+                prepared,
             ));
         }
     }
@@ -1604,6 +2167,7 @@ fn dlc_file_section(
     library_statuses: &[crate::storage::LibraryStatus],
     installer_defaults: &InstallerFilterDefaults,
     show_retired_artifacts: bool,
+    prepared: &PreparedFilesPage,
 ) -> gtk::Box {
     let section = gtk::Box::new(gtk::Orientation::Vertical, 10);
     let refresh_summary = managed_detail_refresher(window, Some(model), &section, dlc.product_id);
@@ -1613,26 +2177,10 @@ fn dlc_file_section(
     title.add_css_class("heading");
     section.append(&title);
 
-    let managed = StateStore::open()
-        .and_then(|store| store.managed_files())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|file| file.product_id == dlc.product_id && file.path.is_file())
-        .collect::<Vec<_>>();
-    let local_files = |kind| {
-        managed
-            .iter()
-            .filter(|file| file.kind == kind)
-            .map(|file| LibraryFile {
-                name: file.filename.clone(),
-                path: file.path.clone(),
-                size: file.size,
-            })
-            .collect::<Vec<_>>()
-    };
-    let installers = local_files(ArtifactKind::Installer);
-    let patches = local_files(ArtifactKind::Patch);
-    let extras = local_files(ArtifactKind::Extra);
+    let product = &prepared.products[&dlc.product_id];
+    let installers = &product.installers;
+    let patches = &product.patches;
+    let extras = &product.extras;
     let dlc_root = download_directory
         .join(parent_slug)
         .join("dlc")
@@ -1667,10 +2215,17 @@ fn dlc_file_section(
                 installed: None,
             };
             if remote.is_empty() {
-                container.append(&file_collection(title, icon, local, &folder, window));
+                container.append(&file_collection(
+                    title,
+                    icon,
+                    local,
+                    &folder,
+                    window,
+                    prepared.directories.contains(&folder),
+                ));
             } else {
                 container.append(&remote_file_collection(
-                    title, icon, &remote, local, &context,
+                    title, icon, &remote, local, &context, prepared,
                 ));
             }
         };
@@ -1679,7 +2234,7 @@ fn dlc_file_section(
         "Offline Installers",
         "folder-download-symbolic",
         ArtifactKind::Installer,
-        &installers,
+        installers,
         Some(installer_defaults),
     );
     append_collection(
@@ -1687,7 +2242,7 @@ fn dlc_file_section(
         "Patches",
         "view-refresh-symbolic",
         ArtifactKind::Patch,
-        &patches,
+        patches,
         None,
     );
     append_collection(
@@ -1695,7 +2250,7 @@ fn dlc_file_section(
         "Goodies & Extras",
         "folder-documents-symbolic",
         ArtifactKind::Extra,
-        &extras,
+        extras,
         None,
     );
     section
@@ -1959,36 +2514,18 @@ fn remote_file_collection(
     files: &[RemoteArtifact],
     local_files: &[LibraryFile],
     context: &RemoteFileContext<'_>,
+    prepared: &PreparedFilesPage,
 ) -> gtk::Box {
-    let state_store = StateStore::open().ok();
-    let (grouped, managed_group_paths): (Vec<_>, Vec<_>) =
-        download_selection::group_artifacts(files)
-            .into_iter()
-            .flat_map(|group| {
-                let artifacts = group.artifacts.iter().collect::<Vec<_>>();
-                let paths = state_store
-                    .as_ref()
-                    .and_then(|store| store.current_managed_paths(&artifacts).ok())
-                    .unwrap_or_default();
-                let mut copies =
-                    std::collections::BTreeMap::<std::path::PathBuf, Vec<std::path::PathBuf>>::new(
-                    );
-                for path in paths {
-                    copies
-                        .entry(path.parent().unwrap_or(&path).to_path_buf())
-                        .or_default()
-                        .push(path);
-                }
-                if copies.is_empty() {
-                    vec![(group, Vec::new())]
-                } else {
-                    copies
-                        .into_values()
-                        .map(|paths| (group.clone(), paths))
-                        .collect()
-                }
-            })
-            .unzip();
+    let product = &prepared.products[&context.product_id];
+    let grouped = product
+        .groups
+        .iter()
+        .filter(|group| {
+            files
+                .first()
+                .is_some_and(|file| file.kind == group.group.kind)
+        })
+        .collect::<Vec<_>>();
     let filter_rows: InstallerFilterRows = Rc::new(RefCell::new(Vec::new()));
     let collection = gtk::Box::new(gtk::Orientation::Vertical, 0);
     collection.add_css_class("file-collection");
@@ -2039,38 +2576,16 @@ fn remote_file_collection(
         header.append(&platforms);
         (language, language_list, windows, linux, macos)
     });
-    let downloaded = grouped
-        .iter()
-        .zip(&managed_group_paths)
-        .filter(|(group, managed_paths)| {
-            let refs = group.artifacts.iter().collect::<Vec<_>>();
-            if !managed_paths.is_empty() {
-                return managed_paths.iter().all(|path| {
-                    matches!(
-                        crate::storage::path_status(context.library_statuses, path),
-                        Some(crate::storage::LibraryCompatibility::Compatible)
-                    )
-                }) && artifact_download_is_plausible(&refs, managed_paths);
-            }
-            matching_download_job(&refs).is_some_and(|job| {
-                job.completed_files.iter().all(|path| {
-                    matches!(
-                        crate::storage::path_status(context.library_statuses, path),
-                        Some(crate::storage::LibraryCompatibility::Compatible)
-                    )
-                }) && download_job_is_complete(&job)
-                    && artifact_download_is_plausible(&refs, &job.completed_files)
-            })
-        })
-        .count();
+    let downloaded = grouped.iter().filter(|group| group.downloaded).count();
     let count_text = format!("{downloaded}/{} Downloaded", grouped.len());
     let count = gtk::Label::new(Some(&count_text));
     count.add_css_class("dim-label");
     header.append(&count);
-    header.append(&folder_button(
+    header.append(&prepared_folder_button(
         &format!("Open {title} folder"),
         context.folder,
         context.window,
+        prepared.directories.contains(context.folder),
     ));
     collection.append(&header);
 
@@ -2082,14 +2597,12 @@ fn remote_file_collection(
         return collection;
     }
     let mut represented_local_files = HashSet::new();
-    for (group, managed_paths) in grouped.iter().zip(&managed_group_paths) {
+    for initial in grouped {
+        let group = &initial.group;
+        let managed_paths = &initial.managed_paths;
         let refs = group.artifacts.iter().collect::<Vec<_>>();
         let file = &group.artifacts[0];
-        if !managed_paths.is_empty() {
-            represented_local_files.extend(managed_paths.iter().cloned());
-        } else if let Some(job) = matching_download_job(&refs).filter(download_job_is_complete) {
-            represented_local_files.extend(job.completed_files);
-        }
+        represented_local_files.extend(initial.represented.iter().cloned());
         let display_name = artifact_display_title(file, context.product_title);
         let mut metadata_parts = [
             file.operating_system.as_deref(),
@@ -2127,7 +2640,7 @@ fn remote_file_collection(
         });
         widgets.row.append(&artifact_download_action(
             &refs,
-            managed_paths,
+            initial,
             &widgets.labels,
             &count,
             context,
@@ -2142,16 +2655,11 @@ fn remote_file_collection(
         collection.append(&widgets.row);
     }
     let retired = if context.show_retired_artifacts {
-        let retired_local_identities = StateStore::open()
-            .ok()
-            .map(|store| {
-                local_files
-                    .iter()
-                    .filter_map(|file| store.retired_artifact_for_file(&file.path).ok().flatten())
-                    .map(|artifact| (artifact.download_path, artifact.version))
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
+        let retired_local_identities = local_files
+            .iter()
+            .filter_map(|file| product.historical.get(&file.path))
+            .map(|artifact| (&artifact.download_path, &artifact.version))
+            .collect::<HashSet<_>>();
         let collection_kind = files.first().map(|file| file.kind).unwrap_or_else(|| {
             if title.to_ascii_lowercase().contains("patch") {
                 ArtifactKind::Patch
@@ -2161,19 +2669,14 @@ fn remote_file_collection(
                 ArtifactKind::Installer
             }
         });
-        StateStore::open()
-            .and_then(|store| store.artifact_catalog(context.product_id))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|entry| !entry.currently_offered)
-            .filter(|entry| entry.artifact.kind == collection_kind)
-            .filter(|entry| {
-                !retired_local_identities.contains(&(
-                    entry.artifact.download_path.clone(),
-                    entry.artifact.version.clone(),
-                ))
+        product
+            .retired
+            .iter()
+            .filter(|artifact| artifact.kind == collection_kind)
+            .filter(|artifact| {
+                !retired_local_identities.contains(&(&artifact.download_path, &artifact.version))
             })
-            .map(|entry| entry.artifact)
+            .cloned()
             .collect::<Vec<_>>()
     } else {
         Vec::new()
@@ -2218,10 +2721,7 @@ fn remote_file_collection(
     for files in historical_groups.values() {
         let file = files[0];
         let historical = file.name.contains("not matched to current GOG manifest");
-        let retired_artifact = StateStore::open()
-            .and_then(|store| store.retired_artifact_for_file(&file.path))
-            .ok()
-            .flatten();
+        let retired_artifact = product.historical.get(&file.path).cloned();
         let display_name = if let Some(artifact) = &retired_artifact {
             artifact_display_title(artifact, context.product_title)
         } else if historical {
@@ -2281,7 +2781,12 @@ fn remote_file_collection(
         });
         let row = widgets.row;
         let local_folder = file.path.parent().unwrap_or(context.folder);
-        let open = folder_button("Show downloaded file", local_folder, context.window);
+        let open = prepared_folder_button(
+            "Show downloaded file",
+            local_folder,
+            context.window,
+            prepared.directories.contains(local_folder),
+        );
         let delete = gtk::Button::from_icon_name("user-trash-symbolic");
         delete.set_tooltip_text(Some("Delete this managed file"));
         let paths = files
@@ -2426,7 +2931,7 @@ pub(super) fn apply_installer_file_filters(
 
 fn artifact_download_action(
     artifacts: &[&RemoteArtifact],
-    managed_paths: &[std::path::PathBuf],
+    initial: &PreparedFileGroup,
     labels: &gtk::Box,
     collection_count: &gtk::Label,
     context: &RemoteFileContext<'_>,
@@ -2436,21 +2941,13 @@ fn artifact_download_action(
 
     let requested_job_id = download::job_id(artifacts);
     let product_id = artifacts[0].product_id;
-    let saved_job = matching_download_job(artifacts);
+    let saved_job = initial.saved_job.clone();
     let job_id = saved_job
         .as_ref()
         .map(|job| job.job_id.clone())
         .unwrap_or(requested_job_id);
     let active_job_id = Rc::new(RefCell::new(job_id.clone()));
-    let existing_files = if managed_paths.is_empty() {
-        saved_job
-            .as_ref()
-            .filter(|job| job.state == "complete")
-            .map(|job| job.completed_files.clone())
-            .unwrap_or_default()
-    } else {
-        managed_paths.to_vec()
-    };
+    let existing_files = initial.existing_files.clone();
     let has_existing_files = !existing_files.is_empty();
     let library_kind = crate::storage::artifact_library_kind(artifacts[0]);
     let local_usable = existing_files.iter().all(|path| {
@@ -2466,24 +2963,8 @@ fn artifact_download_action(
                 crate::storage::LibraryCompatibility::Compatible
             )
     });
-    let invalid_download = !existing_files.is_empty()
-        && (!local_usable || !artifact_download_is_plausible(artifacts, &existing_files));
-    let completed_folder = (!invalid_download)
-        .then(|| {
-            managed_paths
-                .first()
-                .and_then(|path| path.parent())
-                .map(std::path::Path::to_path_buf)
-                .or_else(|| {
-                    saved_job.as_ref().and_then(|job| {
-                        (job.state == "complete"
-                            && !job.completed_files.is_empty()
-                            && job.completed_files.iter().all(|path| path.is_file()))
-                        .then(|| job.destination.clone())
-                    })
-                })
-        })
-        .flatten();
+    let invalid_download = initial.invalid_download;
+    let completed_folder = initial.completed_folder.clone();
     let status_text = if invalid_download {
         "✕"
     } else if completed_folder.is_some() {
@@ -4280,6 +4761,7 @@ pub(super) fn file_collection(
     files: &[crate::domain::LibraryFile],
     folder: &std::path::Path,
     window: &adw::ApplicationWindow,
+    folder_available: bool,
 ) -> gtk::Box {
     let collection = gtk::Box::new(gtk::Orientation::Vertical, 0);
     collection.add_css_class("file-collection");
@@ -4294,10 +4776,11 @@ pub(super) fn file_collection(
     let count = gtk::Label::new(Some(&format!("{} files", files.len())));
     count.add_css_class("dim-label");
     header.append(&count);
-    header.append(&folder_button(
+    header.append(&prepared_folder_button(
         &format!("Open {title} folder"),
         folder,
         window,
+        folder_available,
     ));
     collection.append(&header);
 
@@ -4385,6 +4868,610 @@ fn inferred_local_artifact(file: &LibraryFile) -> Option<RemoteArtifact> {
         provider_file_id: None,
         provider_category: None,
     })
+}
+
+#[cfg(test)]
+mod initial_files_tests {
+    use super::*;
+    use std::sync::{Arc, atomic::Ordering};
+    use std::time::Instant;
+
+    #[track_caller]
+    fn wait(mut check: impl FnMut() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(8);
+        loop {
+            while glib::MainContext::default().iteration(false) {}
+            if check() {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "initial Files condition timed out"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn pump(duration: Duration) {
+        let deadline = Instant::now() + duration;
+        wait(|| Instant::now() >= deadline);
+    }
+
+    fn labels(widget: &gtk::Widget) -> Vec<String> {
+        let mut result = widget
+            .clone()
+            .downcast::<gtk::Label>()
+            .ok()
+            .map(|label| vec![label.text().to_string()])
+            .unwrap_or_default();
+        let mut child = widget.first_child();
+        while let Some(widget) = child {
+            result.extend(labels(&widget));
+            child = widget.next_sibling();
+        }
+        result
+    }
+
+    struct Fixture {
+        _app: adw::Application,
+        window: adw::ApplicationWindow,
+        host: gtk::Box,
+        focus: gtk::Entry,
+        header: gtk::Label,
+        model: Rc<RefCell<AppModel>>,
+        game: Game,
+        probe: Arc<InitialFilesProbe>,
+        started: mpsc::Receiver<()>,
+        permit: mpsc::Sender<()>,
+        ready: mpsc::Receiver<()>,
+        publish: mpsc::Sender<()>,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let home = std::env::var("HOME").unwrap();
+            assert!(home.starts_with("/tmp/ludomere-p354-"));
+            let root = Path::new(&home).parent().unwrap();
+            for key in [
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+                "XDG_CACHE_HOME",
+                "XDG_STATE_HOME",
+                "XDG_RUNTIME_DIR",
+                "TMPDIR",
+            ] {
+                assert!(Path::new(&std::env::var_os(key).unwrap()).starts_with(root));
+            }
+            assert!(
+                crate::identity::database().starts_with(std::env::var_os("XDG_DATA_HOME").unwrap())
+            );
+            adw::init().unwrap();
+            let archives = root.join("archives");
+            std::fs::create_dir_all(&archives).unwrap();
+            let config = Config {
+                offline_libraries: vec![crate::config::GameLibrary {
+                    id: "synthetic-archives".into(),
+                    name: "Synthetic archives".into(),
+                    path: archives.clone(),
+                    default: true,
+                }],
+                game_libraries: vec![],
+                extras_libraries: vec![],
+                show_retired_artifacts: true,
+                installer_windows: true,
+                ..Config::default()
+            };
+            let artifact = |group: &str, part: u32| -> RemoteArtifact {
+                serde_json::from_value(serde_json::json!({
+                    "product_id":9354001, "kind":"installer", "name":group,
+                    "operating_system":"windows", "language":"English", "version":"2",
+                    "download_path":format!("/synthetic/{group}/{part}"),
+                    "part_number":part, "part_count":2, "size_bytes":64,
+                    "provider_group_id":group, "provider_file_id":format!("{group}-{part}"),
+                    "provider_category":"installer"
+                }))
+                .unwrap()
+            };
+            let mut game = Game {
+                product_id: 9354001,
+                title: "Synthetic Files".into(),
+                slug: "synthetic-files".into(),
+                location: archives.join("synthetic-files"),
+                ..Game::default()
+            };
+            let store = StateStore::open().unwrap();
+            let old = (1..=2)
+                .map(|part| {
+                    let mut value = artifact("Complete", part);
+                    value.version = Some("1".into());
+                    value.download_path = format!("/synthetic/old/{part}");
+                    value
+                })
+                .collect::<Vec<_>>();
+            store
+                .cache_download_manifest(game.product_id, &old)
+                .unwrap();
+            let write_parts = |name: &str| {
+                let folder = game.location.join(name);
+                std::fs::create_dir_all(&folder).unwrap();
+                (1..=2)
+                    .map(|part| {
+                        let path = folder.join(format!("setup-{part}.bin"));
+                        std::fs::write(&path, [42_u8; 64]).unwrap();
+                        path
+                    })
+                    .collect::<Vec<_>>()
+            };
+            store
+                .record_completed_artifacts("old", &game.slug, &old, &write_parts("old"))
+                .unwrap();
+            for group in ["Complete", "Paused", "Failed", "Interrupted"] {
+                game.remote_artifacts
+                    .extend((1..=2).map(|part| artifact(group, part)));
+            }
+            store
+                .cache_download_manifest(game.product_id, &game.remote_artifacts)
+                .unwrap();
+            for (index, state) in [
+                DownloadState::Complete,
+                DownloadState::Paused,
+                DownloadState::Failed,
+                DownloadState::Downloading,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let artifacts = &game.remote_artifacts[index * 2..index * 2 + 2];
+                let job_id = download::job_id(&artifacts.iter().collect::<Vec<_>>());
+                let paths = if index == 0 {
+                    write_parts("current")
+                } else {
+                    Vec::new()
+                };
+                store
+                    .save_download_job(&crate::state::DownloadJobUpdate {
+                        job_id: &job_id,
+                        product_id: game.product_id,
+                        title: &game.title,
+                        artifacts,
+                        destination: &game.location.join("current"),
+                        state,
+                        bytes_downloaded: 64,
+                        total_bytes: Some(128),
+                        completed_files: &paths,
+                        error: None,
+                    })
+                    .unwrap();
+                if index == 0 {
+                    store
+                        .record_completed_artifacts(&job_id, &game.slug, artifacts, &paths)
+                        .unwrap();
+                    store
+                        .record_completed_artifacts(
+                            &job_id,
+                            &game.slug,
+                            artifacts,
+                            &write_parts("copy"),
+                        )
+                        .unwrap();
+                }
+            }
+            // Existing persistence decodes malformed artifact JSON as an empty list.
+            // Initial matching must safely ignore that row instead of indexing it.
+            store
+                .save_download_job(&crate::state::DownloadJobUpdate {
+                    job_id: "empty-artifacts",
+                    product_id: game.product_id,
+                    title: "Incomplete saved job",
+                    artifacts: &[],
+                    destination: &game.location,
+                    state: DownloadState::Failed,
+                    bytes_downloaded: 0,
+                    total_bytes: None,
+                    completed_files: &[],
+                    error: None,
+                })
+                .unwrap();
+            let mut dlc_artifact = artifact("DLC Files", 1);
+            dlc_artifact.product_id = 9354002;
+            dlc_artifact.part_count = Some(1);
+            game.dlcs.push(Dlc {
+                product_id: 9354002,
+                owned: true,
+                title: "Synthetic DLC".into(),
+                slug: "synthetic-dlc".into(),
+                remote_artifacts: vec![dlc_artifact],
+                ..Dlc::default()
+            });
+            // Legal legacy metadata can reuse an official group ID across different kinds.
+            for (kind, name) in [
+                (ArtifactKind::Patch, "Synthetic patch"),
+                (ArtifactKind::Extra, "Synthetic extra"),
+            ] {
+                let mut mixed = artifact("Shared legacy ID", 1);
+                mixed.kind = kind;
+                mixed.name = name.into();
+                mixed.part_count = Some(1);
+                mixed.provider_category = None;
+                mixed.provider_file_id = None;
+                game.remote_artifacts.push(mixed);
+            }
+            drop(store);
+            let model = Rc::new(RefCell::new(AppModel {
+                library_statuses: crate::storage::inspect_libraries(&config).unwrap(),
+                config,
+                games: vec![game.clone()],
+                detail_target: Some((game.product_id, None)),
+                ..AppModel::default()
+            }));
+            let app = adw::Application::builder()
+                .application_id("io.github.ludomere.InitialFilesTest")
+                .flags(gio::ApplicationFlags::NON_UNIQUE)
+                .build();
+            app.register(gio::Cancellable::NONE).unwrap();
+            let window = adw::ApplicationWindow::new(&app);
+            window.set_default_size(1000, 700);
+            let host = gtk::Box::new(gtk::Orientation::Vertical, 8);
+            let focus = gtk::Entry::new();
+            host.append(&focus);
+            let header =
+                gtk::Label::new(Some("Synthetic Files · Downloaded files: previously known"));
+            header.set_widget_name("managed-product-subtitle-9354001");
+            host.append(&header);
+            let scroll = gtk::ScrolledWindow::builder().child(&host).build();
+            window.set_content(Some(&scroll));
+            window.present();
+            wait(|| focus.is_mapped());
+            focus.grab_focus();
+            let (started_sender, started) = mpsc::channel();
+            let (permit, permit_receiver) = mpsc::channel();
+            let (ready_sender, ready) = mpsc::channel();
+            let (publish, publish_receiver) = mpsc::channel();
+            let probe = Arc::new(InitialFilesProbe {
+                gtk_thread: std::thread::current().id(),
+                started: started_sender,
+                permit: std::sync::Mutex::new(permit_receiver),
+                ready: ready_sender,
+                publish: std::sync::Mutex::new(publish_receiver),
+                opens: 0.into(),
+                jobs: 0.into(),
+            });
+            assert!(
+                INITIAL_FILES_PROBE
+                    .lock()
+                    .unwrap()
+                    .replace(probe.clone())
+                    .is_none()
+            );
+            Self {
+                _app: app,
+                window,
+                host,
+                focus,
+                header,
+                model,
+                game,
+                probe,
+                started,
+                permit,
+                ready,
+                publish,
+            }
+        }
+
+        fn mount(&self) -> gtk::Box {
+            self.model.borrow_mut().detail_generation += 1;
+            let state = self.model.borrow();
+            let page = build_files_page(
+                &DetailPageModel::game(state.games[0].clone(), false),
+                &self.window,
+                FilesPageOptions {
+                    model: &self.model,
+                    access_token: None,
+                    config: &state.config,
+                    library_statuses: &state.library_statuses,
+                    installer_defaults: &InstallerFilterDefaults {
+                        language: None,
+                        windows: true,
+                        linux: false,
+                        macos: false,
+                    },
+                    show_retired_artifacts: true,
+                    management: None,
+                    installed: None,
+                },
+            );
+            drop(state);
+            self.host.append(&page);
+            page
+        }
+
+        fn started(&self) {
+            wait(|| self.started.try_recv().is_ok());
+        }
+        fn prepare(&self) {
+            self.permit.send(()).unwrap();
+            wait(|| self.ready.try_recv().is_ok());
+        }
+        fn loaded(&self, page: &gtk::Box) -> bool {
+            find_named_descendant(page.upcast_ref(), "managed-files-summary-9354001").is_some()
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            self.window.destroy();
+            *INITIAL_FILES_PROBE.lock().unwrap() = None;
+        }
+    }
+
+    #[test]
+    #[ignore = "requires private p354 HOME/all XDG, D-Bus and GTK; inert local fixture only"]
+    fn initial_files_inspection_is_responsive_and_reuses_prepared_rows() {
+        let fixture = Fixture::new();
+        let connection = rusqlite::Connection::open(crate::identity::database()).unwrap();
+        connection.execute_batch("BEGIN EXCLUSIVE").unwrap();
+        let start = Instant::now();
+        let page = fixture.mount();
+        assert!(start.elapsed() < Duration::from_secs(1));
+        fixture.started();
+        assert!(!fixture.loaded(&page));
+        assert_eq!(
+            labels(page.upcast_ref()),
+            ["Inspecting downloaded files…", "Retry"]
+        );
+        assert!(fixture.header.text().ends_with("previously known"));
+        assert!(
+            crate::profile_reset::reserve().is_err(),
+            "guard must precede worker dispatch"
+        );
+        fixture.permit.send(()).unwrap();
+        let beats = Rc::new(std::cell::Cell::new(0));
+        let heartbeat = glib::timeout_add_local(Duration::from_millis(10), {
+            let beats = beats.clone();
+            move || {
+                beats.set(beats.get() + 1);
+                glib::ControlFlow::Continue
+            }
+        });
+        wait(|| beats.get() >= 12);
+        assert_eq!(fixture.probe.opens.load(Ordering::SeqCst), 1);
+        assert_eq!(fixture.probe.jobs.load(Ordering::SeqCst), 0);
+        assert!(!fixture.loaded(&page));
+        connection.execute_batch("ROLLBACK").unwrap();
+        wait(|| fixture.ready.try_recv().is_ok());
+        // Keep SQLite unavailable during GTK row construction: any fallback open/read blocks.
+        connection.execute_batch("BEGIN EXCLUSIVE").unwrap();
+        let focus = gtk::prelude::GtkWindowExt::focus(&fixture.window);
+        let render = Instant::now();
+        fixture.publish.send(()).unwrap();
+        wait(|| fixture.loaded(&page));
+        assert!(
+            render.elapsed() < Duration::from_secs(1),
+            "row construction reentered SQLite"
+        );
+        connection.execute_batch("ROLLBACK").unwrap();
+        heartbeat.remove();
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&fixture.window), focus);
+        assert!(fixture.focus.is_mapped());
+        assert!(page.is_ancestor(&fixture.window));
+        let texts = labels(page.upcast_ref());
+        for text in [
+            "✓",
+            "Paused — resume",
+            "Failed — retry",
+            "Interrupted — resume",
+            "Synthetic DLC",
+            "Synthetic patch",
+            "Synthetic extra",
+            "1/4 Downloaded",
+        ] {
+            assert!(
+                texts.iter().any(|label| label == text),
+                "missing {text}: {texts:?}"
+            );
+        }
+        assert!(texts.iter().any(|label| label.contains("Retired")));
+        assert!(
+            texts.iter().any(|label| label.contains("Local")),
+            "additional copy must remain visible"
+        );
+        assert!(fixture.header.text().contains("Downloaded files: 384 B"));
+        assert_eq!(fixture.probe.opens.load(Ordering::SeqCst), 1);
+        assert_eq!(fixture.probe.jobs.load(Ordering::SeqCst), 1);
+        pump(Duration::from_millis(300));
+        assert!(
+            fixture.started.try_recv().is_err(),
+            "initial completion must not start another worker"
+        );
+        fixture.host.remove(&page);
+        // Older cached local files remain usable before they have managed/job records.
+        connection
+            .execute_batch("DELETE FROM managed_files; DELETE FROM download_jobs")
+            .unwrap();
+        let path = fixture.game.location.join("fallback.bin");
+        std::fs::write(&path, [42_u8; 64]).unwrap();
+        let mut fallback = fixture.game.clone();
+        fallback.remote_artifacts.clear();
+        fallback.dlcs.clear();
+        fallback.installers = vec![LibraryFile {
+            name: "fallback.bin".into(),
+            path,
+            size: 64,
+        }];
+        fallback.disk_usage = 64;
+        fixture.model.borrow_mut().games = vec![fallback];
+        let page = fixture.mount();
+        fixture.started();
+        fixture.prepare();
+        fixture.publish.send(()).unwrap();
+        wait(|| fixture.loaded(&page));
+        assert!(
+            labels(page.upcast_ref())
+                .iter()
+                .any(|label| label.contains("1 local installers  ·  64 B on disk"))
+        );
+        assert!(fixture.header.text().contains("Downloaded files: 64 B"));
+        wait(|| crate::profile_reset::reserve().is_ok());
+    }
+
+    #[test]
+    #[ignore = "requires private p354 HOME/all XDG, D-Bus and GTK; inert local fixture only"]
+    fn initial_files_inspection_retries_and_rejects_stale_results() {
+        let fixture = Fixture::new();
+        let page = fixture.mount();
+        fixture.started();
+        fixture.prepare();
+        let retry = find_named_descendant(page.upcast_ref(), "initial-files-retry")
+            .unwrap()
+            .downcast::<gtk::Button>()
+            .unwrap();
+        fixture.model.borrow_mut().local_revision += 1;
+        // Multiple requests while one inspection is held must coalesce into one latest attempt.
+        retry.emit_clicked();
+        retry.emit_clicked();
+        fixture.publish.send(()).unwrap();
+        fixture.started();
+        assert!(!fixture.loaded(&page));
+        assert!(fixture.header.text().ends_with("previously known"));
+        fixture.prepare();
+        fixture.publish.send(()).unwrap();
+        wait(|| fixture.loaded(&page));
+        assert_eq!(fixture.probe.opens.load(Ordering::SeqCst), 2);
+        assert_eq!(fixture.probe.jobs.load(Ordering::SeqCst), 2);
+        fixture.host.remove(&page);
+
+        let connection = rusqlite::Connection::open(crate::identity::database()).unwrap();
+        connection
+            .execute_batch("ALTER TABLE managed_files RENAME TO fixture_managed_files")
+            .unwrap();
+        let page = fixture.mount();
+        fixture.started();
+        fixture.prepare();
+        fixture.publish.send(()).unwrap();
+        let retry = find_named_descendant(page.upcast_ref(), "initial-files-retry")
+            .unwrap()
+            .downcast::<gtk::Button>()
+            .unwrap();
+        wait(|| retry.is_mapped() && retry.is_sensitive());
+        assert!(!fixture.loaded(&page));
+        assert!(
+            labels(page.upcast_ref())
+                .iter()
+                .any(|label| label.contains("Could not inspect downloaded files"))
+        );
+        assert!(fixture.header.text().contains("Downloaded files: 384 B"));
+        connection
+            .execute_batch("ALTER TABLE fixture_managed_files RENAME TO managed_files")
+            .unwrap();
+        retry.emit_clicked();
+        fixture.started();
+        fixture.prepare();
+        fixture.publish.send(()).unwrap();
+        wait(|| fixture.loaded(&page));
+        fixture.host.remove(&page);
+
+        let page = fixture.mount();
+        fixture.started();
+        fixture.prepare();
+        let attempts = fixture.probe.opens.load(Ordering::SeqCst);
+        page.set_visible(false);
+        fixture.publish.send(()).unwrap();
+        pump(Duration::from_millis(120));
+        assert!(!fixture.loaded(&page));
+        page.set_visible(true);
+        wait(|| fixture.loaded(&page));
+        assert_eq!(fixture.probe.opens.load(Ordering::SeqCst), attempts);
+        fixture.host.remove(&page);
+
+        for invalidation in [
+            "revision",
+            "retry",
+            "detail",
+            "epoch",
+            "logout",
+            "detach",
+            "auth-ready",
+            "account-ready",
+            "auth",
+            "account",
+            "destroy",
+        ] {
+            fixture.model.borrow_mut().logout_pending = false;
+            let page = fixture.mount();
+            fixture.started();
+            let before = fixture.probe.opens.load(Ordering::SeqCst);
+            if invalidation.ends_with("-ready") {
+                fixture.prepare();
+            }
+            match invalidation {
+                "revision" => fixture.model.borrow_mut().local_revision += 1,
+                "retry" => find_named_descendant(page.upcast_ref(), "initial-files-retry")
+                    .unwrap()
+                    .downcast::<gtk::Button>()
+                    .unwrap()
+                    .emit_clicked(),
+                "detail" => fixture.model.borrow_mut().detail_generation += 1,
+                "epoch" => fixture.model.borrow_mut().account_epoch += 1,
+                "logout" => fixture.model.borrow_mut().logout_pending = true,
+                "detach" => fixture.host.remove(&page),
+                "auth" | "auth-ready" => auth::invalidate_session(),
+                "account" | "account-ready" => online::invalidate_library_session(),
+                "destroy" => fixture.window.destroy(),
+                _ => unreachable!(),
+            }
+            if !invalidation.ends_with("-ready") {
+                fixture.prepare();
+            }
+            fixture.publish.send(()).unwrap();
+            pump(Duration::from_millis(120));
+            assert!(!fixture.loaded(&page), "stale {invalidation} painted rows");
+            if matches!(
+                invalidation,
+                "auth" | "account" | "auth-ready" | "account-ready"
+            ) {
+                let status = find_named_descendant(page.upcast_ref(), "initial-files-status")
+                    .unwrap()
+                    .downcast::<gtk::Label>()
+                    .unwrap();
+                assert_eq!(
+                    status.text(),
+                    "Your sign-in session changed. Go to Home, then reopen this game to inspect downloaded files."
+                );
+                assert!(status.is_mapped());
+                let spinner = page
+                    .first_child()
+                    .unwrap()
+                    .first_child()
+                    .unwrap()
+                    .downcast::<gtk::Spinner>()
+                    .unwrap();
+                assert!(!spinner.get_visible());
+            }
+            if matches!(invalidation, "auth" | "account") {
+                assert_eq!(
+                    fixture.probe.opens.load(Ordering::SeqCst),
+                    before,
+                    "obsolete session opened SQLite"
+                );
+            }
+            if matches!(invalidation, "revision" | "retry") {
+                fixture.started();
+                fixture.prepare();
+                fixture.publish.send(()).unwrap();
+                wait(|| fixture.loaded(&page));
+            } else {
+                assert!(
+                    fixture.started.try_recv().is_err(),
+                    "obsolete page scheduled another attempt"
+                );
+            }
+            if page.parent().is_some() {
+                fixture.host.remove(&page);
+            }
+        }
+        wait(|| crate::profile_reset::reserve().is_ok());
+    }
 }
 
 #[cfg(test)]
@@ -4498,6 +5585,19 @@ mod unified_row_tests {
             std::slice::from_ref(&artifact),
             &[],
             &context,
+            &prepare_files_page(
+                &DetailPageModel::game(
+                    Game {
+                        product_id: 9306001,
+                        remote_artifacts: vec![artifact.clone()],
+                        ..Game::default()
+                    },
+                    false,
+                ),
+                &config,
+                &statuses,
+            )
+            .unwrap(),
         );
         let row = collection.last_child().unwrap();
         let count = descendants(collection.upcast_ref())
@@ -4860,9 +5960,22 @@ mod unified_row_tests {
                 installed: None,
             };
             let labels = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            let prepared = prepare_files_page(
+                &DetailPageModel::game(
+                    Game {
+                        product_id: 9296002,
+                        remote_artifacts: artifacts.clone(),
+                        ..Game::default()
+                    },
+                    false,
+                ),
+                &config,
+                &statuses,
+            )
+            .unwrap();
             let action = artifact_download_action(
                 &artifacts.iter().collect::<Vec<_>>(),
-                &[],
+                &prepared.products[&9296002].groups[0],
                 &labels,
                 &gtk::Label::new(None),
                 &context,

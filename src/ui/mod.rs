@@ -565,6 +565,18 @@ fn load_managed_detail_summary(
     product_id: i64,
 ) -> anyhow::Result<(usize, u64)> {
     let files = store.managed_files_for_products(&[product_id])?;
+    Ok(managed_detail_summary(
+        &files,
+        &store.download_jobs()?,
+        product_id,
+    ))
+}
+
+fn managed_detail_summary(
+    files: &[crate::state::ManagedFileRecord],
+    jobs: &[DownloadJobRecord],
+    product_id: i64,
+) -> (usize, u64) {
     let present = files
         .iter()
         .filter(|file| file.product_id == product_id && file.present)
@@ -578,8 +590,7 @@ fn load_managed_detail_summary(
         .iter()
         .filter(|file| file.kind == ArtifactKind::Installer)
         .count();
-    for job in store
-        .download_jobs()?
+    for job in jobs
         .iter()
         .filter(|job| job.product_id == product_id && job.state == "complete")
     {
@@ -600,7 +611,7 @@ fn load_managed_detail_summary(
             }
         }
     }
-    Ok((installers, bytes))
+    (installers, bytes)
 }
 
 fn managed_detail_refresher(

@@ -19,6 +19,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- Archive-only Gungeon macOS transfer paused at134.8/260MB. Initial featured trash clicks showed
+  no dialog despite responsive navigation; after revisiting Downloads, ordinary clicks show Cancel
+  download confirmation. Confirmed cancellation removes that transfer, preserving both completed
+  Linux/Windows installers and native payload. Source diagnosis finds no proven dead handler;
+  original transition remains unexplained, no speculative product change. Reserve9GB of40GB.
+
 - Onc9f5b99, existing native Gungeon installation launches and renders its intro; normal window
   quit ends EtG.x86_64 and restores green Play/white title/search in place. The original mixed
   marker hash remains unchanged before/after launch, proving read-only recovery. No Windows repair
@@ -69,6 +75,23 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P354 — prepare initial downloaded-file rows off GTK
+
+- Files immediately shows an inspection shell while one tracked worker prepares base/owned-DLC
+  paths, saved jobs, completeness, historical copies, folder availability and summary values.
+  Reuse one connection/jobs scan and prepared rows; no initial per-row GTK DB/stat fallback.
+- Keep unknown local state non-actionable, retain prior totals on returned errors and offer Retry.
+  Weak view/request/account/auth/local-revision/input guards reject stale results and coalesce
+  changes. Revoked sessions stop loading with exact Home-then-reopen guidance; no automatic
+  replacement-session work. Ordinary errors keep in-place Retry; later row policies are unchanged.
+- Review caught and corrected cached-local fallback totals, cross-kind grouping and stale-session
+  loading feedback. Two new actual-entry lock/heartbeat/prepared-data/lifecycle fixtures plus four
+  existing archive/queue/summary regressions PASS. Initial existing-test runs refused the wrong
+  private prefix; corrected harness invocation passed without weakening guards or product code.
+  Independent final review, formatting, Clippy and build PASS. No real-file work in fixtures.
+- Existing persistence APIs may suppress malformed row/JSON errors internally; this pre-existing
+  limitation remains explicitly deferred. One connection is not an atomic multi-query snapshot.
 
 ### P357 — track Storage inspection during profile reset
 

@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADc9f5b99. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEADaa23e68. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve8GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered29 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered30 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -23,9 +23,12 @@ Last meaningful update: 2026-10-06.
   run separately. Later changes pass focused gates/builds; next consolidated gate after this batch.
   Harness/log: /tmp/ludomere-r111-full-build.py and full-build-odjoz3gv/build.log. Two earlier
   harness-only mount/NSS failures corrected without exposing real profile/bus/network or changing tests.
-- Active P354 (ui_critic): isolated one-worker initial Files preparation and loading/Retry shell,
-  with session/view/local-revision/profile-activity guards. Preserve inherited persistence API
-  decode behavior; its swallowed errors are a separate finding. Implementation/tests not frozen.
+- P354 verified (ui_critic; reviewer file_summary): one-worker initial Files preparation and
+  loading/Retry shell, with session/view/local-revision/profile-activity guards. Review corrected
+  fallback summaries, per-kind grouping and revoked-session spinner feedback. Six focused private
+  regressions, final review, fmt/Clippy/build PASS. Two initial existing-test runs refused the wrong
+  private prefix; reruns with mandatory p296 prefix passed, tests/product unchanged for that refusal.
+  Inherited persistence decode suppression remains deferred; returned errors stay visible.
 - Active P355 (performance_audit; reviewer file_summary): approved cached-offline/source-migration
   preference retention, native boundary and pending-profile preservation, with tracked cached
   preparation before DB access. Isolated implementation; no product integration yet.
@@ -33,9 +36,9 @@ Last meaningful update: 2026-10-06.
   for reset draining. Initial independent review caught lifetime session capture disabling reused
   Settings; corrected per-admission snapshots restore deliberate same-page retry while rejecting
   old results. Final review, actual delayed-worker and P350 GTK tests, fmt/Clippy/build PASS.
-- Active P358 diagnosis (file_summary): live archive Pause works at134.8/260MB, featured trash
-  gives no visible dialog; main navigation still responsive. Root keeps test archive paused for
-  retest. Existing native game and Linux/Windows archives retained. Reserve9GB of40GB now.
+- P358 diagnosis closed without code change: live Pause works at134.8/260MB; initial trash clicks
+  unexplained, but ordinary clicks after revisiting Downloads show confirmation and remove the
+  transfer. Main navigation responsive; existing game/two archives retained. Reserve9GB of40GB.
 - P356 deferred narrower findings: same-target Move remains enabled and returns a refusal;
   Account Settings session subtitle is a stale snapshot. P355 additionally found mixed-case Linux
   dispatch inconsistency. Initial file summaries, completed-transfer colors, read-only free-space

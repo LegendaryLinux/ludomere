@@ -90,7 +90,7 @@
 - P353 (complete, ui_critic; reviewer file_summary): clarify that Storage capacity bar covers the
   containing drive while managed category totals cover the selected library. Wording/layout only
   in isolated storage.rs; preserve arithmetic/workers and P350 feedback; verify narrow layout.
-- P354 (in_progress, ui_critic; reviewer file_summary): reviewed initial Files worker conversion,
+- P354 (complete, ui_critic; reviewer file_summary): reviewed initial Files worker conversion,
   own isolated files.rs and necessary mod.rs summary seam. One scoped data preparation reused for
   rows/totals, immediate loading and retryable failures, no initial GTK I/O or false empty actions.
   Preserve session/auth/detail/local-revision/weak lifetime and pre-spawn profile guards; private
@@ -112,9 +112,16 @@
   current receiver semantics; delayed-worker/reset-drain fixture, no real data or reset protocol changes.
   Source follow-up disproved the pure-filesystem premise for library-choice inspection: it too
   opens StateStore. Include both worker admissions under the same bounded fix and tests.
-- P358 (in_progress diagnosis, file_summary): live paused archive featured trash button gives no
-  visible cancellation dialog despite responsive navigation. Source/synthetic diagnosis only;
-  root retains paused134.8MB test archive for live retest. Protect existing payload/two archives.
+- P358 (complete diagnosis, file_summary): initial paused archive trash clicks unexplained; after
+  revisiting Downloads ordinary clicks show confirmation and cancellation removes test transfer,
+  retaining existing payload/two archives. Source finds no proven dead handler; no speculative fix.
+- P359 (review, performance_audit; reviewer file_summary): refresh Account GOG session subtitle
+  from in-memory network/token/logout state using weak bounded updates, unchanged wording except
+  no authenticated display during logout. Own isolated settings.rs; no wallet/DB/network probes,
+  identity/action redesign or navigation. Actual row/state/destruction focused regression required.
+- P360 (in_progress source proposal, performance_audit): assess malformed game-preference JSON
+  silently becoming defaults, caller fallbacks and safe actionable recovery. No implementation,
+  raw private arguments/profile access, queue/catalog/schema changes or new API without review.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.
