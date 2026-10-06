@@ -69,6 +69,12 @@
   assurance found cancellation's GTK admission can wait on another operation's persistence.
 - P348 (review, performance_audit; reviewer file_summary): remove that blocking cancellation admission without dropping
   recovery-generation, profile-activity or ownership safeguards; deterministic held-lock regression.
+- P349 (ready, performance_audit; reviewer file_summary): coalesce Home scroll cover-priority
+  scans, skip filtered/unmapped rows and retain latest viewport/lifetime safeguards. Own library.rs
+  in isolated checkout; source work-count evidence and strict mapped equivalence/lifecycle fixture.
+  No grid virtualization, backend queue redesign, real data or main edits before review.
+- P350 (pending, ui_critic): inspect remaining Settings/Storage interactive feedback and Collections
+  keyboard consistency; report concrete bounded proposals before edits, synthetic/source only.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

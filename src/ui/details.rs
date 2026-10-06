@@ -2409,13 +2409,7 @@ fn installation_status_panel(
             }
             if let Some(failed) = jobs.iter().find(|job| job.state == DownloadState::Failed) {
                 action_visual.set(0);
-                primary_action.remove_css_class("operational-action");
-                action_group.remove_css_class("operational-state");
-                set_primary_button_content(
-                    &primary_action,
-                    normal_action.icon(),
-                    normal_action.label(),
-                );
+                set_idle_primary_action(&primary_action, &action_group, normal_action);
                 panel_for_poll.set_visible(true);
                 heading.set_label("DOWNLOAD FAILED");
                 let message = failed
@@ -2428,25 +2422,17 @@ fn installation_status_panel(
                 view_error.set_visible(true);
                 progress.set_visible(false);
                 determinate.set(false);
-                primary_action.set_sensitive(true);
                 return glib::ControlFlow::Continue;
             }
             if jobs.iter().any(|job| job.state == DownloadState::Paused) {
                 view_error.set_visible(false);
                 action_visual.set(0);
-                primary_action.remove_css_class("operational-action");
-                action_group.remove_css_class("operational-state");
-                set_primary_button_content(
-                    &primary_action,
-                    normal_action.icon(),
-                    normal_action.label(),
-                );
+                set_idle_primary_action(&primary_action, &action_group, normal_action);
                 panel_for_poll.set_visible(true);
                 heading.set_label("DOWNLOAD PAUSED");
                 detail.set_label("Resume this download from the Downloads page");
                 progress.set_visible(false);
                 determinate.set(false);
-                primary_action.set_sensitive(true);
                 return glib::ControlFlow::Continue;
             }
         }
@@ -2512,6 +2498,7 @@ fn installation_status_panel(
                 !snapshot.queued && snapshot.state != crate::domain::InstallationState::Installing
             })
         {
+            action_visual.set(0);
             set_idle_primary_action(&primary_action, &action_group, normal_action);
             panel_for_poll.set_visible(true);
             cancel.set_visible(false);
@@ -2780,6 +2767,17 @@ fn set_idle_primary_action(button: &gtk::Button, actions: &gtk::Box, action: Gam
     button.set_sensitive(true);
     button.remove_css_class("operational-action");
     actions.remove_css_class("operational-state");
+    if matches!(
+        action,
+        GamePrimaryAction::Download
+            | GamePrimaryAction::Install
+            | GamePrimaryAction::DownloadUpdate
+            | GamePrimaryAction::InstallUpdate
+    ) {
+        actions.add_css_class("download-state");
+    } else {
+        actions.remove_css_class("download-state");
+    }
     set_alternate_game_actions_sensitive(actions, true);
 }
 
@@ -3890,6 +3888,7 @@ mod installation_progress_tests {
                 std::thread::sleep(Duration::from_millis(5));
             }
             assert_eq!(button.tooltip_text().as_deref(), Some(action.label()));
+            assert_eq!(actions.has_css_class("download-state"), !is_installed);
             assert_eq!(
                 action,
                 if is_installed {
@@ -3904,6 +3903,7 @@ mod installation_progress_tests {
             assert_eq!(alternate.popover(), Some(popover.clone()));
             assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
         }
+        #[track_caller]
         fn wait(check: impl Fn() -> bool) {
             let deadline = std::time::Instant::now() + Duration::from_secs(5);
             while !check() && std::time::Instant::now() < deadline {
@@ -3919,7 +3919,7 @@ mod installation_progress_tests {
         model.borrow_mut().local_actions.insert(
             1,
             sections::LocalActionState {
-                installed: Some(installed),
+                installed: Some(installed.clone()),
                 ..Default::default()
             },
         );
@@ -3945,19 +3945,38 @@ mod installation_progress_tests {
                 updated_at: 0,
                 completed_at: None,
             });
-        for terminal in [
-            DownloadState::Paused,
-            DownloadState::Failed,
-            DownloadState::Complete,
+        for (is_installed, terminal) in [
+            (true, DownloadState::Paused),
+            (false, DownloadState::Paused),
+            (true, DownloadState::Failed),
+            (false, DownloadState::Failed),
+            (true, DownloadState::Complete),
+            (false, DownloadState::Complete),
         ] {
             model.borrow_mut().download_jobs[0].state = DownloadState::Downloading;
             wait(|| button.tooltip_text().as_deref() == Some("Pause"));
             assert!(button.has_css_class("operational-action"));
             assert!(actions.has_css_class("operational-state"));
+            if is_installed {
+                model
+                    .borrow_mut()
+                    .installed_games
+                    .insert(1, installed.clone());
+            } else {
+                model.borrow_mut().installed_games.remove(&1);
+            }
+            model
+                .borrow_mut()
+                .local_actions
+                .get_mut(&1)
+                .unwrap()
+                .installed = is_installed.then(|| installed.clone());
             model.borrow_mut().download_jobs[0].state = terminal;
-            wait(|| button.tooltip_text().as_deref() == Some("Play"));
+            let action = current_primary_action(&model.borrow(), 1, None);
+            wait(|| button.tooltip_text().as_deref() == Some(action.label()));
             assert!(!button.has_css_class("operational-action"));
             assert!(!actions.has_css_class("operational-state"));
+            assert_eq!(actions.has_css_class("download-state"), !is_installed);
             assert!(button.is_sensitive());
             assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
         }
@@ -3965,6 +3984,8 @@ mod installation_progress_tests {
         for action in [
             GamePrimaryAction::Download,
             GamePrimaryAction::Install,
+            GamePrimaryAction::DownloadUpdate,
+            GamePrimaryAction::InstallUpdate,
             GamePrimaryAction::Play,
             GamePrimaryAction::Play,
             GamePrimaryAction::Install,
@@ -3979,6 +4000,10 @@ mod installation_progress_tests {
             assert_eq!(button.tooltip_text().as_deref(), Some(action.label()));
             assert!(alternate.is_sensitive());
             assert!(!actions.has_css_class("operational-state"));
+            assert_eq!(
+                actions.has_css_class("download-state"),
+                action != GamePrimaryAction::Play
+            );
             assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
             let content = button.child().unwrap();
             assert_eq!(
