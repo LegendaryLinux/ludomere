@@ -4,6 +4,10 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P333 committed94ef9fd and exact post-commit build PASS. P335 independent review and two
+  focused synthetic SQLite/TTL regressions, formatting, all-target Clippy and build PASS;
+  separate commit next. P337 exit/filter correction isolated; P338 polling proposal underway.
+
 - P333 bounded full-error scrollers independently reviewed; mapped long/short archive and Depot
   errors plus three existing error/cancel regressions PASS. Controls stay visible at600px height;
   formatting, all-target Clippy and build PASS. Separate commit next.

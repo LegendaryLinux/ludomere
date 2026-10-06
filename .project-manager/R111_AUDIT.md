@@ -145,8 +145,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   a separate search/sidebar inconsistency, assigned P337. Normal game exit was not simulated by
   destroying its X11 window; no automatic post-exit cloud-sync success is inferred from that action.
 
-## Remaining findings
-
 ### P333 — keep Downloads actions visible with long failures
 
 - Full selectable archive/Depot diagnostic labels scroll inside a capped viewport, leaving
@@ -154,6 +152,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Independent review and four focused GTK tests PASS. Mapped real-CSS fixture at1100x600 kept
   archive/Depot headers at210/241px for roughly16KB errors; inner scrolling leaves actions and
   outer scroll fixed. Formatting, all-target Clippy and build PASS.
+
+### P335 — reuse the cached-library database connection
+
+- Startup Metadata/Acquisition readiness reuses one store and at most one cached-product
+  reconstruction per game. Preserve independent observation errors, strict TTL boundaries,
+  malformed-product handling, immediate game-list delivery and existing receiver guards.
+- Source-derived connection opens drop from1+2N to1; observations remain2N and maximum product
+  reconstructions drop from2N toN. This is not a measured whole-application timing claim.
+- Independent review, two focused private regressions, formatting, all-target Clippy and build PASS.
+
+## Remaining findings
 
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.

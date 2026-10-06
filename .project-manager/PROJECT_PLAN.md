@@ -36,14 +36,16 @@
 - P334 (complete, file_summary; reviewer ui_critic): show zero-result Home feedback in place, retain
   existing truly empty/account messages and explicit Home navigation. Isolated overlay/widget work;
   independent review, two focused GTK tests, formatting/Clippy/build PASS. No real-account agent access.
-- P335 (review, file_summary; reviewer ui_critic): reuse cached-startup SQLite store and one product reconstruction
+- P335 (complete, file_summary; reviewer ui_critic): reuse cached-startup SQLite store and one product reconstruction
   for Metadata/Acquisition readiness; preserve TTL/errors/receivers. Isolated online.rs and cached
   worker only; root coordinates integration with P334. No schema or new cache framework.
-- P336 (in_progress, file_summary): prepare a private-profile consolidated build harness only;
+- P336 (review, file_summary): prepare a private-profile consolidated build harness only;
   root reviews and executes later. No real desktop, credentials, games or product edits.
 - P337 (in_progress, ui_critic; reviewer performance_audit): release the mutable model borrow before
   sidebar filter invalidation after game exit. Live Coffee Talk Stop shows all rows despite query
   and count. Own isolated details.rs and same-file regression; preserve both sorts and navigation.
+- P338 (proposal, performance_audit): inspect repeated archive chooser polling reads; propose a
+  bounded batch preserving row matching, latest-record semantics and error behavior. No edits yet.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

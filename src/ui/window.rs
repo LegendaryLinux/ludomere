@@ -328,27 +328,26 @@ fn load_cached_library(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
     let (sender, receiver) = mpsc::channel();
     let (ready_sender, ready_receiver) = mpsc::channel();
     std::thread::spawn(move || {
-        let result = StateStore::open().map(|store| {
-            store
-                .normalized_games()
-                .ok()
-                .filter(|games| !games.is_empty())
-                .unwrap_or_else(|| store.cached_online_games().unwrap_or_default())
-        });
-        let ids = result
-            .as_ref()
-            .map(|games| games.iter().map(|game| game.product_id).collect::<Vec<_>>())
-            .unwrap_or_default();
-        let _ = sender.send(result);
         let mut ready = Vec::new();
-        for id in ids {
-            for scope in [
-                online::DetailSection::Metadata,
-                online::DetailSection::Acquisition,
-            ] {
-                if online::section_ready(id, scope).unwrap_or(false) {
-                    ready.push((id, scope));
+        match StateStore::open() {
+            Ok(store) => {
+                let games = store
+                    .normalized_games()
+                    .ok()
+                    .filter(|games| !games.is_empty())
+                    .unwrap_or_else(|| store.cached_online_games().unwrap_or_default());
+                let ids = games.iter().map(|game| game.product_id).collect::<Vec<_>>();
+                let _ = sender.send(Ok(games));
+                for id in ids {
+                    ready.extend(
+                        online::cached_library_ready_sections(&store, id)
+                            .into_iter()
+                            .map(|section| (id, section)),
+                    );
                 }
+            }
+            Err(error) => {
+                let _ = sender.send(Err(error));
             }
         }
         let _ = ready_sender.send(ready);
