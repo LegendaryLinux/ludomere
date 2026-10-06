@@ -8,7 +8,7 @@
   Root actual narrow/wide scrolling and existing control gates; stop if native cue is inadequate.
   Isolated details.rs property only, no standalone fixture warranted for this presentation flag.
 
-- P387 (in_progress, file_summary): correct observed single-part file metadata to1 part,
+- P387 (complete, file_summary; reviewer ui_critic): correct observed single-part file metadata to1 part,
   preserving None/multipart/grouping semantics. Isolated files.rs expression only; no new fixture
   for this copy change. Independent source review, formatting and exact build are proportional.
 - P386 (complete, performance_audit; reviewer ui_critic): inspect concrete Properties/Cloud ownership

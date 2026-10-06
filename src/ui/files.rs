@@ -2647,7 +2647,10 @@ fn remote_file_collection(
         .map(str::to_owned)
         .collect::<Vec<_>>();
         if let Some(part_count) = file.part_count {
-            metadata_parts.push(format!("{part_count} parts"));
+            metadata_parts.push(format!(
+                "{part_count} {}",
+                if part_count == 1 { "part" } else { "parts" }
+            ));
         }
         if let Some(path) = managed_paths.first().and_then(|path| path.parent()) {
             metadata_parts.push(path.display().to_string());

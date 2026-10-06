@@ -38,6 +38,10 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P387 reviewed one-expression copy correction renders1 part instead of1 parts, preserving
+  None omission and plural counts. Formatting/diff PASS; no new fixture for this copy change.
+  P386 commitf8a9cb7 exact build PASS, bringing59 built audit commits before P387.
+
 - P386 private actual-component lifetime PASS (p386-g0thah12): inventory row/button and
   Advanced popup/force buttons release after ordinary detachment while host remains mapped.
   Retained P267/P369/P372/P379/P384 PASS (p267-9l7q8joe,p369-djwfcbfv,p372-8nrw9w17,
