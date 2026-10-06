@@ -4,6 +4,11 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P338 committed2a930e4 exact post-commit build PASS. P342 independent review, private no-write
+  regression, formatting/all-target Clippy/build PASS; commit next. Real Gungeon Depot reinstall
+  finished with setup success before attempted pause; count as reinstall success, not cancellation.
+  Conservative total test reservation7GB of40GB. No cloud deletion performed.
+
 - P341 committed5862b7a exact post-commit build PASS. P338 independent review and four private
   regressions (identity/ties, bounded reads, file validity and GTK selection), formatting/all-target
   Clippy/build PASS; separate commit next. P342/P340 await gates; P343/P345 isolated.

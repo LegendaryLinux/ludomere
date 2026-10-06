@@ -54,15 +54,17 @@
 - P341 (complete, file_summary; reviewer performance_audit): clear stale archive error styling on
   new preparation and keep active Pause blue with proper terminal Play restoration. Isolated
   files/details changes plus existing state-transition fixtures; no real agent data access.
-- P342 (in_progress, file_summary): remove chooser-open directory creation; query existing valid
+- P342 (complete, file_summary; reviewer performance_audit): remove chooser-open directory creation; query existing valid
   destinations only and retain Unavailable state. Explicit missing-folder creation remains deferred
   because libraries do not retain mount identity. Isolated chooser/helper regression only.
 - P343 (in_progress, ui_critic): normal uninstall hides irrelevant Retry and collapses alternative
   removal methods, expanding recovery after failure. Preserve Browse, all warnings and consent.
+- P344 (review, ui_critic): four existing uninstaller status strings explain following prompts in
+  the uninstaller window. No process, focus, detection or execution changes.
 - P345 (in_progress, file_summary): synchronize idle download-state class and reuse existing helper
   for paused/failed archive restoration; isolated details-only transitions regression.
-- P346 (proposal, performance_audit): installer chooser shows mountpoint instead of actual selected
-  library and irrelevant Galaxy feedback for offline sources; propose truthful source-scoped display.
+- P346 (ready, performance_audit): show full selected library and actual installation folder;
+  source-scope Galaxy feedback while preserving generic/offline failures and preparation behavior.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

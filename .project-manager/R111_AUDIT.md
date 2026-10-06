@@ -203,7 +203,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Independent review, three private pure/file regressions and actual-row GTK regression PASS;
   formatting, all-target Clippy and build PASS.
 
+### P342 — keep free-space inspection read-only
+
+- Only compatible existing destinations start a read-only free-space query; opening the chooser
+  no longer creates missing directories or replaces an unavailable diagnosis with free bytes.
+- Reject missing/non-directory/symlink leaves in the query boundary. No new mount assumptions or
+  folder-creation workflow. Independent review, private no-write regression, formatting/Clippy/build PASS.
+
 ## Remaining findings
+
+- Gungeon's Depot reinstall completed all declared prerequisite setup successfully before the
+  attempted cancellation interaction; this is successful reinstall evidence, not a cancellation pass.
+  Conservative transfer/storage budget reservation7GB of40GB after repeated Gungeon acquisition.
 
 - Gungeon uninstall completed through its own Yes/remove, Yes/keep-saves and final OK prompts.
   Ludomere restored Download without reopening details and retained its offline archive; external

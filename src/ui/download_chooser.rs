@@ -2667,7 +2667,6 @@ fn populate_install_dialog(
         let free = gtk::Label::new(Some("Calculating…"));
         free.add_css_class("install-library-free");
         content.append(&free);
-        update_install_library_free_space(&game_library.path, &free);
         row.set_child(Some(&content));
         if storage_locked && index != default_library {
             row.add_css_class("dim-label");
@@ -2678,14 +2677,25 @@ fn populate_install_dialog(
             row.set_tooltip_text(Some("This game is installed in this library."));
         }
         library_choices.append(&row);
-        if let Some(status) = library_statuses.iter().find(|status| {
-            status.kind == LibraryKind::GameFiles && status.library_id == game_library.id
-        }) && let crate::storage::LibraryCompatibility::Incompatible(reason)
-        | crate::storage::LibraryCompatibility::Unavailable(reason) = &status.compatibility
+        match library_statuses
+            .iter()
+            .find(|status| {
+                status.kind == LibraryKind::GameFiles && status.library_id == game_library.id
+            })
+            .map(|status| &status.compatibility)
         {
-            row.set_sensitive(false);
-            row.set_tooltip_text(Some(reason));
-            free.set_label("Unavailable");
+            Some(crate::storage::LibraryCompatibility::Compatible) => {
+                update_install_library_free_space(&game_library.path, &free);
+            }
+            Some(
+                crate::storage::LibraryCompatibility::Incompatible(reason)
+                | crate::storage::LibraryCompatibility::Unavailable(reason),
+            ) => {
+                row.set_sensitive(false);
+                row.set_tooltip_text(Some(reason));
+                free.set_label("Unavailable");
+            }
+            None => free.set_label("Unavailable"),
         }
         if index == default_library {
             library_choices.select_row(Some(&row));
@@ -3884,10 +3894,7 @@ fn update_install_library_free_space(path: &std::path::Path, label: &gtk::Label)
     let label = label.clone();
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
-        let free = std::fs::create_dir_all(&path)
-            .ok()
-            .and_then(|()| fs2::available_space(&path).ok());
-        let _ = sender.send(free);
+        let _ = sender.send(install_library_free_space(&path).ok());
     });
     glib::timeout_add_local(Duration::from_millis(100), move || {
         match receiver.try_recv() {
@@ -3906,6 +3913,16 @@ fn update_install_library_free_space(path: &std::path::Path, label: &gtk::Label)
             }
         }
     });
+}
+
+fn install_library_free_space(path: &std::path::Path) -> std::io::Result<u64> {
+    if !std::fs::symlink_metadata(path)?.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "The library path is not a real directory",
+        ));
+    }
+    fs2::available_space(path)
 }
 
 fn update_install_plan_preview(
@@ -5949,6 +5966,38 @@ mod archive_poll_tests {
 #[cfg(test)]
 mod installer_version_tests {
     use super::*;
+
+    #[test]
+    fn library_free_space_checks_never_create_missing_directories() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(install_library_free_space(root.path()).is_ok());
+        for path in [
+            root.path().join("missing"),
+            root.path().join("missing/nested"),
+        ] {
+            assert_eq!(
+                install_library_free_space(&path).unwrap_err().kind(),
+                std::io::ErrorKind::NotFound
+            );
+            assert!(!path.exists());
+        }
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+
+        let file = root.path().join("file");
+        std::fs::write(&file, b"inert neighboring file").unwrap();
+        assert_eq!(
+            install_library_free_space(&file).unwrap_err().kind(),
+            std::io::ErrorKind::NotADirectory
+        );
+        let link = root.path().join("link");
+        std::os::unix::fs::symlink(root.path(), &link).unwrap();
+        assert_eq!(
+            install_library_free_space(&link).unwrap_err().kind(),
+            std::io::ErrorKind::NotADirectory
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), b"inert neighboring file");
+        assert!(!root.path().join("missing").exists());
+    }
 
     #[test]
     fn setup_failure_summary_preserves_context_and_redacts_diagnostics() {
