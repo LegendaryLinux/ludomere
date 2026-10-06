@@ -38,6 +38,27 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P391 Rename starts disabled and follows trimmed entry text, avoiding silent empty submission.
+  Existing actual Manage tags fixture PASS (p270-u8jsxqlm): empty/whitespace/valid/cleared,
+  Cancel/no-write and valid trimmed SQLite rename; stale/reset checks retained. Initial fixture
+  compile failed on nonexistent AlertDialog.response; independently reviewed correction clicks
+  the actual mapped native response button. Final fmt/Clippy/compile PASS; production unchanged
+  by correction. No real personal tags changed by this test.
+
+- Actual Gungeon grid Hide → empty results → Show hidden → Unhide round trip PASS.
+  Search remains intact; count0/1 and notification update correctly; Show hidden remains under
+  Library category. Restored original visible game and disabled Show hidden. Evidence
+  grid-hidden-result.png, show-hidden-filter.png, grid-unhide-menu.png, grid-visibility-restored.png.
+  Running preview is0d10311 plus rejected P388 visual flag; this flow is unaffected by that flag.
+
+- P388 one-property non-overlay scrollbar candidate rejected by live narrow gate: visible bar
+  consumes tab allocation and clips labels (p388-narrow-settled.png); wide fits normally.
+  Independent source reassessment finds native Automatic measurement does not reserve the bar
+  through natural-height propagation alone. Entire product delta reverted; no commit/acceptance.
+  Existing keyboard/wheel-reachable tab layout remains. Discoverability improvement deferred
+  rather than add speculative geometry handlers. Preview process retains old candidate until restart.
+  P387 commit0d10311 exact build PASS;60 separate built audit commits.
+
 - P387 reviewed one-expression copy correction renders1 part instead of1 parts, preserving
   None omission and plural counts. Formatting/diff PASS; no new fixture for this copy change.
   P386 commitf8a9cb7 exact build PASS, bringing59 built audit commits before P387.

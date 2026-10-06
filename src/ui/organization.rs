@@ -262,6 +262,15 @@ pub(super) fn tag_editor(w: &Widgets, model: &Rc<RefCell<AppModel>>, id: i64) ->
             content.append(&replacement);
             dialog.set_extra_child(Some(&content));
             dialog.add_responses(&[("cancel", "Cancel"), ("rename", "Rename"), ("delete", "Delete tag")]);
+            dialog.set_response_enabled("rename", false);
+            replacement.connect_changed({
+                let dialog = dialog.downgrade();
+                move |entry| {
+                    if let Some(dialog) = dialog.upgrade() {
+                        dialog.set_response_enabled("rename", !entry.text().trim().is_empty());
+                    }
+                }
+            });
             dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             dialog.set_close_response("cancel");
             let w = w.clone_refs();
@@ -547,6 +556,77 @@ mod tests {
         wait_until(|| status.label() == "Tags saved");
         assert_eq!(model.borrow().tags[&9270001], ["Synthetic"]);
         assert!(editor.is_sensitive());
+
+        let tag_editor = tag_editor(&widgets, &model, 9270001);
+        let manage = tag_editor
+            .last_child()
+            .unwrap()
+            .prev_sibling()
+            .unwrap()
+            .last_child()
+            .unwrap()
+            .downcast::<gtk::Button>()
+            .unwrap();
+        assert_eq!(manage.label().as_deref(), Some("Manage tags…"));
+        widgets.details.append(&tag_editor);
+        widgets.content.set_visible_child_name("details");
+        wait_until(|| manage.is_mapped());
+        for rename in [false, true] {
+            manage.emit_clicked();
+            let dialog = widgets
+                .window
+                .visible_dialog()
+                .and_downcast::<adw::AlertDialog>()
+                .unwrap();
+            let replacement = dialog
+                .extra_child()
+                .unwrap()
+                .last_child()
+                .unwrap()
+                .downcast::<gtk::Entry>()
+                .unwrap();
+            wait_until(|| replacement.is_mapped());
+            assert!(!dialog.is_response_enabled("rename"));
+            for (text, enabled) in [(" \t ", false), (" Renamed in dialog ", true), ("", false)] {
+                replacement.set_text(text);
+                assert_eq!(dialog.is_response_enabled("rename"), enabled);
+                assert!(dialog.is_response_enabled("cancel"));
+                assert!(dialog.is_response_enabled("delete"));
+                assert!(!model.borrow().organization_pending);
+                assert_eq!(model.borrow().tags[&9270001], ["Synthetic"]);
+            }
+            replacement.set_text(" Renamed in dialog ");
+            let mut pending = vec![dialog.clone().upcast::<gtk::Widget>()];
+            let response = loop {
+                let widget = pending.pop().expect("mapped dialog response button");
+                if let Some(button) = widget.downcast_ref::<gtk::Button>()
+                    && button.label().as_deref() == Some(if rename { "Rename" } else { "Cancel" })
+                {
+                    break button.clone();
+                }
+                pending.extend(std::iter::successors(widget.first_child(), |child| {
+                    child.next_sibling()
+                }));
+            };
+            wait_until(|| response.is_mapped());
+            assert!(response.is_sensitive());
+            response.emit_clicked();
+            wait_until(|| widgets.window.visible_dialog().is_none());
+            let expected = if rename {
+                "Renamed in dialog"
+            } else {
+                "Synthetic"
+            };
+            wait_until(|| {
+                let state = model.borrow();
+                !state.organization_pending && state.tags[&9270001] == [expected]
+            });
+            assert_eq!(model.borrow().tags[&9270001], [expected]);
+            assert_eq!(
+                StateStore::open().unwrap().tags().unwrap()[&9270001],
+                [expected]
+            );
+        }
         hidden.activate(Some(&9270001i64.to_variant()));
         wait_until(|| model.borrow().hidden_products.contains(&9270001));
         widgets.window.close();

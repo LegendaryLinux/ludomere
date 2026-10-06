@@ -2,11 +2,35 @@
 
 ## R111 interactive audit
 
-- P388 (in_progress, performance_audit; reviewer ui_critic): make detail-tab overflow visibly
+- P392 (in_progress assessment, performance_audit): tray recent-game menu/launch inspection
+  accesses profile without activity admission; bounded guards/session proposal separate from
+  P389 startup. Preserve signed-out local use, menu order and installedness; private fixtures
+  only, no actual reset/account or menu DB operations. No implementation before review.
+
+- P390 (in_progress implementation, ui_critic; reviewer performance_audit): Maintenance metadata refresh local feedback and
+  repeat-click prevention using current sync state/generation. Proposal before edits; preserve
+  global refresh, signed-out reconciliation, terminal errors and weak Settings lifetime.
+  Independent proposal GO; settings.rs only. Signed-out local request acknowledgment retained,
+  no fabricated local completion/duplicate suppression. Exact inert-action GTK fixture required.
+- P391 (complete, ui_critic; reviewer file_summary): prevent empty/whitespace tag Rename dismissing without action.
+  Narrow response sensitivity/entry hint, preserve backend guard/Delete/Cancel and account scope.
+  No tag model/persistence redesign; proportionate existing fixture if implementation authorized.
+  Existing mapped dialog/private persistence fixture PASS, fmt/Clippy/compile PASS.
+
+- P389 (in_progress implementation, file_summary; reviewer performance_audit): source-proven blocking tray registration on GTK.
+  Return bounded worker/lifecycle proposal and proportionate private test design before edits.
+  Preserve close/quit, pending-start deduplication, command dispatch and late-handle cleanup.
+  No actual bus/account access, broad shutdown rewrite or configuration writer changes.
+  Independent proposal GO; worker owns registration and explicit shutdown, GTK only lifecycle
+  admission/readiness. Private held-driver gate, late cleanup and weak owner checks required.
+
+- P388 (deferred after failed live gate, performance_audit; reviewer ui_critic): make detail-tab overflow visibly
   discoverable with native non-overlay horizontal scrolling only on this local scroller.
   Source candidate approved within R111; no custom controls/key handlers/navigation semantics.
   Root actual narrow/wide scrolling and existing control gates; stop if native cue is inadequate.
   Isolated details.rs property only, no standalone fixture warranted for this presentation flag.
+  Traditional scrollbar clips tab labels at narrow width; candidate reverted, not committed.
+  No clearly justified one-property height correction; retain verified native navigation.
 
 - P387 (complete, file_summary; reviewer ui_critic): correct observed single-part file metadata to1 part,
   preserving None/multipart/grouping semantics. Isolated files.rs expression only; no new fixture
