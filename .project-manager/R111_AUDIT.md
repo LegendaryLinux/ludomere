@@ -48,6 +48,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P406 one-literal log status correction independently reviewed; forced Refresh no longer
+  promises live following when Follow is off. Existing actual-reader/folder/Follow/Refresh
+  regression p399-1jkhg1gq PASS; fmt/compile PASS, known private schema warnings only. No reader
+  policy or test assertions changed. P403 commit0c6152e exact post-build PASS,75 built commits.
+
 - P403 corrected exact gate PASS p403-3132_dmv with no GTK warnings: frozen admission creates
   no DB, activity exists before worker entry and through result send, duplicate ticks do not
   dispatch, raw/session/owner/logout retirement rejects work/results, mutable-model notify

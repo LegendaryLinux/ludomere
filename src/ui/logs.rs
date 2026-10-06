@@ -184,7 +184,7 @@ impl Viewer {
         } else if tail.text.is_empty() {
             "This launch has not written any output yet.".to_owned()
         } else {
-            "Saved launch output. Live updates appear while this tab is open.".to_owned()
+            "Saved launch output.".to_owned()
         });
         if self.follow.is_active() {
             let text = self.text.downgrade();

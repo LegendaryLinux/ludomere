@@ -8,7 +8,7 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified73 separate audit commits through9acdda6, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified75 separate audit commits through0c6152e, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS at37aa551: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.93 library tests
@@ -19,9 +19,10 @@ Last meaningful update: 2026-10-06.
   guards, operation-log activity, persistent log-folder errors, General-first Properties and
   singular archive copy. P404 removes explicit unopened-menu capture cycles: same strict test
   fails before/passes after, and mapped actions retain behavior. Each task's evidence is in plan/audit.
-- Active: P403 chooser polling lifecycle patch independently reviewed and under root private
-  gates; I/O was already worker-side. P405 full-path Properties row reviewed, actual allocation
-  check pending. P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic
+- Active: P403 chooser polling lifecycle committed/built after strict private gates; I/O was
+  already worker-side. P405 full-path Properties row committed/built with normal/minimum-width
+  visual and selection gates. P406 neutral log success copy passes retained reader regression.
+  P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic
   code removed. P404 is a separately approved narrower fix, not a pass of that old gate.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
 - Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve14GB of40GB, covering

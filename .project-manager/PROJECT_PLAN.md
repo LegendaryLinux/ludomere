@@ -2,10 +2,11 @@
 
 ## R111 interactive audit
 
-- P406 (in_progress, ui_critic; reviewer file_summary): replace misleading success text claiming
+- P406 (complete, ui_critic; reviewer file_summary): replace misleading success text claiming
   live updates after forced Refresh with Follow off. One logs.rs literal: Saved launch output.
   Preserve Follow/Refresh/read/paused/error semantics and P399 folder feedback. No new fixture
   framework; source/fmt/build and existing private P399 actual-view regression are proportionate.
+  Independent one-literal review, fmt/compile and retained actual-reader gate p399-1jkhg1gq PASS.
 
 - P405 (complete, ui_critic; reviewer file_summary): show Installation directory as a
   full-width selectable ActionRow subtitle instead of ellipsized suffix, matching existing
