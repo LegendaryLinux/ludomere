@@ -2,11 +2,29 @@
 
 ## R111 interactive audit
 
-- P399 (in_progress proposal, ui_critic; reviewer performance_audit): runtime-log folder opening
+- P401 (in_progress, ui_critic; reviewer performance_audit): generic new Properties window opens
+  General first, retaining explicit Cloud Saves access and selected page in an existing window.
+  Own isolated game_settings.rs navigation-array order only; source confirms sole generic caller.
+  Root actual native-game Properties/default/Cloud/reopen check, formatting/build; no new policy
+  or test framework. Feature/play-mode semantic deduplication remains deferred.
+
+- P400 (complete for bounded source coverage, performance_audit): cumulative R111 auth/credential,
+  installation/marker and download changes against5c0d5cb, focusing lifecycle/session, path/data
+  preservation and accidental GTK I/O. Report concrete severity/evidence and bounded fixes only;
+  distinguish authored sections from independent review, no blanket readiness declaration.
+  No product edits, actual data/credentials/desktop/helpers/network or Cargo; root handles gates.
+  No introduced blocker established; p400-assurance.md records independent vs own coverage and
+  inherited limits, including remaining GTK chooser polling. No exhaustive readiness claim.
+
+- P399 (complete, ui_critic; reviewer performance_audit): runtime-log folder opening
   failure is overwritten by unrelated periodic reader success. Propose minimal distinct local
   feedback in logs.rs using existing async launcher and guards; no polling-policy change,
   actual desktop helper or generic feedback framework. Implementation only after source review;
   use existing fixture/seam if possible, preserve Follow/selection/Copy behavior.
+  Independent proposal GO; exact shared completion with fail-closed synthetic launch outcomes,
+  real private reader updates to demonstrate feedback persistence. No runtime retry-policy change.
+  Final source GO includes recheck after feedback setters; private actual-reader/launch-outcome
+  gate p399-35yn4yyi PASS, fmt/compile/Clippy PASS. No actual file-manager failure induced.
 
 - P398 (complete, ui_critic; reviewer performance_audit): Downloads folder-button eligibility
   uses nonempty path, not a GTK-thread directory stat; existing off-thread validation/launcher

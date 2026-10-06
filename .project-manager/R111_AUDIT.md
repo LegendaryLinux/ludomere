@@ -43,6 +43,29 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P399 private actual-view/reader gate PASS p399-35yn4yyi: sanitized selectable folder failure
+  survives two real synthetic-log updates, selection/pause/Refresh, and clears on retry/success/
+  retirement. Queued late error and signal-time retirement cannot dispatch/update obsolete views.
+  Final independent source GO, fmt/compile/Clippy PASS. Reader policy unchanged; no real desktop
+  error induced. Live Gungeon saved-log view rendered and exposed current run/Refresh/Copy/folder.
+  Actual tag/log preview closed normally after restoring tags; app-tag-log-preview.log retained.
+
+- Actual P394 focused keyboard Enter saves a clearly marked temporary Gungeon tag, displays its
+  chip and Tags saved; clicking its remove control restores empty original tags, clearing input
+  disables Add. Earlier XSendEvent-to-window Return did not submit; normal focused keyboard
+  event did. Screenshots p394-tag-added-focused.png and p394-tag-restored.png. No test tag remains.
+  Generic Properties currently starts on unsupported Cloud Saves for this native game; bounded
+  General-first P401 approved. Separate catalog feature/play-mode near-duplicates preserved.
+
+- P400 cumulative source assurance finds no introduced blocker in its bounded reviewed paths;
+  report /tmp/ludomere-r111-p400-assurance.md separates independent authored-by-others coverage
+  from consistency checks of own code. No runtime, credential exposure or full readiness claim.
+
+- P397 commitcd34f77 exact post-build PASS (69 built audit commits). P393 animation-disabled
+  diagnostic also fails identically (p393-qnn3ynpn); simple animation-dependent explanation is
+  unsupported. All P393 candidate/temporary changes removed from main again. Further owner/
+  native-baseline diagnosis required; no timeout or lifetime assertion weakened.
+
 - P397 exact private actual-worker gate PASS p255-3fwlcft_: activity exists before worker entry,
   frozen/retired admission cannot create log/database paths, staged revocation prevents later DB/
   publication work, partial errors/Retry and newer-row ownership retained. Independent source GO;
