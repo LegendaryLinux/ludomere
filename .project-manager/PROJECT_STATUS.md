@@ -27,6 +27,11 @@ Last meaningful update: 2026-10-06.
   P329 off-thread file summaries independently reviewed, integrated and verified with three private
   regressions, formatting, all-target Clippy and build. P328 committed6c9813e, P330 committed8d37fe0;
   both exact post-commit builds PASS. P327 cancellation and P331 installer restart fixes isolated.
+- P329 committed8a4aab7 with exact post-commit build PASS. Restarted live application restored
+  online access and synchronized normally; keyboard-driven Installed+search intersection verified.
+  P331 integrated after independent review; seven focused tests/fmt/Clippy/build PASS, commit next.
+  Long real error reveals P326 needs bounded diagnostic scrolling (P333); P332 setup modal review
+  PASS, compilation pending. P327 cancellation independent review in progress.
 
 ## R110 complete — 0.3.2 release and new PR
 

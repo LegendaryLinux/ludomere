@@ -22,9 +22,12 @@
 - P330 (complete, reliability_audit; reviewer performance_audit): ensure saved-login reads use existing credential-provider discovery/activation,
   not just interactive sign-in. Live KDE6.29 advertises org.kde.secretservicecompat; activation
   restored org.freedesktop.secrets and user unlocked normally. No wallet configuration changes.
-- P331 (in_progress diagnosis, reliability_audit): investigate Coffee Talk's official .NET4.5.2
+- P331 (complete, reliability_audit; reviewer file_summary): investigate Coffee Talk's official .NET4.5.2
   helper exit194 after successful DirectX setup. Verify Windows-to-Unix exit translation and
   narrowly scoped success/reboot semantics before any implementation; no skipped requirements.
+- P333 (pending integration after P327, ui_critic): bound full Downloads error text in its own
+  scroller so long real setup diagnostics cannot push controls out of view; preserve complete
+  selectable text. Mapped small-window regression required. No new modal or error truncation.
 - P332 (in_progress design, ui_critic): improve setup failure readability observed in real Coffee Talk
   test; own isolated download_chooser.rs, concise pinned outcome and full selectable diagnostics,
   terminal titles, no retry/execution/focus changes. Private fixtures only; root runs gates.

@@ -89,6 +89,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   invocation passed. Formatting, all-target Clippy and cargo build --locked PASS.
 
 ## Further findings
+### P331 — finish native installer restart requirements
+
+- Coffee Talk's .NET vendor log confirms successful setup with HRESULT0x80070BC2 and restart
+  request. Its Windows3010 status became Unix194 and Ludomere incorrectly rejected it.
+- Recognize documented3010/1641 low-byte results only for native MSI and the exact official
+  dotNet45/NDP452 installer. Other executables, Winetricks and interpreters remain strict.
+- Drain installer children, then run the selected prefix's Wine restart routine through normal
+  tracked UMU execution before recording completion. Also finalize after zero success, ensuring
+  a retried already-installed component cannot bypass an interrupted restart. No host reboot.
+- Independent source/security review PASS. Seven focused private regressions PASS, including
+  explicitly synchronized inert process/drain/cancel checks, receipt/retry, strict failures and
+  existing durable guard/MSI-path tests. Formatting, all-target Clippy and build PASS.
+  Real Coffee Talk retry remains pending the rebuilt binary; no live success claimed yet.
+
+## Remaining findings
 
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.
