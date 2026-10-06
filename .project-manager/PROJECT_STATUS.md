@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P348 independent implementation review, five focused private cancellation regressions,
+  formatting/all-target Clippy/build PASS. Fixture-only missing glib import corrected before run.
+  No blocking recovery-generation read on the permanent-cancel path; busy refusal retains state.
+  Preparing separate commit. Manual Comet check shows immediate Checking and terminal Up to date.
+
+- P343 committedcdafed0, exact detached-checkout build PASS; P345 committed4808685, exact clean
+  product build PASS. P348 independent final review PASS and integration underway; P346 next.
+  P349 bounded grid-priority coalescing approved in isolation. P350 Settings/Collections audit
+  found repeated Recheck work and stale storage legends; proposal pending, no changes yet.
+
 - P343 two private GTK regressions PASS after fixture-only public-API corrections. P345 failed
   regression established a real stale completed-transfer visual latch; minimal reset and independent
   re-review now PASS, same strict regression PASS. Combined fmt/Clippy/build PASS; separate commits.

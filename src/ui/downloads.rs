@@ -1302,7 +1302,7 @@ fn connect_depot_cancellation(
             } else if let Some(window) = parent.upgrade() {
                 let error = adw::AlertDialog::builder()
                     .heading("Cancellation unavailable")
-                    .body("The installation has finished, changed, or is already being cancelled. Refresh its status before trying again.")
+                    .body("Game operations may be busy. The installation may also have finished, changed, or already be cancelling. Refresh its status and retry shortly.")
                     .build();
                 error.add_response("close", "Close");
                 error.present(Some(&window));
@@ -2587,6 +2587,8 @@ mod active_transfer_tests {
             .downcast::<adw::AlertDialog>()
             .unwrap();
         assert_eq!(error.heading().as_deref(), Some("Cancellation unavailable"));
+        assert!(error.body().contains("busy") && error.body().contains("retry"));
+        assert!(button.is_sensitive());
         respond(&error, "Close");
         drain();
 

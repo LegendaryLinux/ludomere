@@ -1960,17 +1960,27 @@ fn installation_status_panel(
                 dialog.set_response_appearance("cancel", adw::ResponseAppearance::Destructive);
             }
             let cancel = cancel_for_dialog.clone();
+            let parent = window.downgrade();
             dialog.choose(Some(&window), gio::Cancellable::NONE, move |response| {
                 if response == "cancel" {
-                    let cancelled = depot.as_ref().is_some_and(|snapshot| {
-                        if abandoned {
+                    let cancelled = if abandoned {
+                        depot.as_ref().is_some_and(|snapshot| {
                             crate::installation::abandon_depot_operation(&snapshot.operation_id)
-                        } else {
+                        })
+                    } else {
+                        depot.as_ref().is_some_and(|snapshot| {
                             crate::installation::cancel_depot_operation(&snapshot.operation_id)
-                        }
-                    }) || crate::installation::cancel_operation(product_id);
+                        }) || crate::installation::cancel_operation(product_id)
+                    };
                     if cancelled {
                         cancel.set_sensitive(false);
+                    } else if abandoned && let Some(window) = parent.upgrade() {
+                        let error = adw::AlertDialog::builder()
+                            .heading("Cancellation unavailable")
+                            .body("Game operations may be busy. The installation may also have finished, changed, or already be cancelling. Refresh its status and retry shortly.")
+                            .build();
+                        error.add_response("close", "Close");
+                        error.present(Some(&window));
                     }
                 }
             });

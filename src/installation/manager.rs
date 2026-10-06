@@ -698,18 +698,15 @@ pub fn abandon_depot_operation(operation_id: &str) -> bool {
     let Some(snapshot) = depot_operation_snapshot(operation_id) else {
         return false;
     };
-    abandon_depot_operation_at(
-        operation_id,
-        snapshot.product_id,
-        super::recovery::generation(snapshot.product_id),
-    )
+    abandon_depot_operation_at(operation_id, snapshot.product_id, None)
 }
 
-fn abandon_depot_operation_at(operation_id: &str, product_id: i64, generation: u64) -> bool {
+fn abandon_depot_operation_at(operation_id: &str, product_id: i64, expected: Option<u64>) -> bool {
     let Ok(activity) = crate::profile_reset::begin_activity("installation cancellation") else {
         return false;
     };
-    let Ok(admission) = super::recovery::admit_generation(product_id, generation) else {
+    let Ok((admission, generation)) = super::recovery::try_admit_generation(product_id, expected)
+    else {
         return false;
     };
     let mut manager = DEPOT_MANAGER.lock().unwrap();
@@ -5890,7 +5887,7 @@ mod tests {
             assert!(!abandon_depot_operation_at(
                 &request.operation_id,
                 request.product_id,
-                generation
+                Some(generation)
             ));
             assert!(!cancelled.load(std::sync::atomic::Ordering::Relaxed));
             assert_eq!(
@@ -5911,7 +5908,7 @@ mod tests {
         assert!(!abandon_depot_operation_at(
             &request.operation_id,
             request.product_id,
-            previous
+            Some(previous)
         ));
         // A fresh request can claim this inert active owner once recovery has finished.
         assert!(abandon_depot_operation(&request.operation_id));
@@ -5922,6 +5919,155 @@ mod tests {
         manager.snapshots.remove(&request.operation_id);
         manager.snapshot_sequence.remove(&request.operation_id);
         manager.last_event_at.remove(&request.operation_id);
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn depot_cancel_refuses_busy_admission_without_blocking_gtk_and_retries() {
+        use gtk::glib;
+        use gtk::prelude::*;
+        use std::cell::Cell;
+        use std::rc::Rc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, mpsc};
+        use std::time::{Duration, Instant};
+
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p348-")
+            );
+        }
+        adw::init().unwrap();
+        let window = gtk::Window::new();
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        let button = gtk::Button::with_label("Cancel installation");
+        let heartbeat = gtk::Label::new(Some("Waiting"));
+        content.append(&button);
+        content.append(&heartbeat);
+        window.set_child(Some(&content));
+        window.present();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !button.is_mapped() && Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(button.is_mapped());
+
+        let mut request = request(false);
+        request.operation_id = "nonblocking-cancellation-fixture".into();
+        request.product_id = -348;
+        publish_depot_progress(&request, "interrupted", 0, 0, 0, 1, 1);
+        let original = depot_operation_snapshot(&request.operation_id).unwrap();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        DEPOT_MANAGER
+            .lock()
+            .unwrap()
+            .active
+            .insert(request.operation_id.clone(), cancelled.clone());
+        let (ready, ready_receiver) = mpsc::channel();
+        let (release, release_receiver) = mpsc::channel();
+        let released = Arc::new(AtomicBool::new(false));
+        let holder = thread::spawn({
+            let released = released.clone();
+            move || {
+                // Model unrelated enqueue persistence retaining the global admission guard.
+                let _admission = super::super::recovery::admit_generation(-349, 0).unwrap();
+                ready.send(()).unwrap();
+                // A blocking regression must fail after the watchdog, never hang the runner.
+                let _ = release_receiver.recv_timeout(Duration::from_secs(3));
+                released.store(true, Ordering::Release);
+            }
+        });
+        ready_receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+        let result = Rc::new(Cell::new(None));
+        let returned_while_held = Rc::new(Cell::new(false));
+        button.connect_clicked({
+            let result = result.clone();
+            let returned_while_held = returned_while_held.clone();
+            let released = released.clone();
+            let operation = request.operation_id.clone();
+            move |_| {
+                result.set(Some(abandon_depot_operation(&operation)));
+                returned_while_held.set(!released.load(Ordering::Acquire));
+            }
+        });
+        let heartbeat_while_held = Rc::new(Cell::new(false));
+        glib::idle_add_local_once({
+            let heartbeat = heartbeat.clone();
+            let heartbeat_while_held = heartbeat_while_held.clone();
+            let released = released.clone();
+            move || {
+                heartbeat.set_label("GTK remains responsive");
+                heartbeat_while_held.set(!released.load(Ordering::Acquire));
+            }
+        });
+        button.emit_clicked();
+        let refused = result.get() == Some(false);
+        let returned_before_release = returned_while_held.get();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while heartbeat.text() == "Waiting" && Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            thread::sleep(Duration::from_millis(5));
+        }
+        let unchanged = {
+            let manager = DEPOT_MANAGER.lock().unwrap();
+            manager.snapshots.get(&request.operation_id) == Some(&original)
+                && !manager
+                    .abandon_requested
+                    .contains_key(&request.operation_id)
+                && !cancelled.load(Ordering::Relaxed)
+                && Arc::ptr_eq(
+                    manager.active.get(&request.operation_id).unwrap(),
+                    &cancelled,
+                )
+        };
+        let _ = release.send(());
+        holder.join().unwrap();
+        // Only retry after ownership admission is available. The inert active owner spawns no worker.
+        button.emit_clicked();
+        let retried = result.get() == Some(true) && cancelled.load(Ordering::Relaxed);
+        let generation = super::super::recovery::generation(request.product_id);
+        let registered = {
+            let mut manager = DEPOT_MANAGER.lock().unwrap();
+            let registered = manager
+                .abandon_requested
+                .get(&request.operation_id)
+                .is_some_and(|(captured, _)| *captured == generation)
+                && manager.snapshots[&request.operation_id].state == "cancelling";
+            manager.active.remove(&request.operation_id);
+            manager.abandon_requested.remove(&request.operation_id);
+            manager.snapshots.remove(&request.operation_id);
+            manager.snapshot_sequence.remove(&request.operation_id);
+            manager.last_event_at.remove(&request.operation_id);
+            registered
+        };
+        window.destroy();
+        assert!(
+            refused && returned_before_release,
+            "busy admission must refuse before the holder or watchdog releases it"
+        );
+        assert!(
+            heartbeat_while_held.get(),
+            "GTK heartbeat must run while unrelated admission is held"
+        );
+        assert!(
+            unchanged,
+            "refusal must not change operation ownership, flags or snapshot"
+        );
+        assert!(
+            retried && registered,
+            "retry must register the same cancellation owner and generation"
+        );
     }
 
     #[test]

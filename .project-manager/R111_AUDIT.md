@@ -249,6 +249,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining findings
 
+### P348 — refuse busy cancellation promptly
+
+- Capture/check recovery generation with one nonblocking admission attempt instead of waiting on
+  another operation's journal persistence. Hold successful admission through owner registration;
+  preserve profile activity, protected-file cleanup and late-completion semantics.
+- Both cancellation surfaces explain busy/refreshed state and allow retry. A rejected permanent
+  Depot cancellation cannot fall through to unrelated offline cancellation.
+- Independent review and five private regressions PASS, including actual GTK callback/heartbeat
+  while another admission is held, unchanged owner on refusal, retry, stale generation, late success,
+  protected cleanup and confirmation. Formatting/all-target Clippy/build PASS. Initial test-local
+  missing glib import fixed without adding a production GTK dependency.
+
 - P345 expanded regression exposed an existing Complete→Downloading stale visual-state latch:
   completion restores idle content without clearing the active-state cell, so a later transfer
   skips rendering Pause. Minimal reset approved; retain the strict repeated-operation regression.
