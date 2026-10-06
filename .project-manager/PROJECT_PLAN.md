@@ -2,10 +2,12 @@
 
 ## R111 interactive audit
 
-- P410 (in_progress, ui_critic; reviewer file_summary): relabel shared Proton release-lookup/
+- P410 (complete, ui_critic; reviewer file_summary): relabel shared Proton release-lookup/
   download cancel button to Cancel, since root observed misleading Cancel download before any
   runtime transfer. One literal in isolated proton.rs; no Comet change (its existing label is
   accurate), tests or callback/policy change. Source/fmt/build and root loading screenshot gate.
+  Independent source GO; fmt/build PASS, live p410-proton-loading shows Cancel during release
+  metadata lookup. Existing Proton selection/runtime retained; no payload download initiated.
 
 - P408 (complete, performance_audit; reviewer file_summary): invalidate observed
   download-completion feedback when its exact completed jobs disappear/change after managed

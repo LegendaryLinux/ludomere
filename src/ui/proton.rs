@@ -779,7 +779,7 @@ pub(super) fn acquisition_group_guarded(
     if matches!(scope, ComponentScope::Runtime) {
         group.add(&controls);
     }
-    let cancel = gtk::Button::with_label("Cancel download");
+    let cancel = gtk::Button::with_label("Cancel");
     cancel.set_halign(gtk::Align::Start);
     cancel.set_visible(false);
     group.add(&cancel);

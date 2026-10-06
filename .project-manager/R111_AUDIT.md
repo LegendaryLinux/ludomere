@@ -53,6 +53,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P409 commit17939d1 exact post-build PASS;79 built audit commits. Final Gungeon archive
+  restoration returns3/3 and900.7MB; app-download-feedback-preview.log contains zero Gtk-CRITICAL,
+  GLib-GIO-CRITICAL or panic markers. P410 one-literal Proton Cancel independently reviewed,
+  fmt/build PASS; live p410-proton-loading verifies wording during metadata lookup. No runtime
+  download/selection change, no extra test framework for this reversible text correction.
+
 - P408 live PASS: observed Windows archive downloading/completion, then deleted that exact
   one file without leaving detail. DOWNLOAD COMPLETE disappeared in place; native Play,
   Linux/macOS archives and remaining counts retained. Screenshots p408-live-completed/cleared.
