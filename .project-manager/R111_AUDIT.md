@@ -104,6 +104,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   Real Coffee Talk retry remains pending the rebuilt binary; no live success claimed yet.
 
 ## Remaining findings
+### P332 — keep setup outcomes visible while reading diagnostics
+
+- Pin concise sanitized failure/status above a diagnostics-only scroller, keep Close outside it,
+  hide finished progress bars, and title terminal states Setup complete/failed/stopped using the
+  existing structured outcome. Put full selectable error before operation/stage history.
+- No process, retry, launch or background-window behavior changed. Independent review PASS;
+  formatting/error test and mapped400px GTK scrolling/control regression PASS. Initial GTK test
+  looked for a collapsed expander child too early; corrected fixture only, then passed.
+- Formatting, all-target Clippy and cargo build --locked PASS. Live retry on new code next.
+
+## Remaining findings
 
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.

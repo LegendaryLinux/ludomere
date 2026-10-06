@@ -32,6 +32,10 @@ Last meaningful update: 2026-10-06.
   P331 integrated after independent review; seven focused tests/fmt/Clippy/build PASS, commit next.
   Long real error reveals P326 needs bounded diagnostic scrolling (P333); P332 setup modal review
   PASS, compilation pending. P327 cancellation independent review in progress.
+- P331 committedb93a317 and exact post-commit build PASS. P332 two focused tests PASS after
+  correcting a fixture's collapsed-expander lookup; production unchanged by that correction.
+  Formatting, all-target Clippy and build PASS; preparing P332 commit. P327 review found recovery
+  admission and late-success/cancel races; owner correcting both before any integration.
 
 ## R110 complete — 0.3.2 release and new PR
 

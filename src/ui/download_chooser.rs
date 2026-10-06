@@ -583,12 +583,31 @@ fn confirm_depot_plan(
 enum SetupOperation {
     Depot(String),
     Offline(crate::installation::TrackedInstallation),
+    #[cfg(test)]
+    Fixture(Result<(), String>),
+}
+
+fn setup_failure_summary(error: &str) -> String {
+    let safe = notifications::failure_message("", error);
+    let cause = safe
+        .split_once(". Log:")
+        .map_or(safe.as_str(), |(cause, _)| cause);
+    let summary = cause.split_whitespace().collect::<Vec<_>>().join(" ");
+    if summary.is_empty() {
+        "Setup could not finish. Review Details before retrying.".into()
+    } else if summary.chars().count() > 320 {
+        format!("{}…", summary.chars().take(320).collect::<String>())
+    } else {
+        summary
+    }
 }
 
 fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation: SetupOperation) {
     let operation_name = match &operation {
         SetupOperation::Depot(id) => format!("Depot operation: {id}"),
         SetupOperation::Offline(_) => "Offline installer setup (current attempt)".to_owned(),
+        #[cfg(test)]
+        SetupOperation::Fixture(_) => "Synthetic setup attempt".to_owned(),
     };
     let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
     root.append(&adw::HeaderBar::new());
@@ -597,9 +616,25 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
     body.set_margin_end(20);
     body.set_margin_bottom(20);
     let status = gtk::Label::builder()
+        .name("setup-status")
         .label("Waiting to start setup…")
         .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
+        .width_chars(1)
+        .lines(3)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
         .xalign(0.0)
+        .build();
+    let failure = gtk::Label::builder()
+        .name("setup-failure-summary")
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
+        .width_chars(1)
+        .lines(3)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .selectable(true)
+        .xalign(0.0)
+        .visible(false)
         .build();
     let progress = gtk::ProgressBar::new();
     let components = gtk::ProgressBar::builder()
@@ -607,6 +642,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
         .visible(false)
         .build();
     let details = gtk::Label::builder()
+        .name("setup-details")
         .label(format!(
             "{operation_name}\nWaiting for this operation to start."
         ))
@@ -619,19 +655,23 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
         .label("Details")
         .child(&details)
         .build();
+    expander.set_margin_start(20);
+    expander.set_margin_end(20);
     let explanation = gtk::Label::builder().label("Closing this dialog lets setup continue in the background. The game will not start automatically.").wrap(true).xalign(0.0).build();
     for widget in [
         status.upcast_ref::<gtk::Widget>(),
+        failure.upcast_ref(),
         progress.upcast_ref(),
         components.upcast_ref(),
         explanation.upcast_ref(),
-        expander.upcast_ref(),
     ] {
         body.append(widget);
     }
+    root.append(&body);
     root.append(
         &gtk::ScrolledWindow::builder()
-            .child(&body)
+            .name("setup-details-scroll")
+            .child(&expander)
             .vexpand(true)
             .hscrollbar_policy(gtk::PolicyType::Never)
             .build(),
@@ -642,6 +682,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
     actions.set_margin_bottom(20);
     let stop = gtk::Button::with_label("Stop setup");
     let close = gtk::Button::with_label("Run in background");
+    close.set_widget_name("setup-close");
     actions.append(&stop);
     actions.append(&close);
     root.append(&actions);
@@ -680,6 +721,8 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
                 });
             })
         }
+        #[cfg(test)]
+        SetupOperation::Fixture(_) => Box::new(|| {}),
     };
     let stopping = Rc::new(std::cell::Cell::new(false));
     stop.connect_clicked({
@@ -719,7 +762,10 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
             return glib::ControlFlow::Continue;
         }
         let mut terminal = None;
+        let mut terminal_stopped = false;
         match &operation {
+            #[cfg(test)]
+            SetupOperation::Fixture(result) => terminal = Some(result.clone()),
             SetupOperation::Offline(tracked) => {
                 loop {
                     match tracked.events.try_recv() {
@@ -755,6 +801,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
                             break;
                         }
                         Ok(crate::installation::InstallationEvent::Cancelled) => {
+                            terminal_stopped = true;
                             terminal=Some(Err("Setup was stopped. Any retained backup remains safe; setup may still be required.".into()));
                             break;
                         }
@@ -801,30 +848,71 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
                     fraction = None;
                     components.set_visible(false);
                     match snapshot.state.as_str() {
-                    "complete" => terminal=Some(Ok(())),
-                    "failed" => terminal=Some(Err(snapshot.error.unwrap_or_else(|| "Setup could not finish. Review the game before retrying.".into()))),
-                    "cancelled" | "abandoned" | "interrupted" | "paused" => terminal=Some(Err(snapshot.error.unwrap_or_else(|| "Setup was stopped. Any retained backup remains safe; setup may still be required.".into()))),
-                    "setup" => {
-                        if let Some(setup)=snapshot.setup {
-                            stage_details.push_str(&format!("\nCurrent step: {}",setup.component));
-                            status.set_label(&if setup.total == 0 { setup.component.clone() } else { format!("Installing: {}", setup.component) });
-                            if setup.total>0 {
-                                stage_details.push_str(&format!("\nComponents completed: {} of {}",setup.completed,setup.total));
-                                components.set_visible(true);
-                                components.set_fraction(setup.completed as f64/setup.total as f64);
-                                components.set_text(Some(&format!("{} of {} components completed",setup.completed,setup.total)));
+                        "complete" => terminal = Some(Ok(())),
+                        "failed" => {
+                            terminal = Some(Err(snapshot.error.unwrap_or_else(|| {
+                                "Setup could not finish. Review the game before retrying.".into()
+                            })))
+                        }
+                        "cancelled" | "abandoned" | "interrupted" | "paused" => {
+                            terminal_stopped = true;
+                            terminal=Some(Err(snapshot.error.unwrap_or_else(|| "Setup was stopped. Any retained backup remains safe; setup may still be required.".into())));
+                        }
+                        "setup" => {
+                            if let Some(setup) = snapshot.setup {
+                                stage_details
+                                    .push_str(&format!("\nCurrent step: {}", setup.component));
+                                status.set_label(&if setup.total == 0 {
+                                    setup.component.clone()
+                                } else {
+                                    format!("Installing: {}", setup.component)
+                                });
+                                if setup.total > 0 {
+                                    stage_details.push_str(&format!(
+                                        "\nComponents completed: {} of {}",
+                                        setup.completed, setup.total
+                                    ));
+                                    components.set_visible(true);
+                                    components
+                                        .set_fraction(setup.completed as f64 / setup.total as f64);
+                                    components.set_text(Some(&format!(
+                                        "{} of {} components completed",
+                                        setup.completed, setup.total
+                                    )));
+                                }
+                            } else {
+                                status.set_label("Applying game setup…");
                             }
-                        } else { status.set_label("Applying game setup…"); }
-                    }
-                    phase => {
-                        status.set_label(match phase { "queued"=>"Waiting to start setup…", "preparing"=>"Reading game download information…", "calculating"=>"Calculating required downloads…", "dependencies"=>"Downloading required components…", "downloading"|"materializing"=>"Downloading game files…", "extracting"=>"Extracting game files…", "verifying"|"verifying_existing"=>"Checking installed files…", "committing"=>"Saving repaired files…", "finalizing"=>"Finishing game installation…", _=>"Preparing game setup…" });
-                        if matches!(phase,"verifying"|"verifying_existing"|"dependencies"|"extracting") && snapshot.total_bytes>0 {
-                            fraction=Some(snapshot.bytes_completed as f64/snapshot.total_bytes as f64);
-                        } else if matches!(phase,"downloading"|"materializing") && let Some(total)=snapshot.download_total_bytes.filter(|total| *total>0) {
-                            fraction=Some(snapshot.bytes_downloaded as f64/total as f64);
+                        }
+                        phase => {
+                            status.set_label(match phase {
+                                "queued" => "Waiting to start setup…",
+                                "preparing" => "Reading game download information…",
+                                "calculating" => "Calculating required downloads…",
+                                "dependencies" => "Downloading required components…",
+                                "downloading" | "materializing" => "Downloading game files…",
+                                "extracting" => "Extracting game files…",
+                                "verifying" | "verifying_existing" => "Checking installed files…",
+                                "committing" => "Saving repaired files…",
+                                "finalizing" => "Finishing game installation…",
+                                _ => "Preparing game setup…",
+                            });
+                            if matches!(
+                                phase,
+                                "verifying" | "verifying_existing" | "dependencies" | "extracting"
+                            ) && snapshot.total_bytes > 0
+                            {
+                                fraction = Some(
+                                    snapshot.bytes_completed as f64 / snapshot.total_bytes as f64,
+                                );
+                            } else if matches!(phase, "downloading" | "materializing")
+                                && let Some(total) =
+                                    snapshot.download_total_bytes.filter(|total| *total > 0)
+                            {
+                                fraction = Some(snapshot.bytes_downloaded as f64 / total as f64);
+                            }
                         }
                     }
-                }
                 }
             }
         }
@@ -847,24 +935,39 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
             stop.set_visible(false);
             close.set_label("Close");
             components.set_visible(false);
+            progress.set_visible(false);
             explanation.set_label("The game has not been launched.");
             match result {
                 Ok(()) => {
+                    if let Some(dialog) = dialog.upgrade() {
+                        dialog.set_title("Setup complete");
+                    }
                     status.set_label("Game setup completed.");
-                    details.set_label(notifications::failure_message("", &format!("{current_details}\n\nResult: Game setup completed. The game was not launched.")).trim_start());
-                    progress.set_fraction(1.0);
+                    details.set_label(notifications::failure_message("", &format!("Result: Game setup completed. The game was not launched.\n\n{current_details}")).trim_start());
                 }
                 Err(error) => {
-                    status.set_label("Game setup did not complete. See Details before retrying.");
+                    if let Some(dialog) = dialog.upgrade() {
+                        dialog.set_title(if terminal_stopped {
+                            "Setup stopped"
+                        } else {
+                            "Setup failed"
+                        });
+                    }
+                    status.set_label(if terminal_stopped {
+                        "Game setup was stopped."
+                    } else {
+                        "Game setup did not complete."
+                    });
+                    failure.set_label(&setup_failure_summary(&error));
+                    failure.set_visible(true);
                     details.set_label(
                         notifications::failure_message(
                             "",
-                            &format!("{current_details}\n\nResult: {error}"),
+                            &format!("Result: {error}\n\n{current_details}"),
                         )
                         .trim_start(),
                     );
                     expander.set_expanded(true);
-                    progress.set_visible(false);
                 }
             }
             finished = true;
@@ -5392,6 +5495,155 @@ pub(super) struct DetailFileManagement {
 #[cfg(test)]
 mod installer_version_tests {
     use super::*;
+
+    #[test]
+    fn setup_failure_summary_preserves_context_and_redacts_diagnostics() {
+        assert_eq!(
+            setup_failure_summary(
+                "Fixture Game\n\nRequired dependency DirectX failed (exit status: 1). Log: /synthetic/install.log\nRepeated diagnostic output"
+            ),
+            "Fixture Game Required dependency DirectX failed (exit status: 1)"
+        );
+        assert_eq!(
+            setup_failure_summary("Fixture: setup failed:\nCannot write prefix registry"),
+            "Fixture: setup failed: Cannot write prefix registry"
+        );
+        let summary = setup_failure_summary(
+            "Request failed access_token=synthetic-secret https://example.invalid/signed?token=secret",
+        );
+        assert!(!summary.contains("synthetic-secret"));
+        assert!(!summary.contains("https://"));
+        assert!(summary.contains("[credential redacted]"));
+        assert!(summary.contains("[URL redacted]"));
+        let summary = setup_failure_summary(&"é".repeat(400));
+        assert_eq!(summary.chars().count(), 321);
+        assert!(summary.ends_with('…'));
+        assert_eq!(
+            setup_failure_summary("\n  "),
+            "Setup could not finish. Review Details before retrying."
+        );
+    }
+
+    #[test]
+    #[ignore = "requires private HOME/all XDG, D-Bus and GTK; synthetic setup results only"]
+    fn setup_outcome_and_close_stay_visible_while_diagnostics_scroll() {
+        assert!(
+            std::env::var("HOME")
+                .unwrap()
+                .starts_with("/tmp/ludomere-p332-")
+        );
+        adw::init().unwrap();
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.SetupFeedbackTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(800)
+            .default_height(600)
+            .build();
+        let original_page = gtk::Label::new(Some("Original page"));
+        window.set_content(Some(&original_page));
+        window.present();
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        let error = format!(
+            "Fixture Game\n\nRequired dependency DirectX failed (exit status: 1). Log: /synthetic/install.log\n{}\naccess_token=synthetic-secret https://example.invalid/signed?token=secret\nFinal diagnostic line",
+            "Repeated diagnostic detail with a very long path-like-token/".repeat(150)
+        );
+        for result in [Err(error.clone()), Ok(())] {
+            let dialog = adw::Dialog::builder().content_width(600).build();
+            let failed = result.is_err();
+            monitor_setup(&dialog, &model, SetupOperation::Fixture(result));
+            // Presentation here is the fixture's direct action, never a worker result.
+            dialog.present(Some(&window));
+            let root = dialog.child().unwrap();
+            let status = find_named_descendant(&root, "setup-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let failure = find_named_descendant(&root, "setup-failure-summary")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let scroll = find_named_descendant(&root, "setup-details-scroll")
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let close = find_named_descendant(&root, "setup-close")
+                .and_downcast::<gtk::Button>()
+                .unwrap();
+            wait(|| close.is_mapped() && close.label().as_deref() == Some("Close"));
+            // Collapsed expanders retain their child outside the traversable widget tree.
+            let details = scroll
+                .child()
+                .and_downcast::<gtk::Viewport>()
+                .unwrap()
+                .child()
+                .and_downcast::<gtk::Expander>()
+                .unwrap()
+                .child()
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            assert_eq!(dialog.content_height(), 400);
+            assert_eq!(
+                dialog.title(),
+                if failed {
+                    "Setup failed"
+                } else {
+                    "Setup complete"
+                }
+            );
+            assert_eq!(failure.is_visible(), failed);
+            if failed {
+                wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+                assert!(
+                    failure
+                        .text()
+                        .contains("Required dependency DirectX failed")
+                );
+                assert!(!failure.text().contains("Repeated diagnostic"));
+                assert!(!failure.layout().is_ellipsized());
+                assert_eq!(
+                    details.text(),
+                    notifications::failure_message("", &format!(
+                        "Result: {error}\n\nSynthetic setup attempt\nWaiting for this operation to start.\n\nRecent stages:\nWaiting to start setup…"
+                    )).trim_start()
+                );
+                assert!(details.is_selectable());
+                assert_eq!(details.ellipsize(), gtk::pango::EllipsizeMode::None);
+                let cause_bounds = failure.compute_bounds(&root).unwrap();
+                let status_bounds = status.compute_bounds(&root).unwrap();
+                let close_bounds = close.compute_bounds(&root).unwrap();
+                assert!(cause_bounds.height() > 0.0);
+                assert!(cause_bounds.y() >= 0.0);
+                assert!(
+                    cause_bounds.y() + cause_bounds.height()
+                        <= scroll.compute_bounds(&root).unwrap().y()
+                );
+                assert!(close_bounds.y() + close_bounds.height() <= root.height() as f32);
+                assert!(root.height() <= 400);
+                scroll.vadjustment().set_value(scroll.vadjustment().upper());
+                wait(|| scroll.vadjustment().value() > 0.0);
+                assert_eq!(failure.compute_bounds(&root).unwrap(), cause_bounds);
+                assert_eq!(status.compute_bounds(&root).unwrap(), status_bounds);
+                assert_eq!(close.compute_bounds(&root).unwrap(), close_bounds);
+                assert!(close.is_sensitive());
+            } else {
+                assert_eq!(status.text(), "Game setup completed.");
+                assert!(details.text().starts_with("Result: Game setup completed."));
+            }
+            assert_eq!(window.content().as_ref(), Some(original_page.upcast_ref()));
+            close.emit_clicked();
+            wait(|| window.visible_dialog().is_none());
+        }
+        window.destroy();
+    }
 
     #[test]
     fn depot_action_captures_current_token_and_rejects_unavailable_sessions() {

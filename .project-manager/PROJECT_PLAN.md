@@ -28,7 +28,7 @@
 - P333 (pending integration after P327, ui_critic): bound full Downloads error text in its own
   scroller so long real setup diagnostics cannot push controls out of view; preserve complete
   selectable text. Mapped small-window regression required. No new modal or error truncation.
-- P332 (in_progress design, ui_critic): improve setup failure readability observed in real Coffee Talk
+- P332 (complete, ui_critic; reviewer file_summary): improve setup failure readability observed in real Coffee Talk
   test; own isolated download_chooser.rs, concise pinned outcome and full selectable diagnostics,
   terminal titles, no retry/execution/focus changes. Private fixtures only; root runs gates.
 - P327 (in_progress design, performance_audit): Depot cancellation confirmation/background cleanup and terminal failure handling;
