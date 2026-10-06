@@ -9,10 +9,13 @@
   concrete source evidence and bounded fixes. No real data or source edits until assigned.
 - P324 (complete for initial findings, reliability_audit): inspect downloads/installations/state propagation for defects,
   especially offline/Depot behavior and stale/busy controls. Read-only source audit first.
-- P325 (verified, performance_audit): preserve search/filter intersections, keep search visible
+- P325 (complete, performance_audit): preserve search/filter intersections, keep search visible
   and enabled with active chips; own library.rs/window.rs and focused same-file tests. P322 reviews.
-- P326 (pending, reliability_audit): Downloads featured selection must show active work before
+- P326 (verified, reliability_audit): Downloads featured selection must show active work before
   paused/failed entries and show full featured errors. Own downloads.rs; begin after P325 build.
+- P328 (pending): propagate current authenticated session through direct Depot actions, avoiding
+  redundant wallet reads. Independent proposal review requires auth/online-generation, expiry,
+  account-match and pre-persistence checks; no token serialization or new global cache.
 - P327 (pending): Depot cancellation confirmation/background cleanup and terminal failure handling;
   inspect data impact before assigning minimal implementation. Preserve files on safety refusal.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,

@@ -15,6 +15,10 @@ Last meaningful update: 2026-10-06.
   P322/P323/P324 audits returned findings; P325 first fix independently reviewed and focused GTK
   regression/formatting/all-target Clippy pass. Live reproduction confirms query reset/hiding.
   Cutoff2026-10-06 20:13:55 UTC. Detailed findings and evidence in R111_AUDIT.md.
+- P325 committed717e8da with exact post-commit build PASS. P326 independently reviewed, four
+  focused tests and formatting/Clippy/build PASS. Root preparing its separate commit.
+- Live offline Windows Gungeon download/automatic install succeeded, Play updated in place.
+  Approximately0.383 GB transferred; launch test underway. Depot wallet propagation queuedP328.
 
 ## R110 complete — 0.3.2 release and new PR
 

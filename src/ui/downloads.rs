@@ -196,7 +196,8 @@ pub(super) fn start_download_monitor(w: &Rc<Widgets>, model: &Rc<RefCell<AppMode
                     .iter_mut()
                     .find(|current| current.operation_id == snapshot.operation_id)
                 {
-                    depot_changed |= current.state != snapshot.state;
+                    depot_changed |=
+                        current.state != snapshot.state || current.error != snapshot.error;
                     *current = snapshot;
                 } else {
                     state.depot_operations.push(snapshot);
@@ -511,8 +512,46 @@ pub(super) fn download_job_structure_changed(
         || old.iter().zip(new).any(|(old, new)| {
             old.job_id != new.job_id
                 || old.state != new.state
+                || old.error != new.error
                 || old.status_message != new.status_message
         })
+}
+
+fn featured_downloads<'a>(
+    jobs: &'a [DownloadJobRecord],
+    operations: &'a [crate::installation::DepotOperationSnapshot],
+    active_job_ids: &HashSet<String>,
+) -> (
+    Option<&'a crate::installation::DepotOperationSnapshot>,
+    Option<&'a DownloadJobRecord>,
+) {
+    if let Some(operation) = operations
+        .iter()
+        .rev()
+        .find(|operation| depot_active(&operation.state))
+    {
+        return (Some(operation), None);
+    }
+    if let Some(job) = jobs
+        .iter()
+        .rev()
+        .find(|job| active_job_ids.contains(&job.job_id))
+    {
+        return (None, Some(job));
+    }
+    if let Some(operation) = operations
+        .iter()
+        .rev()
+        .find(|operation| matches!(operation.state.as_str(), "interrupted" | "failed"))
+    {
+        return (Some(operation), None);
+    }
+    (
+        None,
+        jobs.iter()
+            .rev()
+            .find(|job| matches!(job.state.as_str(), "paused" | "failed")),
+    )
 }
 
 pub(super) fn rebuild_downloads_page(w: &Widgets, model: &AppModel) {
@@ -523,19 +562,13 @@ pub(super) fn rebuild_downloads_page(w: &Widgets, model: &AppModel) {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 24);
     page.set_margin_bottom(36);
 
-    let featured_depot = model.depot_operations.iter().rev().find(|operation| {
-        depot_active(&operation.state)
-            || matches!(operation.state.as_str(), "interrupted" | "failed")
-    });
-    let featured_job = featured_depot
-        .is_none()
-        .then(|| {
-            jobs.iter().rev().find(|job| {
-                download::is_active(&job.job_id)
-                    || matches!(job.state.as_str(), "paused" | "failed")
-            })
-        })
-        .flatten();
+    let active_job_ids = jobs
+        .iter()
+        .filter(|job| download::is_active(&job.job_id))
+        .map(|job| job.job_id.clone())
+        .collect::<HashSet<_>>();
+    let (featured_depot, featured_job) =
+        featured_downloads(jobs, &model.depot_operations, &active_job_ids);
     if let Some(operation) = featured_depot {
         page.append(&active_depot_header(operation, model, &w.window));
     } else if let Some(job) = featured_job {
@@ -549,9 +582,9 @@ pub(super) fn rebuild_downloads_page(w: &Widgets, model: &AppModel) {
     let queued = jobs
         .iter()
         .filter(|job| {
-            job.state == "queued" || (depot_is_active && download::is_active(&job.job_id))
+            job.state == "queued" || (depot_is_active && active_job_ids.contains(&job.job_id))
         })
-        .filter(|job| depot_is_active || !download::is_active(&job.job_id))
+        .filter(|job| depot_is_active || !active_job_ids.contains(&job.job_id))
         .collect::<Vec<_>>();
     let queued_depots = model
         .depot_operations
@@ -1005,6 +1038,16 @@ fn active_download_header(job: &DownloadJobRecord, model: &AppModel, w: &Widgets
         ),
         false,
     ));
+    if let Some(message) = job.error.as_deref().or(job.status_message.as_deref()) {
+        let message = gtk::Label::new(Some(message));
+        message.set_widget_name("active-download-message");
+        message.set_xalign(0.0);
+        message.set_wrap(true);
+        message.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        message.set_width_chars(1);
+        message.set_selectable(true);
+        details.append(&message);
+    }
     let eta = estimated_remaining(model, total.saturating_sub(job.bytes_downloaded));
     let footer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let eta = gtk::Label::new(eta.as_deref());
@@ -1025,7 +1068,11 @@ fn active_download_header(job: &DownloadJobRecord, model: &AppModel, w: &Widgets
         footer.append(&pause);
     } else {
         let resume = gtk::Button::from_icon_name("media-playback-start-symbolic");
-        resume.set_tooltip_text(Some("Resume"));
+        resume.set_tooltip_text(Some(if job.state == "failed" {
+            "Retry download"
+        } else {
+            "Resume"
+        }));
         resume.set_sensitive(model.account_token.is_some());
         let token = model
             .account_token
@@ -1127,10 +1174,18 @@ fn active_depot_header(
         &format!("{:.0}%", install_fraction * 100.0),
         true,
     ));
-    let footer_text = operation.error.clone().or_else(|| {
-        operation.download_total_bytes.and_then(|total| {
-            estimated_remaining(model, total.saturating_sub(operation.bytes_downloaded))
-        })
+    if let Some(message) = operation.error.as_deref() {
+        let message = gtk::Label::new(Some(message));
+        message.set_widget_name("active-depot-message");
+        message.set_xalign(0.0);
+        message.set_wrap(true);
+        message.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        message.set_width_chars(1);
+        message.set_selectable(true);
+        details.append(&message);
+    }
+    let footer_text = operation.download_total_bytes.and_then(|total| {
+        estimated_remaining(model, total.saturating_sub(operation.bytes_downloaded))
     });
     let footer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let eta = gtk::Label::new(footer_text.as_deref());
@@ -1260,6 +1315,10 @@ fn depot_operation_card(
     let detail = gtk::Label::new(Some(operation.error.as_deref().unwrap_or(&operation.state)));
     detail.set_widget_name(&format!("depot-detail-{}", operation.operation_id));
     detail.set_xalign(0.0);
+    detail.set_wrap(true);
+    detail.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    detail.set_width_chars(1);
+    detail.set_selectable(true);
     detail.add_css_class("dim-label");
     copy.append(&detail);
     if operation.download_total_bytes.is_some() && operation.state != "complete" {
@@ -1425,16 +1484,20 @@ fn update_depot_page_progress(w: &Widgets, model: &AppModel) {
             let percent = total
                 .filter(|total| *total > 0)
                 .map(|total| completed.saturating_mul(100) / total);
-            detail.set_label(&percent.map_or_else(
-                || depot_stage_label(&operation.state).to_owned(),
-                |percent| {
-                    format!(
-                        "{} · {}%",
-                        depot_stage_label(&operation.state),
-                        percent.min(100)
-                    )
-                },
-            ));
+            if let Some(error) = operation.error.as_deref() {
+                detail.set_label(error);
+            } else {
+                detail.set_label(&percent.map_or_else(
+                    || depot_stage_label(&operation.state).to_owned(),
+                    |percent| {
+                        format!(
+                            "{} · {}%",
+                            depot_stage_label(&operation.state),
+                            percent.min(100)
+                        )
+                    },
+                ));
+            }
         }
         if let Some(progress) = named
             .get(format!("depot-progress-{}", operation.operation_id).as_str())
@@ -1933,6 +1996,205 @@ mod active_transfer_tests {
             updated_at: 0,
             completed_at: None,
         }
+    }
+
+    #[test]
+    fn active_transfer_precedes_paused_and_failed_history() {
+        let active = job();
+        let mut inactive = job();
+        inactive.job_id = "later".into();
+        let active_ids = HashSet::from([active.job_id.clone()]);
+        let mut operation = crate::installation::DepotOperationSnapshot {
+            setup: None,
+            operation_id: "depot".into(),
+            product_id: 43,
+            state: "failed".into(),
+            bytes_completed: 0,
+            bytes_downloaded: 0,
+            bytes_written: 0,
+            total_write_bytes: 0,
+            total_bytes: 0,
+            download_total_bytes: None,
+            error: None,
+        };
+        for state in [DownloadState::Paused, DownloadState::Failed] {
+            inactive.state = state;
+            let jobs = [active.clone(), inactive.clone()];
+            for depot_state in ["failed", "interrupted"] {
+                operation.state = depot_state.into();
+                for operations in [vec![], vec![operation.clone()]] {
+                    let (depot, job) = featured_downloads(&jobs, &operations, &active_ids);
+                    assert!(depot.is_none());
+                    assert_eq!(job.unwrap().job_id, active.job_id);
+                }
+            }
+        }
+        operation.state = "failed".into();
+        let failed_depot = operation.clone();
+        operation.state = "materializing".into();
+        let jobs = [active, inactive.clone()];
+        let operations = [operation, failed_depot.clone()];
+        let (depot, job) = featured_downloads(&jobs, &operations, &active_ids);
+        assert_eq!(depot.unwrap().state, "materializing");
+        assert!(job.is_none());
+
+        let operations = [failed_depot];
+        let (depot, job) = featured_downloads(&jobs, &operations, &HashSet::new());
+        assert_eq!(depot.unwrap().state, "failed");
+        assert!(job.is_none());
+        let (depot, job) = featured_downloads(&jobs, &[], &HashSet::new());
+        assert!(depot.is_none());
+        assert_eq!(job.unwrap().job_id, inactive.job_id);
+        inactive.state = DownloadState::Complete;
+        let jobs = [inactive];
+        let (depot, job) = featured_downloads(&jobs, &[], &HashSet::new());
+        assert!(depot.is_none() && job.is_none());
+    }
+
+    #[test]
+    fn changed_failure_reason_refreshes_download_presentation() {
+        let mut old = job();
+        old.state = DownloadState::Failed;
+        old.error = Some("First failure".into());
+        let mut new = old.clone();
+        new.error = Some("Updated failure".into());
+        assert!(download_job_structure_changed(&[old], &[new]));
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn featured_archive_keeps_full_error_and_retry_without_navigation() {
+        assert!(
+            std::env::var("HOME")
+                .unwrap()
+                .starts_with("/tmp/ludomere-p326-")
+        );
+        adw::init().unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.DownloadFailureTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(&app, &Config::default());
+        let visible_page = widgets.content.visible_child_name();
+        let mut failed = job();
+        failed.state = DownloadState::Failed;
+        failed.error = Some(format!(
+            "The downloaded archive could not be registered.\n{}\nRetry after restoring access.",
+            "Synthetic diagnostic detail ".repeat(24)
+        ));
+        let mut older = failed.clone();
+        older.job_id = "older-failure".into();
+        let mut model = AppModel {
+            download_jobs: vec![older, failed.clone()],
+            ..AppModel::default()
+        };
+        rebuild_downloads_page(&widgets, &model);
+        let header = find_named_descendant(
+            widgets.downloads.upcast_ref(),
+            &format!("active-download-{}", failed.job_id),
+        )
+        .unwrap();
+        let message = find_named_descendant(&header, "active-download-message")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        update_depot_page_progress(&widgets, &model);
+        assert_eq!(message.text().as_str(), failed.error.as_deref().unwrap());
+        assert!(message.wraps() && message.is_selectable());
+        assert_eq!(message.ellipsize(), gtk::pango::EllipsizeMode::None);
+        assert!(
+            download_progress_widgets(&header)
+                .values()
+                .any(|widget| { widget.tooltip_text().as_deref() == Some("Retry download") })
+        );
+        assert!(
+            find_named_descendant(
+                widgets.downloads.upcast_ref(),
+                "download-detail-older-failure"
+            )
+            .is_some()
+        );
+        assert!(
+            find_named_descendant(widgets.downloads.upcast_ref(), "download-detail-fixture")
+                .is_none()
+        );
+
+        model.download_jobs = vec![failed];
+        model.download_jobs[0].error = None;
+        model.download_jobs[0].status_message = Some("Registration needs retry".into());
+        rebuild_downloads_page(&widgets, &model);
+        let message =
+            find_named_descendant(widgets.downloads.upcast_ref(), "active-download-message")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+        assert_eq!(message.text(), "Registration needs retry");
+        model.download_jobs[0].state = DownloadState::Paused;
+        model.download_jobs[0].status_message = None;
+        rebuild_downloads_page(&widgets, &model);
+        assert!(
+            find_named_descendant(widgets.downloads.upcast_ref(), "active-download-message")
+                .is_none()
+        );
+        assert!(
+            download_progress_widgets(widgets.downloads.upcast_ref())
+                .values()
+                .any(|widget| widget.tooltip_text().as_deref() == Some("Resume"))
+        );
+        assert_eq!(widgets.content.visible_child_name(), visible_page);
+        assert!(widgets.window.visible_dialog().is_none());
+        widgets.window.destroy();
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn depot_failure_details_survive_progress_updates() {
+        assert!(
+            std::env::var("HOME")
+                .unwrap()
+                .starts_with("/tmp/ludomere-p326-")
+        );
+        adw::init().unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.DepotFailureTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(&app, &Config::default());
+        let visible_page = widgets.content.visible_child_name();
+        let failed = crate::installation::DepotOperationSnapshot {
+            setup: None,
+            operation_id: "featured-failure".into(),
+            product_id: 43,
+            state: "failed".into(),
+            bytes_completed: 10,
+            bytes_downloaded: 10,
+            bytes_written: 10,
+            total_write_bytes: 100,
+            total_bytes: 100,
+            download_total_bytes: Some(100),
+            error: Some("Synthetic Depot error\nRestore access and retry.".into()),
+        };
+        let mut older = failed.clone();
+        older.operation_id = "older-failure".into();
+        let model = AppModel {
+            depot_operations: vec![older, failed.clone()],
+            ..AppModel::default()
+        };
+        rebuild_downloads_page(&widgets, &model);
+        for name in ["active-depot-message", "depot-detail-older-failure"] {
+            let message = find_named_descendant(widgets.downloads.upcast_ref(), name)
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            for _ in 0..3 {
+                update_depot_page_progress(&widgets, &model);
+                assert_eq!(message.text().as_str(), failed.error.as_deref().unwrap());
+            }
+            assert!(message.wraps() && message.is_selectable());
+            assert_eq!(message.ellipsize(), gtk::pango::EllipsizeMode::None);
+        }
+        assert_eq!(widgets.content.visible_child_name(), visible_page);
+        assert!(widgets.window.visible_dialog().is_none());
+        widgets.window.destroy();
     }
 
     #[test]
