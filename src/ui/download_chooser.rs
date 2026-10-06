@@ -1415,6 +1415,7 @@ type TestDepotInspectionResult = anyhow::Result<
 #[cfg(test)]
 thread_local! {
     static TEST_DEPOT_INSPECTION_RESULT: RefCell<Option<TestDepotInspectionResult>> = const { RefCell::new(None) };
+    static TEST_DEPOT_INSPECTION_DELAYS: RefCell<VecDeque<mpsc::Receiver<()>>> = const { RefCell::new(VecDeque::new()) };
 }
 
 fn start_existing_depot_operation_dialog(
@@ -1424,9 +1425,16 @@ fn start_existing_depot_operation_dialog(
     kind: crate::domain::DepotOperationKind,
     directory: Option<std::path::PathBuf>,
 ) {
-    let (config, epoch) = {
+    let (config, epoch, session) = {
         let state = model.borrow();
-        (state.config.clone(), state.account_epoch)
+        if state.logout_pending {
+            return;
+        }
+        (
+            state.config.clone(),
+            state.account_epoch,
+            (online::account_session(), auth::session()),
+        )
     };
     let pending = adw::Dialog::builder()
         .title(match kind {
@@ -1482,50 +1490,90 @@ fn start_existing_depot_operation_dialog(
         .map(|library| library.id.clone());
     let expected_directory = directory.clone();
     let (sender, receiver) = mpsc::channel();
-    #[cfg(test)]
-    let test_result = TEST_DEPOT_INSPECTION_RESULT.with(|result| result.borrow_mut().take());
-    std::thread::spawn(move || {
-        #[cfg(test)]
-        if let Some(result) = test_result {
-            let _ = sender.send(result);
-            return;
+    match crate::profile_reset::begin_activity("inspecting installed game") {
+        Err(error) => {
+            let _ = sender.send(Err(error));
         }
-        let result = (|| -> anyhow::Result<_> {
-            let store = StateStore::open()?;
-            let libraries = config
-                .game_libraries
-                .iter()
-                .filter(|library| {
-                    expected_directory
-                        .as_ref()
-                        .is_none_or(|directory| directory.parent() == Some(library.path.as_path()))
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            let installed = crate::installation::reconcile_installed_games(&store, &libraries)?
-                .into_iter()
-                .find(|game| {
-                    game.product_id == product_id
-                        && expected_directory
-                            .as_ref()
-                            .is_none_or(|directory| &game.installation_directory == directory)
-                });
-            let Some(installed) = installed else {
-                return Ok(None);
-            };
-            let marker =
-                crate::installation::load_installation_marker(&installed.installation_directory)?;
-            Ok(marker
-                .filter(|marker| marker.source == crate::domain::InstallationSource::GalaxyDepot)
-                .map(|marker| (installed, marker)))
-        })();
-        let _ = sender.send(result);
-    });
+        Ok(activity) => {
+            #[cfg(test)]
+            let test_result =
+                TEST_DEPOT_INSPECTION_RESULT.with(|result| result.borrow_mut().take());
+            #[cfg(test)]
+            let delay = TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow_mut().pop_front());
+            std::thread::spawn(move || {
+                let result = (|| -> anyhow::Result<_> {
+                    let _activity = activity;
+                    #[cfg(test)]
+                    if let Some(delay) = delay {
+                        delay.recv_timeout(Duration::from_secs(10))?;
+                    }
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed; inspect the installation again."
+                    );
+                    #[cfg(test)]
+                    if let Some(result) = test_result {
+                        return result;
+                    }
+                    let store = StateStore::open()?;
+                    let libraries = config
+                        .game_libraries
+                        .iter()
+                        .filter(|library| {
+                            expected_directory.as_ref().is_none_or(|directory| {
+                                directory.parent() == Some(library.path.as_path())
+                            })
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed; inspect the installation again."
+                    );
+                    let installed =
+                        crate::installation::reconcile_installed_games(&store, &libraries)?
+                            .into_iter()
+                            .find(|game| {
+                                game.product_id == product_id
+                                    && expected_directory.as_ref().is_none_or(|directory| {
+                                        &game.installation_directory == directory
+                                    })
+                            });
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed; inspect the installation again."
+                    );
+                    let Some(installed) = installed else {
+                        return Ok(None);
+                    };
+                    let marker = crate::installation::load_installation_marker(
+                        &installed.installation_directory,
+                    )?;
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed; inspect the installation again."
+                    );
+                    Ok(marker
+                        .filter(|marker| {
+                            marker.source == crate::domain::InstallationSource::GalaxyDepot
+                        })
+                        .map(|marker| (installed, marker)))
+                })();
+                let _ = sender.send(result);
+            });
+        }
+    }
     let window = window.clone();
     let model = model.clone();
     let detail = detail.clone();
     glib::timeout_add_local(Duration::from_millis(32), move || {
-        if closed.get() || model.borrow().account_epoch != epoch || model.borrow().logout_pending {
+        if closed.get() {
+            return glib::ControlFlow::Break;
+        }
+        if model.borrow().account_epoch != epoch
+            || model.borrow().logout_pending
+            || session != (online::account_session(), auth::session())
+        {
             pending.close();
             return glib::ControlFlow::Break;
         }
@@ -6541,6 +6589,240 @@ mod installer_version_tests {
         assert!(current_depot_session(&model).is_err());
         model.borrow_mut().account_token = None;
         assert!(current_depot_session(&model).is_err());
+    }
+
+    #[test]
+    #[ignore = "private HOME/all XDG/TMP, GTK and D-Bus; actual delayed inspection with synthetic empty libraries"]
+    fn existing_inspection_tracks_activity_and_rejects_stale_requests() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p368-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn delay() -> mpsc::Sender<()> {
+            let (sender, receiver) = mpsc::channel();
+            TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow_mut().push_back(receiver));
+            sender
+        }
+        #[track_caller]
+        fn assert_registered() {
+            let error = crate::profile_reset::reserve().err().unwrap().to_string();
+            assert!(error.contains("inspecting installed game"), "{error}");
+            assert!(TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow().is_empty()));
+        }
+        fn assert_responsive() {
+            let heartbeat = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(100), {
+                let heartbeat = heartbeat.clone();
+                move || heartbeat.set(true)
+            });
+            wait(|| heartbeat.get());
+        }
+        let database = crate::identity::database();
+        assert!(database.starts_with(std::env::var("XDG_DATA_HOME").unwrap()));
+        assert!(
+            !database.exists(),
+            "fixture needs a fresh synthetic profile"
+        );
+        assert!(TEST_DEPOT_INSPECTION_RESULT.with(|result| result.borrow().is_none()));
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.InspectionLifecycleTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(640)
+            .default_height(480)
+            .build();
+        let original_page = gtk::Label::new(Some("Original page"));
+        window.set_content(Some(&original_page));
+        window.present();
+        wait(|| window.is_mapped());
+        let model = Rc::new(RefCell::new(AppModel {
+            config: Config {
+                game_libraries: vec![],
+                offline_libraries: vec![],
+                extras_libraries: vec![],
+                ..Config::default()
+            },
+            network_available: false,
+            account_token: None,
+            ..AppModel::default()
+        }));
+        let detail = DetailPageModel::game(
+            Game {
+                product_id: 9368001,
+                slug: "synthetic-inspection".into(),
+                title: "Synthetic inspection".into(),
+                ..Game::default()
+            },
+            false,
+        );
+        let start = || {
+            start_existing_depot_operation_dialog(
+                &window,
+                &model,
+                &detail,
+                crate::domain::DepotOperationKind::Repair,
+                None,
+            );
+        };
+        let message = |dialog: &adw::Dialog| {
+            find_named_descendant(dialog.upcast_ref(), "repair-inspection-message")
+                .and_downcast::<gtk::Label>()
+                .unwrap()
+        };
+
+        // Local inspection needs no authenticated/online account; only generation equality.
+        auth::invalidate_session();
+        assert!(!auth::session_is_current(auth::session()));
+        for invalidate_auth in [true, false] {
+            let epoch = model.borrow().account_epoch;
+            let release = delay();
+            start();
+            let dialog = window.visible_dialog().unwrap();
+            assert_registered();
+            assert_responsive();
+            assert_eq!(message(&dialog).text(), "Checking the installed game…");
+            assert!(!database.exists());
+            if invalidate_auth {
+                auth::invalidate_session();
+            } else {
+                online::invalidate_library_session();
+            }
+            assert_eq!(model.borrow().account_epoch, epoch);
+            wait(|| window.visible_dialog().is_none());
+            assert_registered();
+            release.send(()).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            assert_responsive();
+            assert!(!database.exists(), "stale work must stop before DB access");
+            assert!(window.visible_dialog().is_none());
+            assert!(
+                find_named_descendant(dialog.upcast_ref(), "repair-inspection-browse").is_none()
+            );
+            assert_eq!(window.content().as_ref(), Some(original_page.upcast_ref()));
+        }
+
+        let unused = delay();
+        model.borrow_mut().logout_pending = true;
+        start();
+        assert!(window.visible_dialog().is_none());
+        assert_eq!(
+            TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow().len()),
+            1
+        );
+        assert!(crate::profile_reset::reserve().is_ok());
+        TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow_mut().clear());
+        drop(unused);
+        model.borrow_mut().logout_pending = false;
+
+        let frozen = crate::profile_reset::reserve().unwrap();
+        let release = delay();
+        start();
+        let refused = window.visible_dialog().unwrap();
+        wait(|| message(&refused).text().contains("Profile reset"));
+        assert_eq!(
+            TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow().len()),
+            1
+        );
+        assert!(!database.exists());
+        let spinner = find_named_descendant(refused.upcast_ref(), "repair-inspection-spinner")
+            .and_downcast::<gtk::Spinner>()
+            .unwrap();
+        assert!(!spinner.is_spinning() && !spinner.get_visible());
+        let retry = find_named_descendant(refused.upcast_ref(), "repair-inspection-retry")
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+        assert!(retry.is_sensitive());
+        drop(frozen);
+        retry.emit_clicked();
+        let current = window.visible_dialog().unwrap();
+        assert!(current != refused);
+        assert_registered();
+        assert_responsive();
+        assert!(!database.exists());
+        release.send(()).unwrap();
+        wait(|| {
+            message(&current)
+                .text()
+                .contains("This repair tool checks Galaxy Depot")
+        });
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert!(database.is_file());
+        assert!(!model.borrow().network_available && model.borrow().account_token.is_none());
+        assert!(!auth::session_is_current(auth::session()));
+        assert!(
+            find_named_descendant(current.upcast_ref(), "repair-review-reinstallation").is_some()
+        );
+        assert!(find_named_descendant(current.upcast_ref(), "repair-inspection-reset").is_some());
+        current.close();
+        wait(|| window.visible_dialog().is_none());
+
+        // This is an actual DB-open/initialization failure, not the P367 injected outcome.
+        let invalid_database = b"deliberately invalid synthetic SQLite database";
+        std::fs::write(&database, invalid_database).unwrap();
+        let release = delay();
+        start();
+        let failed = window.visible_dialog().unwrap();
+        assert_registered();
+        release.send(()).unwrap();
+        wait(|| {
+            message(&failed)
+                .text()
+                .starts_with("Could not inspect the installation:")
+        });
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert!(find_named_descendant(failed.upcast_ref(), "repair-inspection-retry").is_some());
+        assert_eq!(
+            std::fs::read(&database).unwrap().as_slice(),
+            invalid_database
+        );
+        failed.close();
+        wait(|| window.visible_dialog().is_none());
+
+        let release = delay();
+        start();
+        let closed = window.visible_dialog().unwrap();
+        assert_registered();
+        closed.close();
+        wait(|| window.visible_dialog().is_none());
+        assert_responsive();
+        assert_registered();
+        release.send(()).unwrap();
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert_responsive();
+        assert!(window.visible_dialog().is_none());
+        assert!(find_named_descendant(closed.upcast_ref(), "repair-inspection-retry").is_none());
+        assert_eq!(window.content().as_ref(), Some(original_page.upcast_ref()));
+        assert!(TEST_DEPOT_INSPECTION_RESULT.with(|result| result.borrow().is_none()));
+        assert!(TEST_DEPOT_INSPECTION_DELAYS.with(|delays| delays.borrow().is_empty()));
+        window.destroy();
     }
 
     #[test]

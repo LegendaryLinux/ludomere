@@ -160,13 +160,22 @@
   authorized for critic, no profile access. Root cancelled without starting another installation.
   Standard full-chooser dimensions/title, padded scrolling fallback and hidden terminal spinner;
   require actual source-row viewport intersection/reachable controls, not only requested sizes.
-- P368 (in_progress diagnosis, performance_audit): root finds repair inspection worker opens/reconciles StateStore without
-  pre-spawn activity/original-session guard; receiver alone checks epoch. Separate lifecycle review
-  needed after P367 ownership clears, no unreviewed worker edits mixed into layout fix.
-- P369 (in_progress diagnosis, file_summary): source-only review of initial Cloud Saves properties
-  loading and control responsiveness. Report concrete GTK-thread I/O, failure/busy behavior and
-  bounded proposals before edits. Exclude real account/cloud/profile data and P368 ownership;
-  no cloud operation, source mutation, new API or tests yet.
+- P368 (complete, performance_audit; reviewer file_summary): independently approved repair
+  inspection lifecycle fix after P367. Own isolated download_chooser.rs; pre-spawn profile activity,
+  original raw auth/online generations and receiver rejection, preserving signed-out/offline local
+  inspection. No token lookup/network, mutex over I/O or claimed atomic cancellation of in-flight
+  reconciliation. Actual delayed worker/reset admission/stale/error/close fixtures required.
+- P369 (in_progress, file_summary; reviewer ui_critic): approved initial Cloud Saves local record
+  loading only, isolated game_settings.rs. Mechanically extract existing controls, one tracked
+  worker, explicit loading/error/Retry; raw original generations and weak original-window lifetime.
+  Hidden tab may populate, closed window may not; stale shell gives close/reopen guidance. Real
+  private reader-lock/heartbeat, errors/retry/missing/offline/native/session/activity/lifetime
+  fixtures plus existing cloud regression required. No metadata/network/policy/override changes.
+  Separate discovery/override races and smaller feedback findings await bounded follow-up review.
+- P370 (in_progress diagnosis, ui_critic): review real Coffee Talk required-component consent
+  layout and completed repair Details counters. Only root-named app screenshots and source;
+  no product edits or actual profile/desktop. Distinguish cosmetic gaps from misleading completed
+  work totals; propose bounded fixes with actual geometry/counter tests before implementation.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

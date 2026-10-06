@@ -24,13 +24,34 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P368 independent review and final private actual-worker lifecycle fixture PASS
+  (/tmp/ludomere-p368-dgo76u9m); existing P367 geometry fixture PASS
+  (/tmp/ludomere-p367-p0fiwve5). Inspection registers activity before dispatch and checks original
+  raw sessions without requiring login for local reads. Initial fixture exposed inherited repeated
+  close on already-closed dialog; narrow early return independently approved and warning absent
+  on final run. Compile/fmt/Clippy PASS. No claimed atomic cancellation of in-flight reconciliation
+  or post-reset surviving worker; this protects queued work, stale results and reset preflight.
+
+- Onb2629ce Coffee Talk's recognized Depot Repair presents explicit repair confirmation and
+  required-component consent, then Setup complete without launching the game. Retains current
+  installed version. Completion succeeded too quickly between root observations to capture active
+  progress; do not infer a full intermediate-progress check. Details contains real stages; repair
+  reused files (0 downloaded/written) but planned558.3MB total looks unfinished, assigned P370
+  diagnosis. Repaired game renders title screen; normal close ends CoffeeTalk.exe and restores
+  Play/white title/search in place. No deliberate cloud deletion, reservation remains9GB of40GB.
+
+- Onb2629ce real Gungeon Manage/Repair shows the padded, titled native fallback; Review
+  Reinstallation opens the full680x620 chooser with Linux2.1.9,255.3MB, full installation
+  destination and visible Cancel/Install. Root cancelled; no installation/files changed.
+  Evidence: repair-fallback-fixed.png and repair-chooser-fixed.png in the private audit directory.
+
 - P367 repair presentation independently reviewed and verified: padded scrolling fallback with
   clear Repair/Update title and hidden stopped spinner; reused reinstallation chooser restores
   standard680x620 dimensions/title. Actual mapped constrained-geometry fixture PASS
   (/tmp/ludomere-p367-8jvgzmkd), existing P346 source/destination fixture PASS
   (/tmp/ludomere-p346-r96dc1gv). Initial Clippy test-type complexity corrected with an equivalent
   cfg(test) alias, independently reviewed; final compile/fmt/Clippy PASS. No execution/consent
-  changes; live retest still pending and inspection lifecycle addressed separately in P368.
+  changes; live retest passes above and inspection lifecycle addressed separately in P368.
 
 - On695d738 the Account Factory Reset-to-Connection gap is visibly corrected; Connection remains
   Online and authenticated. No reset, sign-in exchange or settings mutation performed.
