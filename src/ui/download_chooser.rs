@@ -603,7 +603,11 @@ fn confirm_depot_plan(
     body.append(&actions);
     actions.set_visible(needs_review);
     root.append(&body);
+    dialog.set_focus(None::<&gtk::Widget>);
     dialog.set_child(Some(&root));
+    if needs_review {
+        dialog.set_focus(Some(&cancel));
+    }
     cancel.connect_clicked({
         let dialog = dialog.clone();
         move |_| {
@@ -6703,8 +6707,13 @@ mod installer_version_tests {
                 access_token: "inert-never-used".into(),
             };
             let dialog = adw::Dialog::new();
-            confirm_depot_plan(&window, &model, request, authentication.clone(), &dialog);
+            let preparing = gtk::Label::new(Some("Checking required components…"));
+            preparing.set_selectable(true);
+            dialog.set_child(Some(&preparing));
             dialog.present(Some(&window));
+            wait(|| preparing.is_mapped());
+            drop(preparing);
+            confirm_depot_plan(&window, &model, request, authentication.clone(), &dialog);
             let root = dialog.child().unwrap();
             let header = find_named_descendant(&root, "component-consent-header").unwrap();
             let introduction = find_named_descendant(&root, "component-consent-introduction")
@@ -6738,6 +6747,16 @@ mod installer_version_tests {
                 (600, 440)
             );
             assert_eq!(dialog.title(), "Required game components");
+            assert_eq!(dialog.focus().as_ref(), Some(buttons[0].upcast_ref()));
+            for (direction, target) in [
+                (gtk::DirectionType::TabForward, 1),
+                (gtk::DirectionType::TabForward, 2),
+                (gtk::DirectionType::TabBackward, 1),
+                (gtk::DirectionType::TabBackward, 0),
+            ] {
+                assert!(window.child_focus(direction));
+                assert_eq!(dialog.focus().as_ref(), Some(buttons[target].upcast_ref()));
+            }
             assert!(root.height() <= 400 && root.width() <= 600);
             assert_eq!(description.text(), expected);
             assert!(description.wraps() && description.is_selectable());

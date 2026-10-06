@@ -9,7 +9,7 @@
   deletion/policy change or regular Settings reset change. Independent source/fmt/build gates.
   Exact three-line independent source GO; fmt/build PASS. No real reset executed or claimed.
 
-- P411 (in_progress diagnostic, file_summary; reviewers performance_audit/UI harness ui_critic):
+- P411 (complete, file_summary; reviewers performance_audit/UI harness ui_critic):
   current live927556d repeats P375 gtk_widget_is_ancestor critical after repair Start and before
   component consent; canceled, no component/game mutation. Port only fail-closed old diagnostic
   seams to isolated current source and genuine root-pointer staged X11 fixture/private profile/bus.
@@ -17,6 +17,18 @@
   animations and unique synthetic window. No production timing/focus patch or main integration
   authorized before evidence. Root alone handles explicit display/auth path, actual pointer input
   and screenshots; agents never inspect desktop/profile/auth material. Stop if scope grows.
+  Frozen cfg(test)-only diagnostic and root-only wrapper independently source-reviewed GO by
+  UI and safety reviewers. Root compilation/runtime gate underway; no main product changes.
+  Unchanged native-pointer reproducer repeatedly finds the critical; one isolated focus-clear
+  call before child replacement removes it in p411-2apbzu1s with every gate retained. Independent
+  production-source GO permits one-line main preview, existing consent regression and actual
+  repair/keyboard/Cancel gates. Diagnostic/stack-observer code stays out of main; cause bounded.
+  Final four-line candidate also focuses visible Cancel after replacement. Existing fixture now
+  matches production's presented-dialog lifecycle and asserts initial Cancel plus four native
+  traversal targets; p370a-iiba2nqc PASS. Real Coffee Tab/ShiftTab/Space Cancel passes without
+  setup or critical. Freshly compiled final pointer gate p411-hk_w2z0i PASS, warning absent and
+  focus retained in consent. Independent QA/safety GO; fresh consolidated build PASS at final
+  source (574 library, six integration, five Python tests, fmt/Clippy/build). Commit gate follows.
 
 - P410 (complete, ui_critic; reviewer file_summary): relabel shared Proton release-lookup/
   download cancel button to Cancel, since root observed misleading Cancel download before any

@@ -5,6 +5,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- Final P411 source fresh consolidated build PASS: formatting, all-target Clippy-Dwarnings,
+  574 library tests, six integration tests, five Python helper tests and cargo build.95 library
+  entries ignored by default; affected GTK gates separately executed. Evidence:
+  /tmp/ludomere-r111-full-build-pd7d9sna/build.log. Project artifacts rebuilt after clearing the
+  shared-checkout cache; private profile/process/network environment excludes actual data.
+
 - At927556d consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library tests,
   six integration tests, five Python helper tests and build.95 library entries ignored by default;
   affected GTK gates separately run.80 exact post-commit builds PASS. Evidence
@@ -57,6 +63,68 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P411 final focus-order regression p370a-iiba2nqc PASS (initial Cancel, forward Offline/Confirm,
+  backward Offline/Cancel, all retained layout/cancellation assertions). Freshly compiled final
+  native-pointer diagnostic p411-hk_w2z0i PASS: no target ancestry critical, live consent focus
+  retained, all inert/backend/lifecycle gates unchanged. One cached cross-checkout compilation
+  unexpectedly reused the shared target; no runtime gate was accepted from it. Cleaned only
+  Cargo's Ludomere package artifacts and rebuilt diagnostic freshly, then cleaned that package
+  again for the final main consolidated build. Dependencies and real user/game files untouched.
+  Independent final QA/safety source GO. Only four production lines and the existing fixture
+  changes enter main; all temporary diagnostics stay outside the repository.
+
+- P411 restoration preview focuses the new Cancel action after replacing content. The first
+  existing fixture failed because it presented a fresh dialog after construction, unlike all
+  three production callers. Independently reviewed fixture correction presents inert preparation
+  content first; strict Cancel/layout checks then pass p370a-eyompo1g. Actual Coffee review has
+  zero Gtk-/GLib-GIO-CRITICAL or panics; Tab→Shift+Tab→Space cancels and returns Play. No setup
+  admitted, save/prefix/payload unchanged. Actual app closed normally. Final traversal/build
+  gates pending; diagnostic remains outside main.
+
+- P411 one-line main preview passes fmt/compile/build and retained private consent regression
+  p370a-jlp0n0wr. Actual Coffee repair preparation now emits no Gtk critical; Escape closes
+  review without component execution and restores Play. Tab first selects component text but
+  later focus visibility is inconclusive. The underlying tab highlight after Escape is not
+  proof of focus leakage: the pointer remains over that tab at the former Start coordinates.
+  Do not count full keyboard acceptance yet; candidate remains uncommitted pending narrow review.
+
+- P411 bounded default-forwarding stack observer independently reviewed and compiled. Native-
+  pointer run p411-cqz2a1hq again passes assertions but reports the critical. Stack places it
+  in deferred native event processing during consent observation, not directly inside Rust's
+  set_child call; native frames are unsymbolized. One isolated focus-clear experiment is under
+  review; no product remedy or precise toolkit attribution follows from this partial stack.
+
+- P411 repeat p411-8wy0b4uh again completes all inert/native-pointer assertions with the same
+  content-replacement warning. Reviewed argument-free debugger attachment to that synthetic PID
+  was refused by the OS (ptrace Operation not permitted); no stack obtained, no security setting
+  changed and no real process inspected. A bounded test-only default-forwarding log observer is
+  being assessed instead. Actual app remains closed.
+
+- P411 native-pointer reproduction succeeds diagnostically: p411-441xwxv0 reaches actual
+  Gear/Manage/Repair/Start/components/Cancel; all Rust assertions pass, wrapper intentionally
+  exits2 for exact gtk_widget_is_ancestor critical immediately after preparation release.
+  No profile/database/queue/backend mutation. Previous observer-only p411-dgtqtpg8 established
+  nested leave before enter with containment false; independently approved native-enter count
+  preserves actual-input proof and all other gates. No product fix or internal cause claimed yet.
+
+- P411 diagnostic compiles. Two unchanged native-pointer runs reach the Manage submenu but
+  fail its diagnostic Legacy hover counter (second22.20s, not the45s timeout); no target GTK
+  ancestry critical yet. Approved diagnostic-only correction observes the single existing
+  Motion controller's enter/contains-pointer, matching actual production hover dispatch.
+  Other ButtonPress proofs and backend guards remain strict; no product fix inferred.
+
+- P411 frozen inert X11 diagnostic received independent UI and safety source GO. Root-reviewed
+  persistent inspection/preparation interception, Confirm/Offline refusal, disabled unrelated
+  actions and private bus/profile wrapper. Compilation/runtime pending; this remains outside
+  main and is neither a product fix nor proof of a toolkit cause.
+
+- P412 commit655f5fe exact post-build PASS;81 built audit commits. Coffee Export invoked only
+  its native folder picker; it is unavailable through current X11 automation. No destination
+  selected/export started. External Request.Close correctly refused unmatched caller; normal
+  app tray Close succeeded and its portal request subtree is now empty. Temporary chosen-to-be
+  export directory remains empty. No save/cloud deletion, no access-control bypass; export
+  live gate remains unverified. Actual app closed cleanly before synthetic X11 diagnostic.
 
 - P412 source/fmt/build PASS: recovery Retry now reads Preparing reset… while its existing
   validation/scheduling worker runs; error/disconnect restore Retry reset before re-enabling.
@@ -769,6 +837,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Fixes
 
+### P411 — preserve focus when preparation becomes component consent
+
+- Clear the old dialog focus before replacing its content, then focus visible Cancel on the
+  new component review. This corrects the repeatedly reproduced GTK ancestor critical while
+  retaining keyboard access, explicit consent and automatic no-review behavior.
+- The same strict native-pointer diagnostic reproduces before and passes after; final run
+  p411-hk_w2z0i retains focus and emits no target critical. Existing consent regression now
+  uses the actual presented-dialog lifecycle and checks Cancel plus four native traversal
+  targets; p370a-iiba2nqc passes. Real Coffee Tab/ShiftTab/Space cancellation passes without
+  component execution or critical. Independent QA/safety and fresh full build pass.
+- Main includes four production lines and a small existing-fixture extension. Temporary
+  observers, pointer fixture, stack logging and debugger experiments remain outside main.
+  Failed fixture assumptions and partial native-stack evidence are retained above; no broad
+  GTK cause, warning suppression or whole-application keyboard guarantee is claimed.
+
 ### P365a — save launch fields without overwriting unrelated preferences
 
 - Atomic partial SQL updates only executable/arguments/updated timestamp, preserving raw runtime
@@ -903,14 +986,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Independent source review and four private regressions PASS, covering multipart preparation,
   both native completion points, exact recovery/rejected counterexamples and repeated full/targeted
   reconciliation with activity/preferences/raw-file preservation. Formatting/Clippy/build PASS.
-  Live native retry remains pending; original failed marker is retained for that check.
+  At this checkpoint live native retry was pending. Subsequent live launch and fresh schema1
+  reinstall passed; see the later Live testing entries. No failed-before evidence is discarded.
 
 - The first live retry found Storage's separate protected marker reader still called strict
   validation directly, blocking launch. Follow-up shares the exact pure normalization after each
   reader's existing checks; storage no-follow, bounded regular-file reads and strict writes remain.
   Actual launch-admission/readiness fixture plus the four prior regressions PASS, including rejected
   symlink/oversized/malformed/future metadata and unchanged raw bytes. Independent review and
-  fmt/Clippy/build PASS. This corrects missing admission coverage; real launch still to be retried.
+  fmt/Clippy/build PASS. This corrected missing admission coverage; subsequent live native
+  launch/reinstall results are recorded above and supersede this checkpoint's pending retry.
 
 ### P325 — retain search while changing library filters
 
@@ -1136,7 +1221,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   protected cleanup and confirmation. Formatting/all-target Clippy/build PASS. Initial test-local
   missing glib import fixed without adding a production GTK dependency.
 
-## Remaining gates and live evidence
+## Earlier implementation checkpoints and live evidence
+
+These entries preserve intermediate progress. Later Live testing and consolidated verification
+entries above supersede their pending statements: P349/P350 runtime gates, P351 physical-key
+activation, P353 narrow layout and the full suite subsequently passed. Current limitations are
+listed in PROJECT_STATUS.md; these historical checkpoints are not a current blocking checklist.
 
 ### P353 — explain drive capacity versus library contents
 

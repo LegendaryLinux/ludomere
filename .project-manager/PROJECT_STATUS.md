@@ -8,19 +8,22 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified80 separate audit commits through927556d, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified81 separate audit commits through655f5fe, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
-- Latest consolidated private build PASS at927556d: fmt, all-target Clippy-Dwarnings,
+- Latest consolidated private build PASS on final P411 source: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.95 library tests
   ignored by default; affected GTK gates run separately. Log:
-  /tmp/ludomere-r111-full-build-_ihxotmp/build.log. No real account/helpers/network in gate.
+  /tmp/ludomere-r111-full-build-pd7d9sna/build.log. Fresh project artifacts; no real
+  account/helpers/network in gate. Earlier pinned927556d gate remains in audit history.
 - Latest verified fixes: responsive detail controls, first-click archive popups, tray startup/
   shutdown and session admission, Maintenance progress, tag keyboard/validation, folder-origin
   guards, operation-log activity, persistent log-folder errors, General-first Properties and
   singular archive copy. P404 removes explicit unopened-menu capture cycles: same strict test
   fails before/passes after, and mapped actions retain behavior. Each task's evidence is in plan/audit.
-- Active: P411 isolates the recurring repair-to-components GTK critical with a current-source,
-  root-pointer diagnostic. No production fix authorized without evidence. P408 exact completed-
+- Active: P411 commit and audit closeout. Its four-line focus handoff corrects
+  the reproduced repair-to-components warning and restores focus to visible Cancel. Final native-
+  pointer diagnostic, strict initial/traversal/layout regression and real Coffee keyboard Cancel
+  pass; independent QA/safety GO. Diagnostic code stays outside main. P408 exact completed-
   batch feedback passes strict failing-before/passing-after and live deletion gates. P409 idle
   graph explanation and P410 Proton Cancel wording pass focused/live gates and builds. P407
   Cloud ordering, P403 chooser lifecycle and P405 full-path row are committed and verified.
@@ -30,7 +33,8 @@ Last meaningful update: 2026-10-06.
 - Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve16GB of40GB, covering
   payloads/prefixes/cache/staging/repeats; BIT.TRIP official requirement100MB, measured payload
   56.7MB/prefix409MB. All three rendered game screens and exited normally. Gungeon native
-  offline reinstall writes correct schema1 and retains two archives; Coffee Depot repair succeeds.
+  offline reinstall writes correct schema1; all three test archives were subsequently restored.
+  Coffee Depot repair succeeds.
   No broad gameplay/controller/cold-wallet-start assertion. Saved-login discovery fixed P330;
   user unlocked the already-advertised KDE provider, no wallet settings changed.
 - Recent live: Coffee Audit Test profile created in an empty slot, opening scene reached,
@@ -38,13 +42,15 @@ Last meaningful update: 2026-10-06.
   Gungeon archive pause/cancel first click passes; all three installers restored900.7MB.
   Exact completed archive deletion now clears stale detail feedback without leaving the page.
   Native manual update reports no update and preserves Play; Proton metadata loads normally.
-  Current repair review repeats one nonfatal GTK critical, canceled before component execution.
-- Open evidence/limits: one repeated nonfatal GTK ancestor critical around Repair-to-components
-  transition (P375); earlier paused archive first trash click unexplained (P358); full stale
+  Final repair review is warning-free and keyboard Cancel works; no components executed in it.
+- Open evidence/limits: earlier paused archive first trash click unexplained (P358); full stale
   Properties installed identity deferred beyond P365a; malformed preference JSON recovery
   deferred (P360); whole Cloud Properties page retention remains diagnostic (P386 only fixes
   proven component cycles). P379 resolves override/discovery persistence race. No blanket claim
   that all GTK warnings are absent. Private harness GSettings schema warnings remain nonfatal.
+  P375's reproduced consent-transition warning is corrected by P411; the stripped native stack
+  does not identify an internal GTK cause. Cloud Export remains unverified because its native
+  destination picker was unavailable to X11 automation; normal save synchronization passed.
 - Use normal game windowquit and app tray Close, not X11 windowclose. Agents never see actual
   private profile/game data or raw diagnostic logs; specifically approved app-only screenshots
   are exceptions. Durable artifacts and source/test evidence are linked in R111_AUDIT.md.
