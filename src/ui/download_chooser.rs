@@ -5043,62 +5043,114 @@ fn populate_download_selector(
             });
         });
     }
+    poll_download_selector(dialog, model, state, widgets);
+}
+
+fn poll_download_selector(
+    dialog: &gtk::Window,
+    model: &Rc<RefCell<AppModel>>,
+    state: Rc<RefCell<DownloadDialogState>>,
+    widgets: Rc<DownloadDialogWidgets>,
+) {
+    let epoch = model.borrow().account_epoch;
+    let session = (online::account_session(), auth::session());
     refresh_download_selector(&state, &widgets, true);
-    {
-        let dialog = dialog.clone();
-        let state = state.clone();
-        let widgets = widgets.clone();
-        let availability_model = model.clone();
-        let groups = widgets
-            .rows
-            .iter()
-            .map(|row| row.group.clone())
-            .collect::<Vec<_>>();
-        let (sender, receiver) = mpsc::channel();
-        let mut running = false;
-        let mut initialized = false;
-        glib::timeout_add_local(Duration::from_millis(500), move || {
-            if !dialog.is_visible() {
-                return glib::ControlFlow::Break;
+    let dialog = dialog.downgrade();
+    let model = Rc::downgrade(model);
+    let groups = widgets
+        .rows
+        .iter()
+        .map(|row| row.group.clone())
+        .collect::<Vec<_>>();
+    let (sender, receiver) = mpsc::channel();
+    let mut running = false;
+    let mut initialized = false;
+    glib::timeout_add_local(Duration::from_millis(500), move || {
+        let (Some(dialog), Some(model)) = (dialog.upgrade(), model.upgrade()) else {
+            return glib::ControlFlow::Break;
+        };
+        let current = || {
+            let model = model.borrow();
+            dialog.is_visible()
+                && model.account_epoch == epoch
+                && !model.logout_pending
+                && session == (online::account_session(), auth::session())
+        };
+        if !current() {
+            return glib::ControlFlow::Break;
+        }
+        if let Ok((current, available)) = receiver.try_recv() {
+            running = false;
+            let changed = *widgets.artifact_states.borrow() != current
+                || *widgets.libraries_available.borrow() != available;
+            *widgets.artifact_states.borrow_mut() = current;
+            *widgets.libraries_available.borrow_mut() = available;
+            if changed || !initialized {
+                refresh_download_selector(&state, &widgets, !initialized);
+                initialized = true;
             }
-            if let Ok((current, available)) = receiver.try_recv() {
-                running = false;
-                let changed = *widgets.artifact_states.borrow() != current
-                    || *widgets.libraries_available.borrow() != available;
-                *widgets.artifact_states.borrow_mut() = current;
-                *widgets.libraries_available.borrow_mut() = available;
-                if changed || !initialized {
-                    refresh_download_selector(&state, &widgets, !initialized);
-                    initialized = true;
+        }
+        // Refresh emits GTK signals; an observer may retire this chooser.
+        if !current() {
+            return glib::ControlFlow::Break;
+        }
+        if !running {
+            let Ok(activity) = crate::profile_reset::begin_activity("checking download choices")
+            else {
+                return glib::ControlFlow::Continue;
+            };
+            let sender = sender.clone();
+            let groups = groups.clone();
+            let available = model
+                .borrow()
+                .library_statuses
+                .iter()
+                .filter(|status| {
+                    matches!(
+                        status.compatibility,
+                        crate::storage::LibraryCompatibility::Compatible
+                    )
+                })
+                .map(|status| status.kind)
+                .collect::<Vec<_>>();
+            #[cfg(test)]
+            let probe = archive_poll_tests::POLL_PROBES.with_borrow_mut(|probes| {
+                probes.as_mut().map(|probes| {
+                    probes
+                        .pop_front()
+                        .expect("missing inert archive poll probe")
+                })
+            });
+            running = true;
+            std::thread::spawn(move || {
+                let _activity = activity;
+                #[cfg(test)]
+                if let Some(probe) = &probe {
+                    archive_poll_tests::hold_poll(&probe.before_read);
                 }
-            }
-            if !running {
-                running = true;
-                let sender = sender.clone();
-                let groups = groups.clone();
-                let available = availability_model
-                    .borrow()
-                    .library_statuses
-                    .iter()
-                    .filter(|status| {
-                        matches!(
-                            status.compatibility,
-                            crate::storage::LibraryCompatibility::Compatible
-                        )
-                    })
-                    .map(|status| status.kind)
-                    .collect::<Vec<_>>();
-                std::thread::spawn(move || {
-                    let paths = managed_artifact_paths();
-                    let states = dialog_artifact_states(&groups, &paths, || {
-                        StateStore::open()?.download_jobs()
-                    });
-                    let _ = sender.send((states, available));
+                if session != (online::account_session(), auth::session()) {
+                    return;
+                }
+                let paths = managed_artifact_paths();
+                let states = dialog_artifact_states(&groups, &paths, || {
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed during download inspection"
+                    );
+                    StateStore::open()?.download_jobs()
                 });
-            }
-            glib::ControlFlow::Continue
-        });
-    }
+                #[cfg(test)]
+                if let Some(probe) = &probe {
+                    archive_poll_tests::hold_poll(&probe.before_publish);
+                }
+                if session != (online::account_session(), auth::session()) {
+                    return;
+                }
+                let _ = sender.send((states, available));
+            });
+        }
+        glib::ControlFlow::Continue
+    });
 }
 
 fn cached_artifact_state(
@@ -5795,6 +5847,313 @@ pub(super) struct DetailFileManagement {
 mod archive_poll_tests {
     use super::*;
     use std::path::PathBuf;
+
+    type PollBarrier = (mpsc::Sender<()>, mpsc::Receiver<()>);
+
+    pub(super) struct PollProbe {
+        pub(super) before_read: Option<PollBarrier>,
+        pub(super) before_publish: Option<PollBarrier>,
+    }
+
+    thread_local! {
+        pub(super) static POLL_PROBES: RefCell<Option<VecDeque<PollProbe>>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn hold_poll(barrier: &Option<PollBarrier>) {
+        if let Some((entered, release)) = barrier {
+            entered.send(()).unwrap();
+            release
+                .recv_timeout(Duration::from_secs(30))
+                .expect("private poll barrier was not released");
+        }
+    }
+
+    #[test]
+    #[ignore = "requires fresh private p403 HOME/all XDG/TMP and GTK; empty synthetic database only"]
+    fn archive_poll_admits_profile_work_and_rejects_retired_results() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p403-"),
+                "{key}"
+            );
+        }
+        let database = crate::identity::database();
+        assert!(!database.exists());
+        assert!(!Config::path().exists());
+        POLL_PROBES.with_borrow_mut(|probes| *probes = Some(VecDeque::new()));
+        gtk::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn tick_twice() {
+            let complete = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(1100), {
+                let complete = complete.clone();
+                move || complete.set(true)
+            });
+            wait(|| complete.get());
+        }
+        fn wait_for_entry(receiver: &mpsc::Receiver<()>) {
+            let entered = std::cell::Cell::new(false);
+            wait(|| {
+                if receiver.try_recv().is_ok() {
+                    entered.set(true);
+                }
+                entered.get()
+            });
+        }
+        let barrier = || {
+            let (entered, observed) = mpsc::channel();
+            let (release, proceed) = mpsc::channel();
+            ((entered, proceed), observed, release)
+        };
+        let fixture = || {
+            let window = gtk::Window::new();
+            window.set_default_size(600, 400);
+            let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
+            let group = group(9403001, true);
+            let check = gtk::CheckButton::with_label("Synthetic archive");
+            body.append(&check);
+            let widgets = Rc::new(DownloadDialogWidgets {
+                rows: vec![DownloadDialogRow {
+                    group: group.clone(),
+                    check,
+                    state: DialogArtifactState::Available,
+                }],
+                products: vec![DownloadDialogProduct {
+                    product_id: group.product_id,
+                    slug: "synthetic".into(),
+                    parent_slug: None,
+                    title: "Synthetic".into(),
+                    artwork: None,
+                    groups: vec![group.clone()],
+                    is_primary: true,
+                }],
+                warnings: HashMap::new(),
+                product_content: HashMap::new(),
+                category_expanders: HashMap::new(),
+                plan_boxes: HashMap::new(),
+                product_toggles: HashMap::new(),
+                language_summary: gtk::Label::new(None),
+                summary: gtk::Label::new(None),
+                confirm: gtk::Button::with_label("Add to Download Queue"),
+                authenticated: false,
+                online: false,
+                artifact_states: RefCell::new(HashMap::new()),
+                libraries_available: RefCell::new(Vec::new()),
+            });
+            body.append(&widgets.language_summary);
+            body.append(&widgets.summary);
+            body.append(&widgets.confirm);
+            let state = Rc::new(RefCell::new(DownloadDialogState {
+                selected_products: HashSet::from([group.product_id]),
+                selected_operating_systems: BTreeSet::from(["windows".into()]),
+                selected_languages: BTreeSet::from(["English".into()]),
+                selected_groups: HashSet::from([group.job_id]),
+                include_extras: false,
+                include_patches: false,
+                applying: false,
+            }));
+            let model = Rc::new(RefCell::new(AppModel {
+                network_available: false,
+                library_statuses: vec![crate::storage::LibraryStatus {
+                    kind: LibraryKind::OfflineInstallers,
+                    library_id: "inert-poll-library".into(),
+                    path: crate::identity::data_root().join("never-created-library"),
+                    compatibility: crate::storage::LibraryCompatibility::Compatible,
+                    game_issues: Vec::new(),
+                }],
+                ..AppModel::default()
+            }));
+            window.set_child(Some(&body));
+            window.present();
+            wait(|| widgets.confirm.is_mapped());
+            (window, model, state, widgets)
+        };
+
+        // No readiness/token requirement: each new origin remains usable when signed out.
+        auth::invalidate_session();
+        for change in ["auth", "account"] {
+            let (window, model, state, widgets) = fixture();
+            let (held, entered, release) = barrier();
+            POLL_PROBES.with_borrow_mut(|probes| {
+                probes.as_mut().unwrap().push_back(PollProbe {
+                    before_read: Some(held),
+                    before_publish: None,
+                })
+            });
+            poll_download_selector(&window, &model, state.clone(), widgets.clone());
+            wait_for_entry(&entered);
+            assert!(
+                crate::profile_reset::reserve()
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("checking download choices")
+            );
+            if change == "auth" {
+                auth::invalidate_session();
+            } else {
+                online::invalidate_library_session();
+            }
+            release.send(()).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            tick_twice();
+            assert!(
+                !database.exists(),
+                "retired raw origin must stop before opening the database"
+            );
+            assert!(widgets.artifact_states.borrow().is_empty());
+            assert_eq!(state.borrow().selected_groups.len(), 1);
+            assert!(!widgets.confirm.is_sensitive());
+            window.destroy();
+        }
+
+        // Refusal consumes no probe; admission registers before the held worker can enter DB.
+        let (window, model, state, widgets) = fixture();
+        let frozen = crate::profile_reset::reserve().unwrap();
+        let (held, entered, release) = barrier();
+        let (published, ready, publish) = barrier();
+        POLL_PROBES.with_borrow_mut(|probes| {
+            probes.as_mut().unwrap().push_back(PollProbe {
+                before_read: Some(held),
+                before_publish: Some(published),
+            })
+        });
+        poll_download_selector(&window, &model, state.clone(), widgets.clone());
+        tick_twice();
+        assert_eq!(
+            POLL_PROBES.with_borrow(|probes| probes.as_ref().unwrap().len()),
+            1
+        );
+        assert!(entered.try_recv().is_err());
+        assert!(!database.exists());
+        drop(frozen);
+        wait_for_entry(&entered);
+        assert!(crate::profile_reset::reserve().is_err());
+        tick_twice(); // A real GTK timer advances while the worker is held across two poll ticks.
+        assert!(POLL_PROBES.with_borrow(|probes| probes.as_ref().unwrap().is_empty()));
+        assert!(!database.exists());
+        release.send(()).unwrap();
+        wait_for_entry(&ready);
+        assert!(database.is_file());
+        assert!(crate::profile_reset::reserve().is_err());
+        assert!(widgets.artifact_states.borrow().is_empty());
+        let selected = state.borrow().selected_groups.clone();
+        // Mutably borrowing the model from a refresh signal must work, and retirement
+        // there must prevent the next worker dispatch in this same timer callback.
+        widgets.summary.set_label("Waiting for current sample");
+        widgets.summary.connect_notify_local(Some("label"), {
+            let model = Rc::downgrade(&model);
+            move |_, _| model.upgrade().unwrap().borrow_mut().account_epoch += 1
+        });
+        publish.send(()).unwrap();
+        wait(|| model.borrow().account_epoch == 1);
+        wait(|| crate::profile_reset::reserve().is_ok());
+        tick_twice();
+        assert!(
+            widgets
+                .artifact_states
+                .borrow()
+                .values()
+                .all(|value| *value == DialogArtifactState::Available)
+        );
+        assert_eq!(widgets.artifact_states.borrow().len(), 1);
+        assert_eq!(state.borrow().selected_groups, selected);
+        assert!(widgets.summary.label().starts_with("1 download"));
+        assert!(!widgets.confirm.is_sensitive());
+        assert!(model.borrow().account_token.is_none());
+        assert!(!auth::session_is_current(auth::session()));
+        window.destroy();
+
+        // Results already read must not mutate a retired chooser. Owner loss is real Rc
+        // collection, distinct from hiding/closing a still-retained window.
+        for change in [
+            "epoch", "logout", "close", "destroy", "owner", "auth", "account",
+        ] {
+            let (window, model, state, widgets) = fixture();
+            let weak_model = Rc::downgrade(&model);
+            let weak_window = window.downgrade();
+            let mut window = Some(window);
+            let mut model = Some(model);
+            let (held, entered, release) = barrier();
+            POLL_PROBES.with_borrow_mut(|probes| {
+                probes.as_mut().unwrap().push_back(PollProbe {
+                    before_read: None,
+                    before_publish: Some(held),
+                })
+            });
+            poll_download_selector(
+                window.as_ref().unwrap(),
+                model.as_ref().unwrap(),
+                state.clone(),
+                widgets.clone(),
+            );
+            wait_for_entry(&entered);
+            let selected = state.borrow().selected_groups.clone();
+            let summary = widgets.summary.label();
+            let sensitive = widgets.confirm.is_sensitive();
+            match change {
+                "epoch" => model.as_ref().unwrap().borrow_mut().account_epoch += 1,
+                "logout" => model.as_ref().unwrap().borrow_mut().logout_pending = true,
+                "close" => window.as_ref().unwrap().close(),
+                "destroy" => window.take().unwrap().destroy(),
+                "owner" => drop(model.take()),
+                "auth" => auth::invalidate_session(),
+                "account" => online::invalidate_library_session(),
+                _ => unreachable!(),
+            }
+            if change == "owner" {
+                assert!(weak_model.upgrade().is_none());
+            }
+            if change == "destroy" {
+                wait(|| weak_window.upgrade().is_none());
+            }
+            tick_twice();
+            assert!(crate::profile_reset::reserve().is_err());
+            release.send(()).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            tick_twice();
+            assert!(widgets.artifact_states.borrow().is_empty());
+            assert_eq!(state.borrow().selected_groups, selected);
+            assert_eq!(widgets.summary.label(), summary);
+            assert_eq!(widgets.confirm.is_sensitive(), sensitive);
+            if let Some(window) = window {
+                window.destroy();
+            }
+        }
+        assert!(
+            POLL_PROBES
+                .with_borrow_mut(Option::take)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(crate::profile_reset::reserve().is_ok());
+        assert!(
+            StateStore::open()
+                .unwrap()
+                .download_jobs()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!Config::path().exists());
+    }
 
     fn group(product_id: i64, provider: bool) -> ArtifactGroup {
         let artifacts = (1..=2)

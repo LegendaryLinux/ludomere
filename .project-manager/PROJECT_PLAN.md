@@ -2,6 +2,11 @@
 
 ## R111 interactive audit
 
+- P406 (in_progress, ui_critic; reviewer file_summary): replace misleading success text claiming
+  live updates after forced Refresh with Follow off. One logs.rs literal: Saved launch output.
+  Preserve Follow/Refresh/read/paused/error semantics and P399 folder feedback. No new fixture
+  framework; source/fmt/build and existing private P399 actual-view regression are proportionate.
+
 - P405 (complete, ui_critic; reviewer file_summary): show Installation directory as a
   full-width selectable ActionRow subtitle instead of ellipsized suffix, matching existing
   destination rows. Isolated game_settings.rs one-row presentation only; markup disabled,
@@ -21,7 +26,7 @@
   passes after weak captures (p404-pbsnm7lk). Separate mapped dispatch/order gate p404-c5c_3fnl
   PASS; independent final source review/fmt/compile/Clippy PASS. Known private schema warnings.
 
-- P403 (in_progress, performance_audit; reviewer ui_critic): guard existing background archive chooser
+- P403 (complete, performance_audit; reviewer ui_critic): guard existing background archive chooser
   polling across profile freeze/logout and stale/closed dialog results. Proposal preserves500ms
   cadence, single worker, batching/fallbacks/actions; pre-spawn activity and original raw/model
   generations, weak owners and post-refresh recheck. Isolated download_chooser.rs and focused
@@ -29,6 +34,9 @@
   proposal review before implementation. The I/O was already off-thread, not a GTK migration.
   Proposal independently approved; preserve raw counters, guard through send and post-setter
   admission. Root gates actual wiring with private inert worker barriers plus P338 equivalence.
+  Final exact actual-wiring private gate p403-3132_dmv PASS after independently reviewed
+  fixture-only compatible-library correction. Strict assertions/production unchanged; first
+  failure retained. P338 matching/loader/presentation regressions PASS. Compile/fmt PASS.
 
 - P402 (complete, ui_critic; reviewer performance_audit): correct singular file count in
   Properties archive category and its confirmation. Two strings only, preserve count/bytes/

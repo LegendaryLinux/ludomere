@@ -48,6 +48,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P403 corrected exact gate PASS p403-3132_dmv with no GTK warnings: frozen admission creates
+  no DB, activity exists before worker entry and through result send, duplicate ticks do not
+  dispatch, raw/session/owner/logout retirement rejects work/results, mutable-model notify
+  reentry retires without next dispatch. Existing P338 pure matching/loader PASS
+  p338-y55d9lnk/sg17spnr; actual presentation PASS p338-x0n0cpvx (known schema warnings only).
+  Independent final/correction reviews and fmt/compile PASS. Initial fixture failure retained;
+  no production policy or original strict assertion changed to obtain PASS.
+  P405 commitdbdf61a exact post-build PASS,74 built audit commits.
+
 - P405 actual full-path row passes950px,680px and enforced561px minimum allocation; at561px
   path wraps across two lines with no ellipsis and Browse remains accessible. Focused Ctrl+A
   selects the complete displayed path; clipboard untouched. Screenshots p405-path-{normal,
