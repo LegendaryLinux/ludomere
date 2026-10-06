@@ -3,6 +3,20 @@
 Window: 08:13:55–20:13:55 UTC. Branch: `improvement/interactive-ux-audit-2026-10-06`.
 Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
+## Consolidated verification checkpoint
+
+- At6b7328d the private build gate passes cargo fmt, all-target Clippy with warnings denied,
+ 566 library tests, six integration tests, five Python helper tests and cargo build --locked.
+ 57 ignored library entries are excluded by default; changed GTK paths were exercised separately.
+ Log: /tmp/ludomere-r111-full-build-odjoz3gv/build.log. No exhaustive UI coverage claim.
+- Two earlier harness failures retained: symlink helper blocker destination, then absent synthetic
+ UID records preventing private D-Bus authentication. Wrapper now resolves/deduplicates blocked
+ helpers and mounts only generated current-UID passwd/group/files-only NSS records. No real account
+ database, wallet, desktop or external networking exposed; product tests were not weakened.
+- Live P343/P345/P346 retest passes: healthy uninstall hides Retry/collapses alternative recovery,
+ retains warnings/archive-default, restores blue Download/arrow in place, and source switching in
+ the same chooser shows full paths while hiding Depot feedback for offline selections.
+
 ## Live testing
 
 - Additional live controls: Comet manual check shows immediate checking/disabled button and
@@ -269,6 +283,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   missing glib import fixed without adding a production GTK dependency.
 
 ## Remaining gates and live evidence
+
+### P349 — bound repeated grid-scroll work
+
+- Coalesce adjustment notifications into one75ms trailing pass reading the latest viewport;
+  weak grid references reject hidden/destroyed work. Preserve immediate map/rebuild updates,
+  visible-first/nearby order and existing exact bounds; filtered/unmapped rows skip geometry work.
+- Independent review, strict private500-card geometry/burst/filter/lifecycle/focus regression and
+  formatting/Clippy/build PASS. A burst of20 changes produces one deferred publication instead of
+ 20 scans. Each scan remains linear; no measured frame-rate or virtualization claim.
 
 ### P346 — accurate install destinations and source-specific feedback
 

@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P349 strict500-card mapped regression, independent review, formatting/Clippy/build PASS;
+  preparing separate commit. Live native Gungeon offline download started via unified chooser,
+  visible blue Pause/list status, separate archive/game destinations. Reserve8GB of40GB aggregate.
+
+- Consolidated isolated tools/check.sh plus cargo build PASS at6b7328d. Initial harness-only
+  failures (symlink blocker mount; absent synthetic NSS identity for private DBus) corrected without
+  product/test changes or exposing host account files. Final log full-build-odjoz3gv/build.log.
+  Real Gungeon Depot uninstall now restores blue Download/arrow in place, keeps archive, and shows
+  healthy collapsed recovery options with warnings intact. New chooser displays exact paths.
+
 - P346 final independent visibility review and both private chooser/multipart regressions PASS;
   fmt/Clippy/build PASS. Destination frame timing fixed in fixture; actual hidden-parent visibility
   bug corrected with own-property checks, weak captures avoid status-widget cycles. Obsolete mount

@@ -39,7 +39,7 @@
 - P335 (complete, file_summary; reviewer ui_critic): reuse cached-startup SQLite store and one product reconstruction
   for Metadata/Acquisition readiness; preserve TTL/errors/receivers. Isolated online.rs and cached
   worker only; root coordinates integration with P334. No schema or new cache framework.
-- P336 (review, file_summary): prepare a private-profile consolidated build harness only;
+- P336 (complete for6b7328d, file_summary): prepare a private-profile consolidated build harness only;
   root reviews and executes later. No real desktop, credentials, games or product edits.
 - P337 (complete, ui_critic; reviewer performance_audit): release the mutable model borrow before
   sidebar filter invalidation after game exit. Live Coffee Talk Stop shows all rows despite query
@@ -69,7 +69,7 @@
   assurance found cancellation's GTK admission can wait on another operation's persistence.
 - P348 (complete, performance_audit; reviewer file_summary): remove that blocking cancellation admission without dropping
   recovery-generation, profile-activity or ownership safeguards; deterministic held-lock regression.
-- P349 (review, performance_audit; reviewer file_summary): coalesce Home scroll cover-priority
+- P349 (complete, performance_audit; reviewer file_summary): coalesce Home scroll cover-priority
   scans, skip filtered/unmapped rows and retain latest viewport/lifetime safeguards. Own library.rs
   in isolated checkout; source work-count evidence and strict mapped equivalence/lifecycle fixture.
   No grid virtualization, backend queue redesign, real data or main edits before review.

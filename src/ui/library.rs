@@ -366,24 +366,45 @@ pub(super) fn initialize_library_loading(w: &Widgets, model: &Rc<RefCell<AppMode
         let state = model.clone();
         popover.connect_show(move |_| request_filter_metadata(&widgets, &state, false));
     }
-    if let Some(scroll) = w
-        .home_grid
-        .ancestor(gtk::ScrolledWindow::static_type())
-        .and_downcast::<gtk::ScrolledWindow>()
-    {
-        let widgets = w.clone_refs();
-        scroll
-            .vadjustment()
-            .connect_value_changed(move |_| prioritize_grid_covers(&widgets));
-        let widgets = w.clone_refs();
-        scroll.connect_map(move |_| prioritize_grid_covers(&widgets));
-    }
+    connect_grid_cover_priorities(&w.home_grid, online::prioritize_covers);
     refresh_filters(w, &model.borrow());
 }
 
-fn prioritize_grid_covers(w: &Widgets) {
-    let Some(scroll) = w
-        .home_grid
+fn connect_grid_cover_priorities(grid: &gtk::FlowBox, publish: impl Fn(Vec<i64>) + 'static) {
+    let Some(scroll) = grid
+        .ancestor(gtk::ScrolledWindow::static_type())
+        .and_downcast::<gtk::ScrolledWindow>()
+    else {
+        return;
+    };
+    let publish: Rc<dyn Fn(Vec<i64>)> = Rc::new(publish);
+    let pending = Rc::new(std::cell::Cell::new(false));
+    scroll.vadjustment().connect_value_changed({
+        let grid = grid.downgrade();
+        let publish = publish.clone();
+        move |_| {
+            if pending.replace(true) {
+                return;
+            }
+            let pending = pending.clone();
+            let grid = grid.clone();
+            let publish = publish.clone();
+            glib::timeout_add_local_once(Duration::from_millis(75), move || {
+                pending.set(false);
+                if let Some(grid) = grid.upgrade() {
+                    prioritize_grid_covers(&grid, publish.as_ref());
+                }
+            });
+        }
+    });
+    grid.connect_map(move |grid| prioritize_grid_covers(grid, publish.as_ref()));
+}
+
+fn prioritize_grid_covers(grid: &gtk::FlowBox, publish: &dyn Fn(Vec<i64>)) {
+    if !grid.is_mapped() {
+        return;
+    }
+    let Some(scroll) = grid
         .ancestor(gtk::ScrolledWindow::static_type())
         .and_downcast::<gtk::ScrolledWindow>()
     else {
@@ -391,10 +412,10 @@ fn prioritize_grid_covers(w: &Widgets) {
     };
     let mut visible = Vec::new();
     let mut nearby = Vec::new();
-    let mut child = w.home_grid.first_child();
+    let mut child = grid.first_child();
     while let Some(widget) = child {
         child = widget.next_sibling();
-        if !widget.is_visible() {
+        if !widget.is_mapped() || !widget.is_child_visible() {
             continue;
         }
         let Some(card) = widget.first_child() else {
@@ -415,7 +436,234 @@ fn prioritize_grid_covers(w: &Widgets) {
         }
     }
     visible.extend(nearby);
-    online::prioritize_covers(visible);
+    publish(visible);
+}
+
+#[test]
+#[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+fn cover_priorities_coalesce_scrolls_and_preserve_geometry_and_lifetime() {
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR",
+        "TMPDIR",
+    ] {
+        assert!(
+            std::env::var(key)
+                .unwrap()
+                .starts_with("/tmp/ludomere-p349-")
+        );
+    }
+    adw::init().unwrap();
+    gtk::Settings::default()
+        .unwrap()
+        .set_gtk_enable_animations(false);
+    fn wait(check: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !check() && std::time::Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(check());
+    }
+    fn settle() {
+        let elapsed = Rc::new(std::cell::Cell::new(false));
+        glib::timeout_add_local_once(Duration::from_millis(120), {
+            let elapsed = elapsed.clone();
+            move || elapsed.set(true)
+        });
+        wait(|| elapsed.get());
+    }
+    let window = gtk::Window::builder()
+        .default_width(700)
+        .default_height(500)
+        .build();
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let search = gtk::Entry::new();
+    search.set_text("preserved query");
+    content.append(&search);
+    let stack = gtk::Stack::new();
+    stack.set_vexpand(true);
+    content.append(&stack);
+    let grid = gtk::FlowBox::builder()
+        .min_children_per_line(4)
+        .max_children_per_line(4)
+        .column_spacing(8)
+        .row_spacing(8)
+        .selection_mode(gtk::SelectionMode::None)
+        .build();
+    let cards = (0..500)
+        .map(|id| {
+            let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            card.set_widget_name(&id.to_string());
+            card.set_size_request(120, 70);
+            card.append(&gtk::Label::new(Some(&format!("Game {id}"))));
+            grid.insert(&gtk::FlowBoxChild::builder().child(&card).build(), -1);
+            card
+        })
+        .collect::<Vec<_>>();
+    let scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .child(&grid)
+        .build();
+    stack.add_named(&scroll, Some("home"));
+    stack.add_named(&gtk::Label::new(Some("Other page")), Some("details"));
+    stack.set_visible_child_name("home");
+    window.set_child(Some(&content));
+    let publications = Rc::new(RefCell::new(Vec::<Vec<i64>>::new()));
+    connect_grid_cover_priorities(&grid, {
+        let publications = publications.clone();
+        move |ids| publications.borrow_mut().push(ids)
+    });
+    let published_on_map = Rc::new(std::cell::Cell::new(false));
+    grid.connect_map({
+        let publications = publications.clone();
+        let published_on_map = published_on_map.clone();
+        move |_| published_on_map.set(!publications.borrow().is_empty())
+    });
+    window.present();
+    wait(|| grid.is_mapped() && cards[499].height() > 0 && scroll.vadjustment().upper() > 500.0);
+    settle();
+    assert!(
+        published_on_map.get(),
+        "mapping must publish without waiting for the scroll throttle"
+    );
+    assert!(search.grab_focus());
+    let focus = gtk::prelude::GtkWindowExt::focus(&window);
+    let selected = grid.selected_children();
+    let adjustment = scroll.vadjustment();
+    let maximum = adjustment.upper() - adjustment.page_size();
+    // Preserve the original inclusive viewport/nearby partition, in card order.
+    let expected = || {
+        let mut visible = Vec::new();
+        let mut nearby = Vec::new();
+        for (id, card) in cards.iter().enumerate() {
+            let wrapper = card.parent().unwrap();
+            if !wrapper.is_child_visible() || !wrapper.is_mapped() {
+                continue;
+            }
+            let bounds = card.compute_bounds(&scroll).unwrap();
+            let top = bounds.y();
+            let bottom = top + bounds.height();
+            let height = scroll.height() as f32;
+            if top <= height && bottom >= 0.0 {
+                visible.push(id as i64);
+            } else if top <= 2.0 * height && bottom >= -height {
+                nearby.push(id as i64);
+            }
+        }
+        assert!(!visible.is_empty());
+        visible.extend(nearby);
+        visible
+    };
+    adjustment.set_value(1.0);
+    settle();
+    for position in [0.0, maximum / 2.0, maximum] {
+        adjustment.set_value(position);
+        settle();
+        // The same collector is called directly at the end of an incremental rebuild.
+        let immediate = Rc::new(RefCell::new(Vec::new()));
+        prioritize_grid_covers(&grid, &|ids| *immediate.borrow_mut() = ids);
+        assert_eq!(*immediate.borrow(), expected());
+        assert_eq!(publications.borrow().last().unwrap(), &expected());
+    }
+    publications.borrow_mut().clear();
+    for index in 1..=20 {
+        adjustment.set_value(maximum * index as f64 / 25.0);
+    }
+    assert!(
+        publications.borrow().is_empty(),
+        "scroll notifications must not synchronously scan/publish"
+    );
+    wait(|| !publications.borrow().is_empty());
+    assert_eq!(
+        publications.borrow().len(),
+        1,
+        "a burst must have one trailing pass"
+    );
+    assert_eq!(
+        publications.borrow()[0],
+        expected(),
+        "the pass must read the final viewport"
+    );
+    settle();
+    assert_eq!(publications.borrow().len(), 1);
+    adjustment.set_value(maximum / 3.0);
+    wait(|| publications.borrow().len() == 2);
+    assert_eq!(
+        publications.borrow()[1],
+        expected(),
+        "pending must reset for subsequent movement"
+    );
+    assert_eq!(search.text(), "preserved query");
+    assert_eq!(gtk::prelude::GtkWindowExt::focus(&window), focus);
+    assert_eq!(grid.selected_children(), selected);
+    assert_eq!(stack.visible_child_name().as_deref(), Some("home"));
+
+    grid.set_filter_func(|child| {
+        child
+            .child()
+            .unwrap()
+            .widget_name()
+            .parse::<usize>()
+            .unwrap()
+            .is_multiple_of(7)
+    });
+    settle();
+    adjustment.set_value((adjustment.upper() - adjustment.page_size()) / 2.0);
+    settle();
+    let filtered = Rc::new(RefCell::new(Vec::new()));
+    prioritize_grid_covers(&grid, &|ids| *filtered.borrow_mut() = ids);
+    assert_eq!(*filtered.borrow(), expected());
+    assert!(filtered.borrow().iter().all(|id| id % 7 == 0));
+    assert!(cards[1].parent().unwrap().is_visible());
+    assert!(!cards[1].parent().unwrap().is_child_visible());
+
+    publications.borrow_mut().clear();
+    adjustment.set_value(0.0);
+    stack.set_visible_child_name("details");
+    assert!(!grid.is_mapped());
+    settle();
+    assert!(
+        publications.borrow().is_empty(),
+        "pending work must not publish from hidden Home"
+    );
+    prioritize_grid_covers(&grid, &|_| panic!("hidden rebuild must not publish"));
+    stack.set_visible_child_name("home");
+    assert!(
+        !publications.borrow().is_empty(),
+        "remapping must refresh immediately"
+    );
+    settle();
+    assert_eq!(publications.borrow().last().unwrap(), &expected());
+    assert_eq!(gtk::prelude::GtkWindowExt::focus(&window), focus);
+    assert_eq!(stack.visible_child_name().as_deref(), Some("home"));
+    assert_eq!(
+        grid.child_at_index(499).unwrap().child().as_ref(),
+        Some(cards[499].upcast_ref())
+    );
+
+    publications.borrow_mut().clear();
+    adjustment.set_value((adjustment.upper() - adjustment.page_size()) / 2.0);
+    let weak_grid = grid.downgrade();
+    window.destroy();
+    drop(window);
+    drop(content);
+    drop(stack);
+    drop(scroll);
+    drop(grid);
+    drop(cards);
+    // The adjustment is deliberately retained: its handler and timeout must own only a weak grid.
+    assert!(weak_grid.upgrade().is_none());
+    settle();
+    assert!(
+        publications.borrow().is_empty(),
+        "destroyed Home must not publish stale priorities"
+    );
+    drop(adjustment);
 }
 
 pub(super) fn rebuild_library(w: &Widgets, model: &Rc<RefCell<AppModel>>) {
@@ -518,7 +766,7 @@ pub(super) fn rebuild_library(w: &Widgets, model: &Rc<RefCell<AppModel>>) {
                 rebuild_sidebar_presentation(&w, &mut model.borrow_mut());
                 refresh_filters(&w, &model.borrow());
                 w.home_grid.invalidate_sort();
-                prioritize_grid_covers(&w);
+                prioritize_grid_covers(&w.home_grid, &online::prioritize_covers);
                 if w.filter_button
                     .popover()
                     .is_some_and(|popover| popover.is_visible())
