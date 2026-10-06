@@ -165,7 +165,7 @@
   original raw auth/online generations and receiver rejection, preserving signed-out/offline local
   inspection. No token lookup/network, mutex over I/O or claimed atomic cancellation of in-flight
   reconciliation. Actual delayed worker/reset admission/stale/error/close fixtures required.
-- P369 (in_progress, file_summary; reviewer ui_critic): approved initial Cloud Saves local record
+- P369 (complete, file_summary; reviewer ui_critic): approved initial Cloud Saves local record
   loading only, isolated game_settings.rs. Mechanically extract existing controls, one tracked
   worker, explicit loading/error/Retry; raw original generations and weak original-window lifetime.
   Hidden tab may populate, closed window may not; stale shell gives close/reopen guidance. Real
@@ -176,7 +176,7 @@
   component consent layout only, isolated chooser. Header outside padded body, matching left
   alignment/top-aligned list; preserve consent/actions/admission. Actual short/long text origin,
   scrolling and400px parent controls fixture, no helper/queue/network/realdata execution.
-- P370b (ready after P370a, ui_critic; reviewer performance_audit): approved setup Details
+- P370b (in_progress, ui_critic; reviewer performance_audit): approved setup Details
   counter wording only. Separate actual payload writes/full estimate, explain potential reuse,
   scoped known-zero Depot downloads; dependencies/unknown-origin amounts are processed data, not
   necessarily network traffic. No backend counter, completion, policy or inferred reuse changes.
@@ -190,11 +190,12 @@
   lifecycle proposal, separate from local loader and override race. Capture original authenticated
   session before work, tracked activity, weak feedback and safe inert fixtures; no source edits,
   actual account/cloud/profile/desktop/helper access. Implementation waits for P369 and review.
-- P373 (in_progress diagnosis, performance_audit): root live Notifications shows repeated Checking
-  Windows requirements/Ready despite results-only history policy. Source-only inspect
-  proton::with_windows_components transient progress routing and propose narrow feedback fix
-  preserving terminal errors, pending indicators and unrelated footer activity. No source edits,
-  actual profile/desktop/helper access or architectural UMU changes.
+- P373 (in_progress, performance_audit; reviewer file_summary): approved narrow transient
+  Windows-check footer slot in isolated proton.rs/window.rs. Per-request weak label ownership,
+  one visible line with overlap-safe cleanup; remove progress/Ready history writes, preserve
+  actual errors/Finish setup and unrelated live/history labels. Inert actual-function/footer
+  concurrency/reentry/error/lifetime/compact geometry fixture; no actual helpers/data, backend
+  or UMU architecture changes. Missing optional slot must not block existing action dispatch.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

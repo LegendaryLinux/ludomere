@@ -24,6 +24,19 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P369 new actual Cloud local-loader fixture PASS (/tmp/ludomere-p369-1qnzpsyc): reader-blocking
+  SQLite lock/GTK heartbeat, accurate saved/missing records, real read error/Retry, unchanged
+  database, signed-out local access, original sessions, weak closed/hidden/detached pages and
+  synchronous Retry reentry. Existing P267 cloud-action regression PASS
+  (/tmp/ludomere-p267-5uva2eia). Independent mechanical extraction/lifecycle review and
+  compile/fmt/Clippy PASS. No cloud request or automatic discovery; metadata/override issues
+  remain separate. Live Properties retest pending next app restart.
+
+- Liveb2629ce app log aggregate after these tests: no panic/RefCell borrow/Adwaita critical and
+  no Gtk warnings, but one Gtk critical at08:49:52 local (`gtk_widget_is_ancestor` invalid widget)
+  near the Coffee repair flow. No observed crash or stuck UI; cause not established. Retain as
+  an open diagnostic, do not claim a warning-free live run or infer a speculative source fix.
+
 - P370a consent spacing independently reviewed; final actual mapped short/long text,400px footer
   and error scrolling fixture PASS (/tmp/ludomere-p370a-5o79fn4z). Compile/fmt/Clippy PASS.
   Two earlier fixture failures assumed flush HeaderBar bounds; installed libadwaita stylesheet
