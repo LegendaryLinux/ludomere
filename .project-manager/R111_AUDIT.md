@@ -65,6 +65,19 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   setup completed; retain downloaded game files and investigate before retrying or resetting.
 
 ## Findings queued
+### P330 — discover the credential service before reading a saved login
+
+- Saved-login reads reuse existing bounded Secret Service discovery/advertised provider activation.
+  Standard providers remain preferred; KDE compatibility activation is used only when advertised.
+  No wallet settings changed, new provider hardcoding, plaintext fallback or token cache added.
+- Preserve original authentication generation and durable sign-out barriers before discovery,
+  before credential read and after read. Discovery itself does not request unlock or collection
+  access; the keyring's existing credential-read behavior still applies afterward.
+- Independent security/lifecycle review PASS. Seven focused synthetic/private-bus regressions,
+  formatting, all-target Clippy and cargo build --locked PASS. User-unlocked real provider remains
+  running; no forced wallet restart/lock was used to claim a cold-start integration test.
+
+## Further findings
 
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.

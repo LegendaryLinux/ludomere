@@ -19,13 +19,16 @@
 - P329 (ready, file_summary): move managed-file summary reads/stats off GTK with current-view,
   session and request guards. Isolated checkout /tmp/ludomere-r111-file-summary at ec29d3d;
   own ui/mod.rs helper and necessary call-site plumbing in ui/files.rs. No main-tree edits.
-- P330 (review, reliability_audit; reviewer performance_audit): ensure saved-login reads use existing credential-provider discovery/activation,
+- P330 (complete, reliability_audit; reviewer performance_audit): ensure saved-login reads use existing credential-provider discovery/activation,
   not just interactive sign-in. Live KDE6.29 advertises org.kde.secretservicecompat; activation
   restored org.freedesktop.secrets and user unlocked normally. No wallet configuration changes.
 - P331 (in_progress diagnosis, reliability_audit): investigate Coffee Talk's official .NET4.5.2
   helper exit194 after successful DirectX setup. Verify Windows-to-Unix exit translation and
   narrowly scoped success/reboot semantics before any implementation; no skipped requirements.
-- P327 (pending): Depot cancellation confirmation/background cleanup and terminal failure handling;
+- P332 (in_progress design, ui_critic): improve setup failure readability observed in real Coffee Talk
+  test; own isolated download_chooser.rs, concise pinned outcome and full selectable diagnostics,
+  terminal titles, no retry/execution/focus changes. Private fixtures only; root runs gates.
+- P327 (in_progress design, performance_audit): Depot cancellation confirmation/background cleanup and terminal failure handling;
   inspect data impact before assigning minimal implementation. Preserve files on safety refusal.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
