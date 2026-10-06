@@ -38,6 +38,36 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P390 final private gate PASS (p390-6yecu2en), including separate real library/account counters,
+  reentry, terminal restoration, closed/stale/no-start/local paths. Correct native fixture parent
+  eliminates row-focus criticals; only known private GSettings-schema warnings remain. Final
+  fmt, all-target Clippy and test compilation PASS. Independent container/spacing corrections GO.
+  Actual Settings progress/completion already passed on identical production logic before6px margin.
+
+- P390 corrected counter design passes independent source review and initial private actual-control
+  gate (p390-5uk_o904), fmt/Clippy/compile. Fixture ActionRow incorrectly used a Box parent,
+  producing focus criticals; independently reviewed fixture-only PreferencesGroup correction
+  restores the native hierarchy before final gate. Production real Settings run had zero panic,
+  Gtk-CRITICAL or GLib-GIO-CRITICAL markers. One explicit Refresh immediately showed disabled
+  Refreshing and Game list250/569, then enabled Refresh and synchronization-finished text.
+  Screenshots p390-maintenance-{idle,running,finished}.png; app-maintenance-preview.log.
+  Normal tray Close exits the test instance. Small local feedback spacing correction pending.
+
+- P392 frozen source GO includes review correction: same-session Windows foreground refusal
+  after Starting repeats existing retry guidance instead of leaving false Starting text;
+  revoked-account rejection stays silent. P393 weak-management-popup implementation source GO.
+  Both await root focused compile/runtime gates; no actual reset or game launch used by fixtures.
+
+- P390 pre-integration review caught and corrected a shared proposal mistake: begin_library_session
+  advances LIBRARY_SESSION, not raw ACCOUNT_SESSION. Earlier adoption design/review superseded;
+  no mistaken draft entered main. Root and both agents independently reread the two APIs.
+  Corrected local observer retains original account/auth/epoch, follows model sync_generation,
+  and rejects every account invalidation. This removes unnecessary adoption machinery.
+
+- P389 commitde41bc5 exact post-build PASS;62 built audit commits. P392 isolation starts from
+  that committed tray lifecycle; its profile-work guards remain separate. P390 contract reduced
+  to current-sync feedback, O(1) idle snapshots and no original/newer attribution machinery.
+
 - P389 corrected exact lifecycle gate PASS (p389-5k6sf0cd); disposal helper waits for producer
   disconnect and rejects duplicate acknowledgments. Independent source/correction GO;
   fmt/Clippy/compile/build PASS. Real KDE app270006 advertises expected tray commands, normal

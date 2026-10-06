@@ -2,16 +2,31 @@
 
 ## R111 interactive audit
 
-- P392 (in_progress assessment, performance_audit): tray recent-game menu/launch inspection
+- P393 (review, file_summary; reviewer performance_audit): source-audit game-management popup strong
+  captures in close handlers (files.rs main/manage action loops) after unparented context use.
+  Bounded component-lifetime proposal only; no whole-window release claim or broad conversion.
+  Independent proposal GO: three weak-target blocks, unchanged signal/action/close ordering,
+  actual builder in existing focused fixture; preserve P385 file-row popup behavior.
+
+- P392 (review, performance_audit; reviewer file_summary): tray recent-game menu/launch inspection
   accesses profile without activity admission; bounded guards/session proposal separate from
   P389 startup. Preserve signed-out local use, menu order and installedness; private fixtures
   only, no actual reset/account or menu DB operations. No implementation before review.
+  Independent proposal GO, including repeated existing Windows foreground/detail check after
+  status setters. Isolated base de41bc5 retains completed P389; no startup lifecycle changes.
 
-- P390 (in_progress implementation, ui_critic; reviewer performance_audit): Maintenance metadata refresh local feedback and
+- P390 (complete, ui_critic; reviewer performance_audit): Maintenance metadata refresh local feedback and
   repeat-click prevention using current sync state/generation. Proposal before edits; preserve
   global refresh, signed-out reconciliation, terminal errors and weak Settings lifetime.
   Independent proposal GO; settings.rs only. Signed-out local request acknowledgment retained,
   no fabricated local completion/duplicate suppression. Exact inert-action GTK fixture required.
+  Review erratum: original proposal confused LIBRARY_SESSION with ACCOUNT_SESSION. Root and
+  both agents verified separate counters in online.rs236–297. No old draft integrated. Correct
+  design keeps original raw account/auth/epoch fixed and observes model sync_generation only;
+  no comparing sync_session to account_session or adopting a changed account. Fixtures must
+  model actual separate library/account generation APIs. Current-sync wording remains neutral.
+  Final private actual-control gate, real Settings refresh, fmt/Clippy/compile PASS; native
+  fixture container correction removes fixture row-focus criticals. Six-pixel feedback spacing.
 - P391 (complete, ui_critic; reviewer file_summary): prevent empty/whitespace tag Rename dismissing without action.
   Narrow response sensitivity/entry hint, preserve backend guard/Delete/Cancel and account scope.
   No tag model/persistence redesign; proportionate existing fixture if implementation authorized.
