@@ -1164,6 +1164,10 @@ fn settings_account_page(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) -> adw:
         .propagate_natural_height(true)
         .child(&reset_status)
         .build();
+    reset_status
+        .bind_property("visible", &reset_status_scroll, "visible")
+        .sync_create()
+        .build();
     reset.connect_clicked({
         let w = w.clone();
         let model = model.clone();
@@ -1351,6 +1355,50 @@ mod tests {
         };
         pump(Duration::from_millis(1100));
         assert_eq!(changes.get(), 0, "unchanged status must not notify");
+        {
+            let reset_status = find_named_descendant(page.upcast_ref(), "factory-reset-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let scroll = reset_status
+                .ancestor(gtk::ScrolledWindow::static_type())
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let group = scroll
+                .ancestor(adw::PreferencesGroup::static_type())
+                .and_downcast::<adw::PreferencesGroup>()
+                .unwrap();
+            assert!(!reset_status.get_visible());
+            assert!(!scroll.get_visible());
+            assert!(!scroll.is_mapped());
+            let collapsed_height = group.height();
+            assert!(collapsed_height > 0);
+
+            // Exercise presentation only; never invoke Factory Reset or its worker.
+            reset_status.set_label("Synthetic reset preparation feedback");
+            reset_status.set_visible(true);
+            wait(|| scroll.is_mapped() && group.height() > collapsed_height);
+            let error = format!(
+                "{}\nSynthetic terminal cause. Use Factory Reset above to retry.",
+                "Synthetic complete error detail.\n".repeat(40)
+            );
+            reset_status.set_label(&error);
+            wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+            assert!(reset_status.is_mapped());
+            assert_eq!(reset_status.text(), error);
+            assert!(reset_status.is_selectable());
+            assert!(reset_status.wraps());
+            assert_eq!(scroll.max_content_height(), 160);
+            assert_eq!(scroll.vscrollbar_policy(), gtk::PolicyType::Automatic);
+            assert!(scroll.vadjustment().page_size() > 0.0);
+            assert!(scroll.vadjustment().page_size() <= 160.0);
+            scroll.vadjustment().set_value(scroll.vadjustment().upper());
+            assert!(scroll.vadjustment().value() > 0.0);
+            assert_eq!(reset_status.text(), error);
+            reset_status.set_visible(false);
+            wait(|| !scroll.is_mapped() && group.height() == collapsed_height);
+            assert!(!scroll.get_visible());
+            assert_status("Offline");
+        }
         model.borrow_mut().network_available = true;
         assert_status("Authentication required");
         let token = auth::Token {

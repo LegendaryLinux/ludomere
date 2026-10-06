@@ -150,7 +150,7 @@
   unrelated raw preferences, plus unchanged initial autosave suppression. Own game_settings.rs/state.rs
   only after reviewer acceptance; no sections field, new lock, marker/body invalidation or claim
   that stale installation identity is fully fixed. No real data; preserve changed-save retries.
-- P366 (in_progress, file_summary; reviewer performance_audit): hide Account's empty reset-status
+- P366 (complete, file_summary; reviewer performance_audit): hide Account's empty reset-status
   scroller with one-way own-visible binding to label. Own isolated settings.rs and existing P359
   fixture: synthetic long error mapping/scroll/collapse, no actual Factory Reset or private screenshot.
 - P367 (in_progress, ui_critic; reviewer performance_audit): live native Repair fallback has edge-touching generic

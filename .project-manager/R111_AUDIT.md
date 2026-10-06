@@ -105,6 +105,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Fixes
 
+### P366 — collapse unused Factory Reset feedback space
+
+- Bind the reset-status scroller's own visibility to its label, collapsing the empty reserved
+  area while retaining real progress and full selectable, capped-height error scrolling.
+- Independent review, extended actual Account layout/status/lifetime fixture (p359-anwwrai6),
+  formatting, Clippy and compilation PASS. Synthetic feedback expands, scrolls and collapses to
+  the original measured height; no Factory Reset action, account change or private data in test.
+
 ### P364 — show update-check progress and results inside Settings
 
 - Immediately disable duplicate check activation and show local pending/result/refusal/error text.
