@@ -2,11 +2,19 @@
 
 ## R111 interactive audit
 
-- P401 (in_progress, ui_critic; reviewer performance_audit): generic new Properties window opens
+- P402 (in_progress, ui_critic; reviewer performance_audit): correct singular file count in
+  Properties archive category and its confirmation. Two strings only, preserve count/bytes/
+  delete consent and behavior; isolated files.rs, source/fmt/build and root one-file visual gate.
+  No new fixture framework or actual deletion. Retired-version copy workaround deferred in
+  favor of considering an in-place update, with no implementation authorized yet.
+
+- P401 (complete, ui_critic; reviewer performance_audit): generic new Properties window opens
   General first, retaining explicit Cloud Saves access and selected page in an existing window.
   Own isolated game_settings.rs navigation-array order only; source confirms sole generic caller.
   Root actual native-game Properties/default/Cloud/reopen check, formatting/build; no new policy
   or test framework. Feature/play-mode semantic deduplication remains deferred.
+  Root live p401-general-default.png and p401-existing-cloud-retained.png verify General first,
+  Cloud accessible and reused window retains Cloud. Source review/fmt/build PASS.
 
 - P400 (complete for bounded source coverage, performance_audit): cumulative R111 auth/credential,
   installation/marker and download changes against5c0d5cb, focusing lifecycle/session, path/data

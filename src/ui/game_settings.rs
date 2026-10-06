@@ -444,16 +444,16 @@ pub(super) fn show_game_settings(
 
     for (name, title, icon, page) in [
         (
-            "cloud-saves",
-            "Cloud Saves",
-            "folder-remote-symbolic",
-            cloud_page.upcast::<gtk::Widget>(),
-        ),
-        (
             "general",
             "General",
             "preferences-system-symbolic",
             general_page.upcast::<gtk::Widget>(),
+        ),
+        (
+            "cloud-saves",
+            "Cloud Saves",
+            "folder-remote-symbolic",
+            cloud_page.upcast::<gtk::Widget>(),
         ),
         (
             "compatibility",

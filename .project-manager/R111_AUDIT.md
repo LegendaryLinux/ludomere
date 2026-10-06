@@ -43,6 +43,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P401 live General-first PASS: new Gungeon Properties opens General, Cloud remains accessible,
+  invoking Properties again preserves Cloud in the same existing window. Screenshots
+  p401-general-default.png and p401-existing-cloud-retained.png; app-properties-default-preview.log
+  has no panic/Gtk-CRITICAL/GLib-GIO-CRITICAL. Source review/fmt/build PASS; no settings changed.
+
+- P393 staged-owner diagnostic p393-uau89w2h observes unchanged retention after dropping hover,
+  Refresh and Hide owners separately. Diagnostic exit0 is not original acceptance PASS; original
+  strict lifecycle assertion remains unmet. Temporary diagnostics and candidate removed again.
+  Independently reviewed native three-case baseline authorized, without application/backend code.
+  P399 commit624bf6a exact post-build PASS,70 built audit commits.
+
 - P399 private actual-view/reader gate PASS p399-35yn4yyi: sanitized selectable folder failure
   survives two real synthetic-log updates, selection/pause/Refresh, and clears on retry/success/
   retirement. Queued late error and signal-time retirement cannot dispatch/update obsolete views.
