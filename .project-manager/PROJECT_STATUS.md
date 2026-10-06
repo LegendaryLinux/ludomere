@@ -4,182 +4,45 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
-- P352 admission follow-up independent review, five private regressions and fmt/Clippy/build PASS.
-  Protected Storage reads now share pure marker normalization without weakening read/write checks.
-  Separate follow-up commit next, then real native retry. P354/P357 remain isolated implementations.
-
-- P352 committed34c4c59 exact postbuild PASS. Live native retry exposed another marker reader:
-  Storage launch admission validates raw JSON without the canonical recovery path, still rejecting
-  the known marker. No game launched or prefix repair accepted. P352 follow-up assigned for shared
-  normalization with existing protected reads retained; do not claim end-to-end recovery complete.
-
-- P352 four focused private native/Windows preparation, marker, completion and reconciliation
-  regressions PASS; independent implementation review, fmt/Clippy/build PASS. Commit next, then
-  live native Gungeon retry. P354 isolated implementation; P355/P356 source follow-up reviews.
-
-- At11:06 UTC, P352 independent implementation review PASS; four-file integration and focused
-  gates next. P354 approved for isolated initial Files worker implementation under reviewed
-  lifecycle/profile-reset and honest loading/error constraints. Live Collections Tab/Enter works;
-  temporary Gungeon favorite restored. P353 drive/library wording fits and footer is reachable.
-  Native Gungeon remains unlaunched pending P352; no Windows repair accepted for native files.
-
-- P353 independent copy/layout review and fmt/Clippy/build PASS; no test added for wording-only
-  change. P352 prevention/recovery implementation isolated. P354 source audit confirms initial
-  Files construction performs more GTK I/O than summary alone; bounded snapshot proposal pending,
-  no broad conversion approved. Latest idle app closed normally for upcoming live UI restart.
-
-- P351 committed68fb1a1 exact postbuildPASS. P352 implementation approved after independent
-  explicit-OS/recovery/preference review: narrowly recover the known native marker in memory only,
-  retain saved Windows choices, no prefix mutation or schema change. P353 copy review/integration
-  next; P354 initial Files page source-only proposal requested. Live Gungeon native launch still
-  blocked until P352, original marker retained; no inappropriate Windows repair accepted.
-
-- P350 committed38a4f4e exact postbuildPASS. P351 independent review, private native keyboard/
-  accessibility/membership regression and fmt/Clippy/build PASS; separate commit next. P352 traced
-  native marker pollution to auto-install preference copying and reconciliation; strict proposal
-  underway, including durable Windows-preference preservation during native executable discovery.
-
-- P349 committed8a5f7e8 exact postbuildPASS. P350 integrated, fmt/Clippy/build PASS; mapped gate
-  running. Live native Gungeon download/auto-install finishes but writes schema2 UMU marker over a
-  native start.sh/EtG.x86_64 payload (old EtG.exe absent); Play wrongly offers Windows repair.
-  Root declined repair. P352 isolated diagnosis assigned; do not claim native launch success.
-
-- P349 strict500-card mapped regression, independent review, formatting/Clippy/build PASS;
-  preparing separate commit. Live native Gungeon offline download started via unified chooser,
-  visible blue Pause/list status, separate archive/game destinations. Reserve8GB of40GB aggregate.
-
-- Consolidated isolated tools/check.sh plus cargo build PASS at6b7328d. Initial harness-only
-  failures (symlink blocker mount; absent synthetic NSS identity for private DBus) corrected without
-  product/test changes or exposing host account files. Final log full-build-odjoz3gv/build.log.
-  Real Gungeon Depot uninstall now restores blue Download/arrow in place, keeps archive, and shows
-  healthy collapsed recovery options with warnings intact. New chooser displays exact paths.
-
-- P346 final independent visibility review and both private chooser/multipart regressions PASS;
-  fmt/Clippy/build PASS. Destination frame timing fixed in fixture; actual hidden-parent visibility
-  bug corrected with own-property checks, weak captures avoid status-widget cycles. Obsolete mount
-  helpers removed after their last caller disappeared. Separate commit then consolidated build.
-
-- P348 committed87d896e exact post-commit build PASS. P346 gate caught obsolete mount helpers,
-  a status-widget ownership cycle and hidden-parent visibility feedback bug; minimal corrections
-  underway, strict mapped regression retained, no commit yet. Existing multipart queue test PASS.
-  P349/P350 independent source review PASS; P351 isolated. Consolidated suite awaits P346 gate.
-
-- P348 independent implementation review, five focused private cancellation regressions,
-  formatting/all-target Clippy/build PASS. Fixture-only missing glib import corrected before run.
-  No blocking recovery-generation read on the permanent-cancel path; busy refusal retains state.
-  Preparing separate commit. Manual Comet check shows immediate Checking and terminal Up to date.
-
-- P343 committedcdafed0, exact detached-checkout build PASS; P345 committed4808685, exact clean
-  product build PASS. P348 independent final review PASS and integration underway; P346 next.
-  P349 bounded grid-priority coalescing approved in isolation. P350 Settings/Collections audit
-  found repeated Recheck work and stale storage legends; proposal pending, no changes yet.
-
-- P343 two private GTK regressions PASS after fixture-only public-API corrections. P345 failed
-  regression established a real stale completed-transfer visual latch; minimal reset and independent
-  re-review now PASS, same strict regression PASS. Combined fmt/Clippy/build PASS; separate commits.
-  Live Home keyboard Enter/Space/focus ring/context menu verified. No product game operations here.
-
-- At10:22 UTC: P344 committedcfca221 and exact post-commit build PASS. P345 source review,
-  formatting/Clippy/build passed, but its expanded GTK regression failed a wait assertion;
-  owner diagnosing before commit. P343 reviewed delta entering integration; P346 reviewed and
-  queued. P348 cancellation admission implementation frozen for independent final review.
-
-- P340 committed7967045 exact post-commit build PASS; live client restarted on that build for
-  physical keyboard checks. P344 four-string guidance independently reviewed, formatting/all-target
-  Clippy/build PASS, separate commit next. No new test for a wording-only change.
-
-- P342 committedbf14e58 exact post-commit build PASS. P340 independent review and private native
-  GTK/accessibility regression plus three existing filter/exit regressions PASS; fixture corrected
-  native focus entry and layout timing, assertions retained. Formatting/all-target Clippy/build PASS.
-- P347 source cross-check found cancellation can block GTK on admission held during journal fsync;
-  P348 assigned before consolidated build gate. Other prioritized auth/session/setup paths had no
-  new material finding. P346 independent review PASS and queued; real Gungeon Depot launch rendered
-  its menu and normal window-close ended the process without touching cloud saves.
-
-- P338 committed2a930e4 exact post-commit build PASS. P342 independent review, private no-write
-  regression, formatting/all-target Clippy/build PASS; commit next. Real Gungeon Depot reinstall
-  finished with setup success before attempted pause; count as reinstall success, not cancellation.
-  Conservative total test reservation7GB of40GB. No cloud deletion performed.
-
-- P341 committed5862b7a exact post-commit build PASS. P338 independent review and four private
-  regressions (identity/ties, bounded reads, file validity and GTK selection), formatting/all-target
-  Clippy/build PASS; separate commit next. P342/P340 await gates; P343/P345 isolated.
-
-- P339 committed4fd61fa exact post-commit build PASS. P341 independent review and three focused
-  GTK state/queue regressions PASS, formatting/all-target Clippy/build PASS. One fixture recreated
-  the simulated download parent after real cleanup removed it; production cleanup unchanged.
-  Live Gungeon uninstall completed after external confirmation/saves/success prompts, retained
-  offline archive and restored Download in place. Green Download styling assigned P345.
-
-- P337 committed6c2e603 exact post-commit build PASS. P339 independent review, extended P329
-  mapped regression, formatting/all-target Clippy/build PASS; preparing separate wording commit.
-  P338/P340/P341 independent reviews PASS and await serial integration/gates. P342/P343 isolated.
-
-- P337 strict both-sort mapped regression and final independent re-review PASS; related retained
-  GTK selection flag fixed before row reorder. Formatting/all-target Clippy/build PASS, commit next.
-
-- Live Coffee Talk normal window-close exited the process, completed the launch flow and restored
-  green Play/white title with Coffee-only search still intact. P337 fixture found a related existing
-  GTK selection flag left on rows after reorder; owner correcting before final gate, no failed
-  assertion accepted as a pass. P339 independent review PASS; P341 in review, P338/P340 isolated.
-
-- P335 committed093fd64 and documentation committed6e65c85; exact post-commit builds PASS.
-  Real Gungeon archive deletion restores one Download, updates counts, preserves Play/payload;
-  archive-only re-download succeeds, registers382.7MB, and does not reinstall. Reserve5GB of40GB
-  total testing allowance conservatively. P337 source review PASS and integrated for focused gate.
-
-- P333 committed94ef9fd and exact post-commit build PASS. P335 independent review and two
-  focused synthetic SQLite/TTL regressions, formatting, all-target Clippy and build PASS;
-  separate commit next. P337 exit/filter correction isolated; P338 polling proposal underway.
-
-- P333 bounded full-error scrollers independently reviewed; mapped long/short archive and Depot
-  errors plus three existing error/cancel regressions PASS. Controls stay visible at600px height;
-  formatting, all-target Clippy and build PASS. Separate commit next.
-
-- P327 committed7e07ff8 and P334 committed3fd570b; exact post-commit builds PASS. P334 adds
-  empty-search guidance with independent review and two focused GTK regressions plus fmt/Clippy.
-  Coffee Talk Stop completed and Play restored; no game remains running. The live exit exposed
-  sidebar/search inconsistency assigned P337. P333/P335 reviews PASS, integration pending;
-  P336 prepares the isolated consolidated build gate.
-
-- User interview authorizes twelve hours, real root-only wallet/UI/download/install testing,
-  repair/reinstall of existing managed test games, normal cloud sync but no deliberate cloud deletion,
-  under2 GB additional games and total under40 GB. New branch and separate local commits per fix.
-- PR8 remains open; local main fast-forwarded cleanly to5c0d5cb and new audit branch created.
-  No upstream main mutation or PR merge. Product fixes are separate local commits.
-- Root launched tested target/debug/ludomere on KDE Wayland via X11 backend for scoped input.
-  App-only initial screenshot shows library synchronization. User asked to allow wallet prompt.
-  Private evidence /tmp/ludomere-r111; do not publish account screenshots or logs unredacted.
-  P322/P323/P324 audits returned findings; P325 first fix independently reviewed and focused GTK
-  regression/formatting/all-target Clippy pass. Live reproduction confirms query reset/hiding.
-  Cutoff2026-10-06 20:13:55 UTC. Detailed findings and evidence in R111_AUDIT.md.
-- P325 committed717e8da and P326 committedec29d3d; exact post-commit builds PASS.
-- Live offline Windows Gungeon download/automatic install and launch succeeded; Play/Stop updated
-  in place and running title turned green. Coffee Talk Depot transfer reached setup after root
-  activated the advertised KDE Secret Service provider and user unlocked. Its .NET4.5.2 helper
-  returned194 after successful DirectX setup; P331 diagnosis underway. No wallet settings changed.
-- P328 authenticated Depot handoff independently reviewed; eight focused isolated regressions,
-  formatting, all-target Clippy and cargo build --locked PASS. Preparing separate commit.
-  P330 provider activation patch independently reviewed; seven focused isolated regressions,
-  formatting, all-target Clippy and build PASS. Preparing separate local commit.
-  P329 off-thread file summaries independently reviewed, integrated and verified with three private
-  regressions, formatting, all-target Clippy and build. P328 committed6c9813e, P330 committed8d37fe0;
-  both exact post-commit builds PASS. P327 cancellation and P331 installer restart fixes isolated.
-- P329 committed8a4aab7 with exact post-commit build PASS. Restarted live application restored
-  online access and synchronized normally; keyboard-driven Installed+search intersection verified.
-  P331 integrated after independent review; seven focused tests/fmt/Clippy/build PASS, commit next.
-  Long real error reveals P326 needs bounded diagnostic scrolling (P333); P332 setup modal review
-  PASS, compilation pending. P327 cancellation independent review in progress.
-- P331 committedb93a317 and exact post-commit build PASS. P332 two focused tests PASS after
-  correcting a fixture's collapsed-expander lookup; production unchanged by that correction.
-  Formatting, all-target Clippy and build PASS; preparing P332 commit. P327 review found recovery
-  admission and late-success/cancel races; owner correcting both before any integration.
-- P332 committed5b51541 and exact post-commit build PASS. Coffee Talk real Depot Resume now
-  completes; Play/installed title refresh in place, normal cloud launch enabled, rendered game
-  reaches profile selection. Root corrected X11 windowclose versus windowquit test-driver use;
-  use Ludomere Stop for the surviving test process, not a false application-exit bug report.
-- P327 both reviewed race blockers corrected and re-reviewed; four focused regressions,
-  formatting, all-target Clippy and build PASS. Preparing commit; P333 bounded long errors next.
+- Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
+  improvement/interactive-ux-audit-2026-10-06; HEADc9f5b99. Root alone uses real wallet/profile/
+  desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve8GB of40GB
+  test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
+- Delivered29 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+  focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
+  Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
+  durable preferences. Its follow-up shares narrow read normalization with protected Storage
+  admission; no raw marker rewrite, prefix deletion or relaxed no-follow/bounds checks.
+- Live P352 on c9f5b99: existing native Gungeon launches/rendered intro, normal quit ends process
+  and restores Play/search in place; original marker hash unchanged. Earlier real Windows offline/
+  Depot Gungeon and Coffee Talk launches passed. Collections/Home keyboard activation, archive
+  delete/re-download, uninstall completion, filter retention, Comet checks and Storage wording
+  also exercised. No exhaustive UI/game/controller or cold-wallet-start claim.
+- Consolidated build PASS at6b7328d: fmt, Clippy,566 library tests,6 integration tests,5 Python
+  helper tests and build.57 ignored tests excluded from default suite; affected private GTK gates
+  run separately. Later changes pass focused gates/builds; next consolidated gate after this batch.
+  Harness/log: /tmp/ludomere-r111-full-build.py and full-build-odjoz3gv/build.log. Two earlier
+  harness-only mount/NSS failures corrected without exposing real profile/bus/network or changing tests.
+- Active P354 (ui_critic): isolated one-worker initial Files preparation and loading/Retry shell,
+  with session/view/local-revision/profile-activity guards. Preserve inherited persistence API
+  decode behavior; its swallowed errors are a separate finding. Implementation/tests not frozen.
+- Active P355 (performance_audit; reviewer file_summary): approved cached-offline/source-migration
+  preference retention, native boundary and pending-profile preservation, with tracked cached
+  preparation before DB access. Isolated implementation; no product integration yet.
+- P357 verified (file_summary; reviewer performance_audit): track both Storage inspection workers
+  for reset draining. Initial independent review caught lifetime session capture disabling reused
+  Settings; corrected per-admission snapshots restore deliberate same-page retry while rejecting
+  old results. Final review, actual delayed-worker and P350 GTK tests, fmt/Clippy/build PASS.
+- Active P358 diagnosis (file_summary): live archive Pause works at134.8/260MB, featured trash
+  gives no visible dialog; main navigation still responsive. Root keeps test archive paused for
+  retest. Existing native game and Linux/Windows archives retained. Reserve9GB of40GB now.
+- P356 deferred narrower findings: same-target Move remains enabled and returns a refusal;
+  Account Settings session subtitle is a stale snapshot. P355 additionally found mixed-case Linux
+  dispatch inconsistency. Initial file summaries, completed-transfer colors, read-only free-space
+  checks, cancellation admission and native marker issues have verified corrections.
+- Use normal windowquit for game windows and app tray Close; X11 windowclose destroys a window
+  without proving process exit. Current live client c9f5b99 is idle after native Gungeon test.
+  Actual game markers/data remain private; subagents receive only normalized diagnostic facts.
 
 ## R110 complete — 0.3.2 release and new PR
 

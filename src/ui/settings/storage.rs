@@ -28,6 +28,7 @@ type StorageInspectionResult = anyhow::Result<(
 #[cfg(test)]
 thread_local! {
     static STORAGE_INSPECTIONS: RefCell<Option<Vec<mpsc::Sender<StorageInspectionResult>>>> = const { RefCell::new(None) };
+    static STORAGE_INSPECTION_DELAYS: RefCell<std::collections::VecDeque<mpsc::Receiver<()>>> = const { RefCell::new(std::collections::VecDeque::new()) };
 }
 
 #[derive(Clone)]
@@ -218,6 +219,11 @@ fn build_storage_section(
         let popover = library_popover.clone();
         let add = add.clone();
         Rc::new(move || {
+            if model.borrow().logout_pending {
+                return;
+            }
+            let epoch = model.borrow().account_epoch;
+            let session = (online::account_session(), auth::session());
             while let Some(child) = choices.first_child() {
                 choices.remove(&child);
             }
@@ -263,14 +269,40 @@ fn build_storage_section(
                 return;
             }
             let config = model.borrow().config.clone();
-            let epoch = model.borrow().account_epoch;
+            let activity = match crate::profile_reset::begin_activity("checking library choices") {
+                Ok(activity) => activity,
+                Err(error) => {
+                    for (_, label) in &labels {
+                        label.set_label("Inspection stopped");
+                        label.set_tooltip_text(Some(&error.to_string()));
+                    }
+                    return;
+                }
+            };
+            #[cfg(test)]
+            let delay = STORAGE_INSPECTION_DELAYS.with_borrow_mut(|delays| delays.pop_front());
             let (sender, receiver) = mpsc::channel();
             std::thread::spawn(move || {
-                let _ = sender.send(crate::storage::inspect_libraries(&config));
+                let result = (|| {
+                    let _activity = activity;
+                    #[cfg(test)]
+                    if let Some(delay) = delay {
+                        delay.recv()?;
+                    }
+                    anyhow::ensure!(
+                        session == (online::account_session(), auth::session()),
+                        "Account changed; reopen Storage settings."
+                    );
+                    crate::storage::inspect_libraries(&config)
+                })();
+                let _ = sender.send(result);
             });
             let model = model.clone();
             glib::timeout_add_local(Duration::from_millis(100), move || {
-                if model.borrow().account_epoch != epoch {
+                if model.borrow().account_epoch != epoch
+                    || model.borrow().logout_pending
+                    || session != (online::account_session(), auth::session())
+                {
                     return glib::ControlFlow::Break;
                 }
                 match receiver.try_recv() {
@@ -528,6 +560,17 @@ fn build_storage_section(
         let w = w.clone();
         let recheck = recheck.downgrade();
         Rc::new(move || {
+            if model.borrow().logout_pending {
+                path_label
+                    .set_label("Account change in progress. Recheck library when it finishes.");
+                if let Some(recheck) = recheck.upgrade() {
+                    recheck.set_label("Recheck library");
+                    recheck.set_sensitive(true);
+                }
+                return;
+            }
+            let epoch = model.borrow().account_epoch;
+            let session = (online::account_session(), auth::session());
             request.set(request.get().wrapping_add(1));
             if let Some(recheck) = recheck.upgrade() {
                 recheck.set_sensitive(false);
@@ -588,7 +631,19 @@ fn build_storage_section(
             let recovery_library_id = selected_library.id.clone();
             let titles = model_game_display_data(&model.borrow());
             let config = model.borrow().config.clone();
-            let epoch = model.borrow().account_epoch;
+            let activity = match crate::profile_reset::begin_activity("inspecting selected library")
+            {
+                Ok(activity) => activity,
+                Err(error) => {
+                    path_label.set_label(&format!("Could not inspect library: {error}"));
+                    capacity.set_label("Storage information unavailable");
+                    if let Some(recheck) = recheck.upgrade() {
+                        recheck.set_label("Recheck library");
+                        recheck.set_sensitive(true);
+                    }
+                    return;
+                }
+            };
             let generation = request.get();
             let (sender, receiver) = mpsc::channel();
             #[cfg(test)]
@@ -603,8 +658,19 @@ fn build_storage_section(
             #[cfg(not(test))]
             let captured = false;
             if !captured {
+                #[cfg(test)]
+                let delay = STORAGE_INSPECTION_DELAYS.with_borrow_mut(|delays| delays.pop_front());
                 std::thread::spawn(move || {
                     let result = (|| -> anyhow::Result<_> {
+                        let _activity = activity;
+                        #[cfg(test)]
+                        if let Some(delay) = delay {
+                            delay.recv()?;
+                        }
+                        anyhow::ensure!(
+                            session == (online::account_session(), auth::session()),
+                            "Account changed; reopen Storage settings."
+                        );
                         let inspection = crate::storage::inspect_library_status(
                             &config,
                             kind,
@@ -618,6 +684,10 @@ fn build_storage_section(
                             }
                         }
                         let storage = filesystem_storage(&selected_library.path);
+                        anyhow::ensure!(
+                            session == (online::account_session(), auth::session()),
+                            "Account changed; reopen Storage settings."
+                        );
                         let store = StateStore::open()?;
                         let games = if kind == crate::config::LibraryKind::GameFiles {
                             crate::installation::reconcile_installed_games(&store, &all_libraries)?
@@ -695,7 +765,21 @@ fn build_storage_section(
             let w = w.clone();
             let recheck = recheck.clone();
             glib::timeout_add_local(Duration::from_millis(100), move || {
-                if model.borrow().account_epoch != epoch || request.get() != generation {
+                if request.get() != generation {
+                    return glib::ControlFlow::Break;
+                }
+                if model.borrow().account_epoch != epoch
+                    || model.borrow().logout_pending
+                    || session != (online::account_session(), auth::session())
+                {
+                    if let Some(recheck) = recheck.upgrade() {
+                        recheck.set_label("Recheck library");
+                        recheck.set_sensitive(true);
+                    }
+                    path_label.set_label(
+                        "Account changed. Recheck library to inspect the current account.",
+                    );
+                    capacity.set_label("Storage information unavailable");
                     return glib::ControlFlow::Break;
                 }
                 let result = receiver.try_recv();
@@ -1655,6 +1739,168 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
+    #[ignore = "requires private HOME/all XDG under /tmp/ludomere-p357-, GTK and D-Bus"]
+    fn storage_inspection_admission_tracks_activity_and_rejects_stale_workers() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p357-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn delay_inspections() -> [mpsc::Sender<()>; 2] {
+            std::array::from_fn(|_| {
+                let (sender, receiver) = mpsc::channel();
+                STORAGE_INSPECTION_DELAYS.with_borrow_mut(|delays| delays.push_back(receiver));
+                sender
+            })
+        }
+        fn assert_both_registered() {
+            let error = crate::profile_reset::reserve().err().unwrap().to_string();
+            assert!(error.contains("checking library choices"), "{error}");
+            assert!(error.contains("inspecting selected library"), "{error}");
+            assert!(STORAGE_INSPECTION_DELAYS.with_borrow(|delays| delays.is_empty()));
+        }
+        let root = tempfile::tempdir().unwrap();
+        let library = root.path().join("games");
+        fs::create_dir(&library).unwrap();
+        let config = Config {
+            game_libraries: vec![GameLibrary {
+                id: "test".into(),
+                name: "Test".into(),
+                path: library,
+                default: true,
+            }],
+            offline_libraries: vec![],
+            extras_libraries: vec![],
+            ..Config::default()
+        };
+        let database = crate::identity::database();
+        assert!(database.starts_with(std::env::var("XDG_DATA_HOME").unwrap()));
+        assert!(
+            !database.exists(),
+            "fixture requires a fresh synthetic profile"
+        );
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.StorageLifecycleTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let w = Rc::new(window::create_widgets(&app, &config));
+        let model = Rc::new(RefCell::new(AppModel {
+            config,
+            ..AppModel::default()
+        }));
+        let delayed = delay_inspections();
+        let page = build_storage_page(
+            &w.window,
+            &w,
+            &model,
+            crate::config::LibraryKind::GameFiles,
+            "Game Library",
+        );
+        let recheck = find_named_descendant(page.upcast_ref(), "storage-recheck")
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+        let status = find_named_descendant(page.upcast_ref(), "storage-inspection-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        w.window.set_content(Some(&page));
+        w.window.present();
+        assert_both_registered();
+        assert!(!recheck.is_sensitive());
+        // Dropping the test-only wait channels exercises real worker failure and release.
+        drop(delayed);
+        wait(|| recheck.is_sensitive());
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert!(status.text().starts_with("Incompatible or unavailable:"));
+        assert_eq!(recheck.label().as_deref(), Some("Recheck library"));
+        assert!(!database.exists());
+
+        let delayed = delay_inspections();
+        recheck.emit_clicked();
+        assert_both_registered();
+        auth::invalidate_session();
+        for sender in delayed {
+            sender.send(()).unwrap();
+        }
+        wait(|| crate::profile_reset::reserve().is_ok());
+        wait(|| recheck.is_sensitive());
+        assert!(
+            !database.exists(),
+            "stale workers must stop before either DB open"
+        );
+        assert_eq!(
+            status.text(),
+            "Account changed. Recheck library to inspect the current account."
+        );
+        // Settings is reused after authentication changes. An explicit Recheck
+        // admits the current session on this same page, without automatic work.
+        recheck.emit_clicked();
+        wait(|| recheck.is_sensitive());
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert_eq!(status.text(), "Compatible");
+        assert!(database.is_file());
+        assert_eq!(w.window.content().as_ref(), Some(page.upcast_ref()));
+        let frozen = crate::profile_reset::reserve().unwrap();
+        recheck.emit_clicked();
+        assert!(recheck.is_sensitive());
+        assert_eq!(recheck.label().as_deref(), Some("Recheck library"));
+        assert!(status.text().starts_with("Could not inspect library:"));
+        drop(frozen);
+
+        model.borrow_mut().logout_pending = true;
+        recheck.emit_clicked();
+        assert!(recheck.is_sensitive());
+        assert_eq!(
+            status.text(),
+            "Account change in progress. Recheck library when it finishes."
+        );
+        assert!(crate::profile_reset::reserve().is_ok());
+        model.borrow_mut().logout_pending = false;
+        let delayed = delay_inspections();
+        recheck.emit_clicked();
+        assert_both_registered();
+        model.borrow_mut().account_epoch += 1;
+        online::invalidate_library_session();
+        for sender in delayed {
+            sender.send(()).unwrap();
+        }
+        wait(|| crate::profile_reset::reserve().is_ok());
+        wait(|| recheck.is_sensitive());
+        assert_eq!(
+            status.text(),
+            "Account changed. Recheck library to inspect the current account."
+        );
+        recheck.emit_clicked();
+        wait(|| recheck.is_sensitive());
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert_eq!(status.text(), "Compatible");
+        assert_eq!(w.window.content().as_ref(), Some(page.upcast_ref()));
+        assert!(STORAGE_INSPECTION_DELAYS.with_borrow(|delays| delays.is_empty()));
+        w.window.destroy();
+    }
+
+    #[test]
     #[ignore = "requires private HOME/all XDG, GTK and D-Bus; inspection results are synthetic"]
     fn recheck_feedback_tracks_current_request_and_clears_stale_totals() {
         for key in [
@@ -1835,7 +2081,12 @@ mod tests {
                 .send(Err(anyhow::anyhow!("old account")))
                 .is_err()
         });
-        assert!(!recheck.is_sensitive());
+        assert!(recheck.is_sensitive());
+        assert_eq!(recheck.label().as_deref(), Some("Recheck library"));
+        assert_eq!(
+            status.text(),
+            "Account changed. Recheck library to inspect the current account."
+        );
         assert!(!status.text().contains("old account"));
         assert!(totals.iter().all(|label| label.text() == "—"));
 

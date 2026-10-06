@@ -80,7 +80,7 @@
 - P351 (complete, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
-- P352 (in_progress follow-up, performance_audit; reviewer file_summary): committed explicit-Linux suppression
+- P352 (complete, performance_audit; reviewer file_summary): committed explicit-Linux suppression
   across auto-install/native completion/reconciliation and native-save Windows-preference retention.
   Normalize only identified schema2/Linux/offline matching-managed-UMU/no-provenance shape in memory;
   future/unknown shapes stay strict, Windows missing-prefix stays installed, unknown OS policy stays.
@@ -95,16 +95,26 @@
   rows/totals, immediate loading and retryable failures, no initial GTK I/O or false empty actions.
   Preserve session/auth/detail/local-revision/weak lifetime and pre-spawn profile guards; private
   held-lock/heartbeat/state/lifecycle tests required. No later action-policy or generic framework.
-- P355 (in_progress, performance_audit): source-only native/Windows launch and operation boundary
-  audit following P352; concrete defects and bounded proposals only, no implementation/data access.
+  Existing StateStore APIs swallow certain row/JSON decode failures; preserve that inherited
+  behavior rather than expand state.rs in this change, propagate returned errors and report the
+  persistence issue separately. Empty saved artifact lists must remain safe.
+- P355 (in_progress, performance_audit; reviewer file_summary): confirmed cached-offline and source
+  migration preference loss. Approved owned download_chooser.rs/game_settings.rs/executor.rs;
+  retain fresh-plan args/full saved runtime by explicit OS, authoritative empty saved rows, no
+  old executable/source copying. Keep pending profile without applying it; track cached preparation
+  before DB access and preserve sessions/migration guards. Actual synthetic save/refusal/completion
+  regressions; no real helpers/data. Separate case-insensitive dispatch proposal deferred.
 - P356 (in_progress, file_summary): source-only remaining Settings/account/file-control no-op and
   busy feedback review; exclude P354 initial Files worker. Report proposals before changes.
-- P357 (in_progress, file_summary; reviewer performance_audit): fix confirmed selected-library
+- P357 (complete, file_summary; reviewer performance_audit): fix confirmed selected-library
   inspection activity gap from P356. Own isolated ui/settings/storage.rs; admit profile activity
   before worker and recheck original sessions before DB reads/reconciliation. Preserve P350 and
   current receiver semantics; delayed-worker/reset-drain fixture, no real data or reset protocol changes.
   Source follow-up disproved the pure-filesystem premise for library-choice inspection: it too
   opens StateStore. Include both worker admissions under the same bounded fix and tests.
+- P358 (in_progress diagnosis, file_summary): live paused archive featured trash button gives no
+  visible cancellation dialog despite responsive navigation. Source/synthetic diagnosis only;
+  root retains paused134.8MB test archive for live retest. Protect existing payload/two archives.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

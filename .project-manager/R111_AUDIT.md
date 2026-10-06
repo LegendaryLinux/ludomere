@@ -19,6 +19,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- Onc9f5b99, existing native Gungeon installation launches and renders its intro; normal window
+  quit ends EtG.x86_64 and restores green Play/white title/search in place. The original mixed
+  marker hash remains unchanged before/after launch, proving read-only recovery. No Windows repair
+  accepted or deliberate game save/cloud deletion. Intro, not a completed gameplay test, verified.
+  Further cached reinstall deferred until P355 saved launch-options preservation is corrected.
+
 - P351 live Collections Tab shows a clear game-card focus ring and Enter opens its detail view.
   Gungeon's temporary favorite was restored; screenshot favorite-restored confirms Removed from
   favorites and an empty star. P353 Storage wording fits the990x700 settings window; normal outer
@@ -63,6 +69,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P357 — track Storage inspection during profile reset
+
+- Both choice-list and selected-library inspection open SQLite, so both now acquire profile
+  activity before spawning and check originating sessions before reads/reconciliation. Reset
+  draining accounts for delayed work; results still require current request/account/session.
+- Independent review caught a new page-lifetime session snapshot that prevented reuse after
+  sign-in. Corrected to per-admission snapshots; a deliberate current-session Recheck works in
+  the same Settings page, while old results cannot paint or start stale profile reads.
+- Actual delayed-worker/activity-drain/stale-no-database/same-page-retry and existing P350 feedback
+  regressions PASS in private profiles/displays. Independent re-review, fmt/Clippy/build PASS.
+  No actual profile reset or credential deletion used for this test.
 
 ### P352 — separate native installs from retained Windows preferences
 
