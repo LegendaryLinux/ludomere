@@ -2,7 +2,7 @@
 
 ## R111 interactive audit
 
-- P383 (in_progress, file_summary; proposal/reviewer performance_audit): move Files completion
+- P383 (complete, file_summary; proposal/reviewer performance_audit): move Files completion
   plausibility checks off GTK without changing the predicate, transfer events or unmounted proxy
   contract. Own isolated files.rs only; tracked request-local validation and truthful finalizing/
   error feedback. Synthetic held-worker and actual proxy/terminal regression; no real agent data.
@@ -227,6 +227,9 @@
   Independently approved follow-up owns files.rs header parenting only: title/count/folder top
   row, four existing filter controls individually in a native wrapping FlowBox. No callback or
   filter changes; root settled narrow/wide and native keyboard gates remain required.
+  Settled header/native-key gates pass, but real Download Complete clips actions. Independently
+  approved details-only extension moves existing status panel below unchanged primary row in
+  one styled vertical area; no status behavior changes. Root repeat geometry gate required.
   Verification refinement: full synthetic detail renderer starts unrelated workers. Do not extract
   production action assembly or add a broad test controller only for this presentation change.
   Root will test actual narrow/wide action/tab reachability before commit; retain proportional

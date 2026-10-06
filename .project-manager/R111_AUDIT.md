@@ -33,6 +33,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P383 focused gates PASS: exact unchanged-predicate cases (p296-k1i_y819), actual held-worker
+  completion/deletion/reentry/session fixture (p296-jf1ufpq1), retained unmounted proxy chooser
+  (p296-hoqgb97x). Final fmt/Clippy/compile PASS. Existing nonfatal private GSettings warnings
+  remain; no actual game/account/helper access. Independent source review GO and completion
+  policy unchanged. P382b commit3146197 exact post-commit build PASS.
+
 - P382b actual-dialog initial-outcome fixture PASS twice (p382b-z7k06fmm and final
   p382b-luxeqhzm). Initial Clippy rejected the cfg-known-None test interception; independently
   reviewed closure correction removes the lint without suppression or changed worker behavior.

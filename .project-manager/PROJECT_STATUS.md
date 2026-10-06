@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADde59cb5. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEAD3146197. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered53 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered54 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
   572 library tests, six integration tests, five Python helper tests and build.80 library tests
@@ -22,7 +22,7 @@ Last meaningful update: 2026-10-06.
 - Active: P378 Downloads spacing/labels correction passes private geometry gates and build.
   P379 Cloud folder override persistence fix committed; focused gates and exact build PASS.
   P380 copy fix committed/built; P381 header/keyboard pass but completion status still clips actions.
-  P382a committed/built; P382b reviewed and in focused gates. P383/P384 workers own finalization/
+  P382a/P382b committed/built; P383 reviewed and in focused gates. P384 worker owns
   backup-folder UI I/O fixes in isolation. P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.

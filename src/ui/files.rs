@@ -3075,6 +3075,7 @@ fn artifact_download_action(
     let running = Rc::new(RefCell::new(
         None::<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     ));
+    let finalizing = Rc::new(std::cell::Cell::new(false));
     if can_run_patch {
         let window = context.window.clone();
         let installed = context.installed.cloned().expect("checked above");
@@ -3094,7 +3095,9 @@ fn artifact_download_action(
         let auth_session = auth::session();
         let target_version =
             crate::installation::patch_target_version(artifacts[0].version.as_deref());
+        let finalizing = finalizing.clone();
         run_patch_button.connect_clicked(move |run_patch_button| {
+            if finalizing.get() { return; }
             if online::account_session() != session || auth::session() != auth_session {
                 status.set_label("Account changed"); status.set_visible(true);
                 details.set_label("Close and reopen this game's files before running a patch."); details.set_visible(true);
@@ -3130,8 +3133,9 @@ fn artifact_download_action(
             let progress = progress.clone();
             let details = details.clone();
             let target_version = target_version.clone();
+            let finalizing = finalizing.clone();
             confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
-                if response != "run" {
+                if response != "run" || finalizing.get() {
                     return;
                 }
                 if online::account_session() != session || auth::session() != auth_session || status.root().is_none() || !window_for_response.is_visible() {
@@ -3152,7 +3156,8 @@ fn artifact_download_action(
                 details.set_label("Preparing the patch. Once started, patch work continues if you leave this view."); details.set_visible(true);
                 let current: Rc<dyn Fn() -> bool> = Rc::new({
                     let status = status.downgrade(); let window = window_for_response.downgrade();
-                    move || online::account_session() == session && auth::session() == auth_session
+                    let finalizing = finalizing.clone();
+                    move || !finalizing.get() && online::account_session() == session && auth::session() == auth_session
                         && status.upgrade().is_some_and(|status| status.root().is_some())
                         && window.upgrade().is_some_and(|window| window.is_visible())
                 });
@@ -3176,7 +3181,11 @@ fn artifact_download_action(
         let progress = progress.clone();
         let download_button = button.clone();
         let discard_button_for_response = discard_button.clone();
+        let finalizing = finalizing.clone();
         discard_button.connect_clicked(move |_| {
+            if finalizing.get() {
+                return;
+            }
             let confirmation = adw::AlertDialog::builder()
                 .heading("Discard this download?")
                 .body(
@@ -3194,8 +3203,9 @@ fn artifact_download_action(
             let progress = progress.clone();
             let download_button = download_button.clone();
             let discard_button = discard_button_for_response.clone();
+            let finalizing = finalizing.clone();
             confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
-                if response != "discard" {
+                if response != "discard" || finalizing.get() {
                     return;
                 }
                 if download::remove(&job_id.borrow()) {
@@ -3232,6 +3242,22 @@ fn artifact_download_action(
     let session = online::account_session();
     let copy_requested = Rc::new(std::cell::Cell::new(false));
     let auth_session = auth::session();
+    let origin = context
+        .model
+        .map(|model| (Rc::downgrade(model), model.borrow().account_epoch));
+    let request_current: Rc<dyn Fn() -> bool> = Rc::new({
+        let window = context.window.downgrade();
+        move || {
+            (online::account_session(), auth::session()) == (session, auth_session)
+                && window.upgrade().is_some_and(|window| window.is_visible())
+                && origin.as_ref().is_none_or(|(model, epoch)| {
+                    model.upgrade().is_some_and(|model| {
+                        let model = model.borrow();
+                        model.account_epoch == *epoch && !model.logout_pending
+                    })
+                })
+        }
+    });
     if let Some(model) = context.model {
         let model = Rc::downgrade(model);
         let action = action.downgrade();
@@ -3452,13 +3478,22 @@ fn artifact_download_action(
     {
         let copy_requested = copy_requested.clone();
         let button = button.clone();
+        let finalizing = finalizing.clone();
         download_copy.connect_clicked(move |_| {
+            if finalizing.get() {
+                return;
+            }
             copy_requested.set(true);
             button.emit_clicked();
             copy_requested.set(false);
         });
     }
+    let finalizing_for_download = finalizing.clone();
+    let discard_for_download = discard_button.clone();
     button.connect_clicked(move |button| {
+        if finalizing_for_download.get() || !request_current() {
+            return;
+        }
         if let Some(cancellation) = running_for_download.borrow().as_ref() {
             cancellation.store(true, std::sync::atomic::Ordering::Release);
             status_for_download.set_label("Cancelling…");
@@ -3490,7 +3525,6 @@ fn artifact_download_action(
         let status_for_download = status_for_download.clone();
         let progress_for_download = progress_for_download.clone();
         let count_for_download = count_for_download.clone();
-        let window_for_response = window_for_download.clone();
         let refresh_summary = refresh_summary_for_download.clone();
         let artifacts = artifacts.clone();
         let title = title.clone();
@@ -3499,13 +3533,13 @@ fn artifact_download_action(
         let active_job_id = active_job_id.clone();
         let download_copy = copy_for_download.clone();
         let counted = counted_for_download.clone();
+        let finalizing = finalizing_for_download.clone();
+        let discard = discard_for_download.clone();
+        let request_current = request_current.clone();
         choose_download_libraries(&window_for_download, vec![library_kind], move |libraries| {
             // File-action proxies invoke an unmounted source button. Its root is not
             // the lifetime of this explicit download request.
-            if online::account_session() != session
-                || auth::session() != auth_session
-                || !window_for_response.is_visible()
-            {
+            if finalizing.get() || !request_current() {
                 return;
             }
             let library = &libraries[0].1;
@@ -3573,11 +3607,69 @@ fn artifact_download_action(
             let count_for_response = count_for_download.clone();
             let artifacts_for_validation = artifacts.clone();
             let mut prepared = false;
+            let mut receiver = Some(receiver);
+            let mut inspection: Option<(Vec<PathBuf>, mpsc::Receiver<anyhow::Result<bool>>)> = None;
+            let mut sensitivity = [true; 4];
             glib::timeout_add_local(Duration::from_millis(100), move || {
-                if online::account_session() != session
-                    || auth::session() != auth_session
-                    || !window_for_response.is_visible()
-                {
+                if !request_current() {
+                    return glib::ControlFlow::Break;
+                }
+                if let Some((_, inspected)) = inspection.as_ref() {
+                    let result = match inspected.try_recv() {
+                        Ok(result) => result,
+                        Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                        Err(_) => Err(anyhow::anyhow!("File inspection stopped unexpectedly")),
+                    };
+                    let (files, inspected) = inspection.take().unwrap();
+                    drop(inspected);
+                    *downloaded_files.borrow_mut() = files.clone();
+                    *folder.borrow_mut() = None;
+                    status.remove_css_class("dim-label");
+                    status.remove_css_class("success");
+                    status.remove_css_class("error");
+                    progress.set_visible(false);
+                    button.set_icon_name("folder-download-symbolic");
+                    delete_button.set_visible(!files.is_empty());
+                    download_copy.set_visible(false);
+                    run_patch_button.set_visible(false);
+                    let usable = result.is_ok();
+                    match result {
+                        Ok(true) => {
+                            *folder.borrow_mut() = files.first().and_then(|path| path.parent()).map(Path::to_path_buf);
+                            status.add_css_class("success");
+                            status.set_label("✓");
+                            status.set_tooltip_text(Some("Downloaded"));
+                            progress.set_fraction(1.0);
+                            button.set_icon_name("folder-open-symbolic");
+                            button.set_tooltip_text(Some("Show downloaded files"));
+                            download_copy.set_visible(true);
+                            run_patch_button.set_visible(can_run_patch);
+                            if !counted.replace(true) {
+                                adjust_downloaded_collection_count(&count_for_response, 1);
+                            }
+                            refresh_summary();
+                        }
+                        Ok(false) => {
+                            status.add_css_class("error");
+                            status.set_label("✕");
+                            status.set_tooltip_text(Some("Download files are missing or their file sizes do not match."));
+                            button.set_tooltip_text(Some("Download all required parts again"));
+                        }
+                        Err(error) => {
+                            status.add_css_class("error");
+                            status.set_label("Could not inspect downloaded files. Use Manage → Refresh local state to retry.");
+                            status.set_wrap(true);
+                            status.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+                            status.set_max_width_chars(32);
+                            status.set_tooltip_text(Some(&notifications::failure_message("File inspection failed", &error.to_string())));
+                            button.set_tooltip_text(Some("Use Manage → Refresh local state to inspect these files again"));
+                        }
+                    }
+                    for (control, sensitive) in [&delete_button, &download_copy, &run_patch_button, &discard].into_iter().zip(sensitivity) {
+                        control.set_sensitive(sensitive);
+                    }
+                    finalizing.set(false);
+                    button.set_sensitive(usable);
                     return glib::ControlFlow::Break;
                 }
                 if !prepared {
@@ -3593,7 +3685,7 @@ fn artifact_download_action(
                                     // Queue capture cancels instead of transferring; the fixture
                                     // can now drive this real receiver with synthetic events.
                                     assert!(matches!(
-                                        receiver.try_recv(),
+                                        receiver.as_ref().unwrap().try_recv(),
                                         Ok(download::DownloadEvent::Cancelled)
                                     ));
                                     prepared = true;
@@ -3634,7 +3726,7 @@ fn artifact_download_action(
                         }
                     }
                 }
-                match receiver.try_recv() {
+                match receiver.as_ref().unwrap().try_recv() {
                     Ok(download::DownloadEvent::Progress { downloaded, total }) => {
                         status.set_label(&match total {
                             Some(total) if total > 0 => format!(
@@ -3659,48 +3751,27 @@ fn artifact_download_action(
                         glib::ControlFlow::Continue
                     }
                     Ok(download::DownloadEvent::Complete { files }) => {
+                        drop(receiver.take());
+                        finalizing.set(true);
                         *running.borrow_mut() = None;
-                        *downloaded_files.borrow_mut() = files.clone();
-                        let artifact_refs = artifacts_for_validation.iter().collect::<Vec<_>>();
-                        if !artifact_download_is_plausible(&artifact_refs, &files) {
-                            *folder.borrow_mut() = None;
-                            status.remove_css_class("dim-label");
-                            status.remove_css_class("success");
-                            status.add_css_class("error");
-                            status.set_label("✕");
-                            status.set_tooltip_text(Some(
-                                "Download files are missing or their file sizes do not match.",
-                            ));
-                            progress.set_visible(false);
-                            button.set_icon_name("folder-download-symbolic");
-                            button.set_tooltip_text(Some("Download all required parts again"));
-                            button.set_sensitive(true);
-                            delete_button.set_visible(true);
-                            run_patch_button.set_visible(false);
-                            glib::ControlFlow::Break
-                        } else {
-                            *folder.borrow_mut() = files
-                                .first()
-                                .and_then(|path| path.parent())
-                                .map(std::path::Path::to_owned);
-                            status.remove_css_class("dim-label");
-                            status.add_css_class("success");
-                            status.set_label("✓");
-                            status.set_tooltip_text(Some("Downloaded"));
-                            progress.set_fraction(1.0);
-                            progress.set_visible(false);
-                            button.set_icon_name("folder-open-symbolic");
-                            button.set_tooltip_text(Some("Show downloaded files"));
-                            button.set_sensitive(true);
-                            delete_button.set_visible(true);
-                            download_copy.set_visible(true);
-                            run_patch_button.set_visible(can_run_patch);
-                            if !counted.replace(true) {
-                                adjust_downloaded_collection_count(&count_for_response, 1);
-                            }
-                            refresh_summary();
-                            glib::ControlFlow::Break
+                        sensitivity = [&delete_button, &download_copy, &run_patch_button, &discard].map(|control| control.is_sensitive());
+                        for control in [&button, &delete_button, &download_copy, &run_patch_button, &discard] {
+                            control.set_sensitive(false);
                         }
+                        discard.set_visible(false);
+                        button.set_icon_name("folder-download-symbolic");
+                        button.set_tooltip_text(Some("Inspecting downloaded files"));
+                        status.set_label("Finalizing…");
+                        progress.set_visible(true);
+                        progress.set_fraction(1.0);
+                        progress.set_text(Some("Finalizing…"));
+                        progress.set_show_text(true);
+                        if !request_current() {
+                            return glib::ControlFlow::Break;
+                        }
+                        let inspected = inspect_completed_download(artifacts_for_validation.clone(), files.clone(), (session, auth_session));
+                        inspection = Some((files, inspected));
+                        glib::ControlFlow::Continue
                     }
                     Ok(download::DownloadEvent::Cancelled) => {
                         *running.borrow_mut() = None;
@@ -3756,12 +3827,15 @@ fn artifact_download_action(
         let can_download = context.access_token.is_some();
         let deleting = gtk::Spinner::new();
         let refresh_summary = context.refresh_summary.clone();
+        let finalizing = finalizing.clone();
         deleting.set_visible(false);
         if let Some(action) = action.upgrade() {
             action.append(&deleting);
         }
         delete_button.connect_clicked(move |_| {
-            if (online::account_session(), auth::session()) != (session, auth_session) {
+            if finalizing.get()
+                || (online::account_session(), auth::session()) != (session, auth_session)
+            {
                 return;
             }
             let files = downloaded_files.borrow().clone();
@@ -3793,8 +3867,10 @@ fn artifact_download_action(
             let title = title.clone();
             let counted = counted.clone();
             let refresh_summary = refresh_summary.clone();
+            let finalizing = finalizing.clone();
             confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
                 if response != "delete"
+                    || finalizing.get()
                     || (online::account_session(), auth::session()) != (session, auth_session)
                     || !window_for_response.is_visible()
                     || !action.upgrade().is_some_and(|row| row.is_mapped())
@@ -3978,6 +4054,72 @@ fn delete_downloaded_files(
             }
         }
     });
+}
+
+#[cfg(test)]
+struct CompletedDownloadProbe {
+    entered: mpsc::Sender<()>,
+    permit: mpsc::Receiver<()>,
+    disconnect: bool,
+    checked: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_COMPLETED_DOWNLOADS: RefCell<Option<std::collections::VecDeque<CompletedDownloadProbe>>> = const { RefCell::new(None) };
+}
+
+fn inspect_completed_download(
+    artifacts: Vec<RemoteArtifact>,
+    files: Vec<PathBuf>,
+    session: (u64, u64),
+) -> mpsc::Receiver<anyhow::Result<bool>> {
+    let (sender, receiver) = mpsc::channel();
+    match crate::profile_reset::begin_activity("inspecting completed download") {
+        Err(error) => {
+            let _ = sender.send(Err(error));
+        }
+        Ok(activity) => {
+            #[cfg(test)]
+            let probe = TEST_COMPLETED_DOWNLOADS.with(|probes| {
+                probes.borrow_mut().as_mut().map(|probes| {
+                    probes
+                        .pop_front()
+                        .expect("unplanned completed-download inspection")
+                })
+            });
+            std::thread::spawn(move || {
+                let _activity = activity;
+                let result = (|| {
+                    #[cfg(test)]
+                    if let Some(probe) = probe.as_ref() {
+                        let _ = probe.entered.send(());
+                        probe.permit.recv_timeout(Duration::from_secs(10))?;
+                    }
+                    anyhow::ensure!(
+                        (online::account_session(), auth::session()) == session,
+                        "The account changed before inspecting downloaded files"
+                    );
+                    #[cfg(test)]
+                    if let Some(probe) = probe.as_ref() {
+                        probe
+                            .checked
+                            .store(true, std::sync::atomic::Ordering::Release);
+                    }
+                    Ok(artifact_download_is_plausible(
+                        &artifacts.iter().collect::<Vec<_>>(),
+                        &files,
+                    ))
+                })();
+                #[cfg(test)]
+                if probe.as_ref().is_some_and(|probe| probe.disconnect) {
+                    return;
+                }
+                let _ = sender.send(result);
+            });
+        }
+    }
+    receiver
 }
 
 fn artifact_download_is_plausible(
@@ -5479,8 +5621,85 @@ mod unified_row_tests {
     use super::*;
 
     #[test]
+    fn completed_archive_plausibility_keeps_local_payload_checks() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("part-one");
+        let mut artifact: RemoteArtifact = serde_json::from_value(serde_json::json!({
+            "product_id": 9383001, "kind": "installer", "name": "Inert",
+            "download_path": "synthetic", "size_bytes": 100
+        }))
+        .unwrap();
+        assert!(!artifact_download_is_plausible(
+            &[&artifact],
+            std::slice::from_ref(&file)
+        ));
+        std::fs::write(&file, b"data").unwrap();
+        // Complete/receipt-sized output is not a substitute for rounded catalog plausibility.
+        assert!(!artifact_download_is_plausible(
+            &[&artifact],
+            std::slice::from_ref(&file)
+        ));
+        std::fs::write(&file, [b'x'; 49]).unwrap();
+        assert!(!artifact_download_is_plausible(
+            &[&artifact],
+            std::slice::from_ref(&file)
+        ));
+        std::fs::write(&file, [b'x'; 50]).unwrap();
+        assert!(artifact_download_is_plausible(
+            &[&artifact],
+            std::slice::from_ref(&file)
+        ));
+        for expected in [None, Some(0)] {
+            artifact.size_bytes = expected;
+            std::fs::write(&file, b"data").unwrap();
+            assert!(artifact_download_is_plausible(
+                &[&artifact],
+                std::slice::from_ref(&file)
+            ));
+            for payload in [
+                b"{\"url\":\"inert\"}".as_slice(),
+                b" \n{\"downlink\":\"inert\"}".as_slice(),
+            ] {
+                std::fs::write(&file, payload).unwrap();
+                assert!(!artifact_download_is_plausible(
+                    &[&artifact],
+                    std::slice::from_ref(&file)
+                ));
+            }
+        }
+        artifact.size_bytes = Some(100);
+        let other = root.path().join("part-two");
+        std::fs::write(&file, [b'x'; 50]).unwrap();
+        std::fs::write(&other, [b'y'; 50]).unwrap();
+        assert!(!artifact_download_is_plausible(
+            &[&artifact, &artifact],
+            std::slice::from_ref(&file)
+        ));
+        assert!(artifact_download_is_plausible(
+            &[&artifact, &artifact],
+            &[file, other]
+        ));
+    }
+
+    #[test]
     #[ignore = "private HOME/all XDG, D-Bus and GTK; deletes only inert fixture archives"]
     fn external_archive_completion_and_deletion_update_existing_rows() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p296-"),
+                "{key}"
+            );
+        }
         let _capture = super::super::download_chooser::DownloadQueueCapture::start();
         adw::init().unwrap();
         fn descendants(widget: &gtk::Widget) -> Vec<gtk::Widget> {
@@ -5492,6 +5711,7 @@ mod unified_row_tests {
             }
             result
         }
+        #[track_caller]
         fn wait(check: impl Fn() -> bool) {
             let deadline = std::time::Instant::now() + Duration::from_secs(8);
             while !check() && std::time::Instant::now() < deadline {
@@ -5562,8 +5782,17 @@ mod unified_row_tests {
             linux: false,
             macos: false,
         };
+        let summary_updates = Rc::new(std::cell::Cell::new(0));
+        let refresh_summary: Rc<dyn Fn()> = Rc::new({
+            let summary_updates = summary_updates.clone();
+            let refresh = managed_detail_refresher(&window, Some(&model), &content, 9306001);
+            move || {
+                summary_updates.set(summary_updates.get() + 1);
+                refresh();
+            }
+        });
         let context = RemoteFileContext {
-            refresh_summary: &managed_detail_refresher(&window, Some(&model), &content, 9306001),
+            refresh_summary: &refresh_summary,
             model: Some(&model),
             product_id: 9306001,
             product_slug: "fixture",
@@ -5810,30 +6039,112 @@ mod unified_row_tests {
                     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
                     std::fs::write(&file, b"inert installer").unwrap();
                 }
+                let (entered, entry) = mpsc::channel();
+                let (permit, release) = mpsc::channel();
+                TEST_COMPLETED_DOWNLOADS.with(|probes| {
+                    *probes.borrow_mut() = Some(
+                        [CompletedDownloadProbe {
+                            entered,
+                            permit: release,
+                            disconnect: false,
+                            checked: Default::default(),
+                        }]
+                        .into(),
+                    )
+                });
+                let reentered = Rc::new(std::cell::Cell::new(false));
+                let reentry = (attempt == 1).then(|| {
+                    let reentered = reentered.clone();
+                    let status = status.clone();
+                    download.connect_sensitive_notify(move |button| {
+                        if button.is_sensitive() && !reentered.replace(true) {
+                            assert_eq!(status.text(), "✕");
+                            button.emit_clicked();
+                        }
+                    })
+                });
+                let summaries = summary_updates.get();
                 events
                     .send(download::DownloadEvent::Complete {
                         files: vec![file.clone()],
                     })
                     .unwrap();
+                // A duplicate event must never admit a second inspection or count update.
+                let _ = events.send(download::DownloadEvent::Complete {
+                    files: vec![file.clone()],
+                });
+                let entered = std::cell::Cell::new(false);
+                wait(|| {
+                    if entry.try_recv().is_ok() {
+                        entered.set(true);
+                    }
+                    entered.get()
+                });
+                assert_eq!(status.text(), "Finalizing…");
+                assert_eq!(count.text(), "0/1 Downloaded");
+                assert_eq!(summary_updates.get(), summaries);
+                assert!(crate::profile_reset::reserve().is_err());
+                assert!(
+                    events
+                        .send(download::DownloadEvent::Complete {
+                            files: vec![file.clone()]
+                        })
+                        .is_err()
+                );
+                let heartbeat = Rc::new(std::cell::Cell::new(false));
+                glib::timeout_add_local_once(Duration::from_millis(150), {
+                    let heartbeat = heartbeat.clone();
+                    move || heartbeat.set(true)
+                });
+                // Proxies emit clicked directly, even when their source is insensitive.
+                download.emit_clicked();
+                copy.emit_clicked();
+                delete.emit_clicked();
+                wait(|| heartbeat.get());
+                assert!(window.visible_dialog().is_none());
+                assert_eq!(count.text(), "0/1 Downloaded");
+                permit.send(()).unwrap();
                 wait(|| status.text() == if attempt == 1 { "✕" } else { "✓" });
+                wait(|| crate::profile_reset::reserve().is_ok());
+                assert_eq!(
+                    count.text(),
+                    if attempt == 1 {
+                        "0/1 Downloaded"
+                    } else {
+                        "1/1 Downloaded"
+                    }
+                );
+                assert_eq!(summary_updates.get(), summaries + usize::from(attempt == 2));
+                TEST_COMPLETED_DOWNLOADS.with(|probes| {
+                    assert!(probes.borrow().as_ref().unwrap().is_empty());
+                    *probes.borrow_mut() = None;
+                });
                 assert_eq!(status.has_css_class("error"), attempt == 1);
                 assert_eq!(status.has_css_class("success"), attempt == 2);
+                if let Some(handler) = reentry {
+                    assert!(reentered.get());
+                    download.disconnect(handler);
+                    assert!(window.visible_dialog().is_some());
+                }
             }
             if attempt < 2 {
-                if menu.is_visible() {
-                    menu.popup();
-                    wait(|| popover.is_mapped());
-                    descendants(popover.upcast_ref())
-                        .into_iter()
-                        .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
-                        .find(|button| {
-                            button.tooltip_text().as_deref()
-                                == Some("Download all required parts again")
-                        })
-                        .unwrap()
-                        .emit_clicked();
-                } else {
-                    download.emit_clicked();
+                // Sensitivity restoration may already have admitted the next request.
+                if window.visible_dialog().is_none() {
+                    if menu.is_visible() {
+                        menu.popup();
+                        wait(|| popover.is_mapped());
+                        descendants(popover.upcast_ref())
+                            .into_iter()
+                            .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                            .find(|button| {
+                                button.tooltip_text().as_deref()
+                                    == Some("Download all required parts again")
+                            })
+                            .unwrap()
+                            .emit_clicked();
+                    } else {
+                        download.emit_clicked();
+                    }
                 }
                 wait(|| window.visible_dialog().is_some());
                 wait(|| {
@@ -5863,6 +6174,205 @@ mod unified_row_tests {
         assert_eq!(collection.last_child().as_ref(), Some(&row));
         assert_eq!(tabs.visible_child_name().as_deref(), Some("files"));
         window.close();
+
+        // Each new row uses its actual proxy/chooser/captured Complete path.
+        for (index, case) in [
+            "freeze",
+            "disconnect",
+            "epoch",
+            "logout",
+            "online",
+            "close",
+            "auth",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            model.borrow_mut().logout_pending = false;
+            let window = adw::ApplicationWindow::new(&app);
+            let updates = Rc::new(std::cell::Cell::new(0));
+            let refresh: Rc<dyn Fn()> = Rc::new({
+                let updates = updates.clone();
+                move || updates.set(updates.get() + 1)
+            });
+            let context = RemoteFileContext {
+                window: &window,
+                refresh_summary: &refresh,
+                ..context
+            };
+            let prepared = prepare_files_page(
+                &DetailPageModel::game(
+                    Game {
+                        product_id: 9306001,
+                        remote_artifacts: vec![artifact.clone()],
+                        ..Game::default()
+                    },
+                    false,
+                ),
+                &config,
+                &statuses,
+            )
+            .unwrap();
+            let collection = remote_file_collection(
+                "Offline Installers",
+                "folder-download-symbolic",
+                std::slice::from_ref(&artifact),
+                &[],
+                &context,
+                &prepared,
+            );
+            window.set_content(Some(&collection));
+            window.present();
+            wait(|| collection.is_mapped());
+            let proxy = descendants(collection.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| {
+                    button.is_mapped()
+                        && button.tooltip_text().as_deref() == Some("Download all required parts")
+                })
+                .unwrap();
+            let count = descendants(collection.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                .find(|label| label.text() == "0/1 Downloaded")
+                .unwrap();
+            proxy.emit_clicked();
+            wait(|| window.visible_dialog().is_some());
+            wait(|| {
+                descendants(window.visible_dialog().unwrap().upcast_ref())
+                    .into_iter()
+                    .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                    .any(|button| {
+                        button.label().as_deref() == Some("Download") && button.is_sensitive()
+                    })
+            });
+            respond(&window, "Download");
+            wait(|| {
+                super::super::download_chooser::TEST_DOWNLOAD_QUEUE
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .len()
+                    == index + 4
+            });
+            let events = super::super::download_chooser::TEST_DOWNLOAD_QUEUE
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()[index + 3]
+                .0[0]
+                .events
+                .clone();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            let reservation = (case == "freeze").then(|| crate::profile_reset::reserve().unwrap());
+            let (entered, entry) = mpsc::channel();
+            let (permit, release) = mpsc::channel();
+            let checked = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            TEST_COMPLETED_DOWNLOADS.with(|probes| {
+                *probes.borrow_mut() = Some(if case == "freeze" {
+                    std::collections::VecDeque::new()
+                } else {
+                    [CompletedDownloadProbe {
+                        entered,
+                        permit: release,
+                        disconnect: case == "disconnect",
+                        checked: checked.clone(),
+                    }]
+                    .into()
+                })
+            });
+            events
+                .send(download::DownloadEvent::Complete {
+                    files: vec![file.clone()],
+                })
+                .unwrap();
+            let status = descendants(collection.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                .find(|label| label.text() == "Preparing download…")
+                .unwrap();
+            if case != "freeze" {
+                let started = std::cell::Cell::new(false);
+                wait(|| {
+                    if entry.try_recv().is_ok() {
+                        started.set(true);
+                    }
+                    started.get()
+                });
+                assert_eq!(status.text(), "Finalizing…");
+                assert!(crate::profile_reset::reserve().is_err());
+                match case {
+                    "epoch" => model.borrow_mut().account_epoch += 1,
+                    "logout" => model.borrow_mut().logout_pending = true,
+                    "online" => {
+                        online::invalidate_library_session();
+                    }
+                    "auth" => {
+                        auth::invalidate_session();
+                    }
+                    "close" => {
+                        window.close();
+                    }
+                    _ => {}
+                }
+                // The UI receiver retires while a stale/closed worker remains tracked.
+                let heartbeat = Rc::new(std::cell::Cell::new(false));
+                glib::timeout_add_local_once(Duration::from_millis(200), {
+                    let heartbeat = heartbeat.clone();
+                    move || heartbeat.set(true)
+                });
+                wait(|| heartbeat.get());
+                assert!(crate::profile_reset::reserve().is_err());
+                assert_eq!(count.text(), "0/1 Downloaded");
+                assert_eq!(updates.get(), 0);
+                assert!(!checked.load(std::sync::atomic::Ordering::Acquire));
+                permit.send(()).unwrap();
+            }
+            if matches!(case, "freeze" | "disconnect") {
+                wait(|| {
+                    status
+                        .text()
+                        .starts_with("Could not inspect downloaded files.")
+                });
+                assert!(status.text().contains("Manage → Refresh local state"));
+                assert!(status.has_css_class("error"));
+                assert!(!status.has_css_class("success"));
+                assert!(!proxy.is_sensitive());
+                assert!(
+                    descendants(collection.upcast_ref())
+                        .into_iter()
+                        .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                        .any(|button| button.tooltip_text().as_deref()
+                            == Some("Delete downloaded files")
+                            && button.get_visible()
+                            && button.is_sensitive())
+                );
+            }
+            drop(reservation);
+            wait(|| crate::profile_reset::reserve().is_ok());
+            let settled = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(150), {
+                let settled = settled.clone();
+                move || settled.set(true)
+            });
+            wait(|| settled.get());
+            assert_eq!(count.text(), "0/1 Downloaded");
+            assert_eq!(updates.get(), 0);
+            assert_eq!(
+                checked.load(std::sync::atomic::Ordering::Acquire),
+                !matches!(case, "freeze" | "online" | "auth")
+            );
+            if !matches!(case, "freeze" | "disconnect") {
+                assert_eq!(status.text(), "Finalizing…");
+            }
+            TEST_COMPLETED_DOWNLOADS.with(|probes| {
+                assert!(probes.borrow().as_ref().unwrap().is_empty());
+                *probes.borrow_mut() = None;
+            });
+            window.destroy();
+        }
     }
 
     #[test]
