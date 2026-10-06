@@ -162,8 +162,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   reconstructions drop from2N toN. This is not a measured whole-application timing claim.
 - Independent review, two focused private regressions, formatting, all-target Clippy and build PASS.
 
-## Remaining findings
-
 ### P337 — retain search and selection after game exit
 
 - Release the mutable model borrow before synchronous alphabetical filter invalidation; otherwise
@@ -177,6 +175,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   independent final re-review PASS before commit.
 - Live Home no-match guidance verified. Test-driver xdotool type consumed subsequent words in
   one attempt; corrected by separate invocation. No product defect inferred from that input error.
+
+### P339 — identify archive size honestly
+
+- Label the game detail, DLC catalog and refreshed subtitle byte count as Downloaded files;
+  a remaining installed game no longer has an unexplained0B value after deleting its archive.
+- No byte-counting or traversal changes. Independent review, existing async-summary regression
+  extended through nonzero/zero/repeated refresh, formatting/all-target Clippy/build PASS.
+
+## Remaining findings
 
 - Real Gungeon archive-only deletion/re-download verified: one confirmation removes one archive,
   restores single Download/counts while preserving installed Play; explicit library Download

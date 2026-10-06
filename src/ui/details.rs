@@ -125,7 +125,7 @@ pub(super) fn render_detail_page(
     hero_logo.set_visible(game.hero_logo.is_some());
     let disk_usage = game.disk_usage;
     let subtitle = gtk::Label::new(Some(&format!(
-        "{}{}{}{} · {}",
+        "{}{}{}{} · Downloaded files: {}",
         game.release_year
             .map(|x| x.to_string() + " · ")
             .unwrap_or_default(),
@@ -3416,7 +3416,7 @@ pub(super) fn build_dlc_catalog(
         summary.add_css_class("dlc-catalog-summary");
         copy.append(&summary);
         let kind = gtk::Label::new(Some(&format!(
-            "{}  ·  {}",
+            "{}  ·  Downloaded files: {}",
             dlc.kind(),
             human_size(dlc.disk_usage)
         )));

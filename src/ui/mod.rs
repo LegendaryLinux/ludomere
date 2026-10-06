@@ -706,7 +706,10 @@ fn managed_detail_refresher(
                     let prefix = text
                         .rsplit_once(" · ")
                         .map_or(text.as_str(), |(prefix, _)| prefix);
-                    label.set_label(&format!("{prefix} · {}", human_size(bytes)));
+                    label.set_label(&format!(
+                        "{prefix} · Downloaded files: {}",
+                        human_size(bytes)
+                    ));
                 }
             }
             glib::ControlFlow::Break
@@ -1228,7 +1231,7 @@ mod managed_detail_summary_tests {
         let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
         let summary = gtk::Label::new(Some("5 available · old"));
         summary.set_widget_name("managed-files-summary-42");
-        let subtitle = gtk::Label::new(Some("Game · Linux · old"));
+        let subtitle = gtk::Label::new(Some("Game · Linux · Downloaded files: old"));
         subtitle.set_widget_name("managed-product-subtitle-42");
         page.append(&summary);
         page.append(&subtitle);
@@ -1272,8 +1275,28 @@ mod managed_detail_summary_tests {
         );
         assert_eq!(
             subtitle.text(),
-            format!("Game · Linux · {}", human_size(19))
+            format!("Game · Linux · Downloaded files: {}", human_size(19))
         );
+
+        connection
+            .execute("UPDATE managed_files SET present=0", [])
+            .unwrap();
+        for _ in 0..2 {
+            refresh();
+            finish_workers();
+            pump();
+            assert_eq!(
+                subtitle.text(),
+                format!("Game · Linux · Downloaded files: {}", human_size(0))
+            );
+            assert_eq!(
+                summary.text(),
+                format!(
+                    "5 available · 0 local installers · {} on disk",
+                    human_size(0)
+                )
+            );
+        }
 
         for case in 0..6 {
             summary.set_label("5 available · old");

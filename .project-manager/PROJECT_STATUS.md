@@ -4,6 +4,10 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P337 committed6c2e603 exact post-commit build PASS. P339 independent review, extended P329
+  mapped regression, formatting/all-target Clippy/build PASS; preparing separate wording commit.
+  P338/P340/P341 independent reviews PASS and await serial integration/gates. P342/P343 isolated.
+
 - P337 strict both-sort mapped regression and final independent re-review PASS; related retained
   GTK selection flag fixed before row reorder. Formatting/all-target Clippy/build PASS, commit next.
 
