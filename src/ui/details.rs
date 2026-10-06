@@ -1276,6 +1276,15 @@ pub(super) fn render_detail_page(
     glib::idle_add_local_once(move || adjustment.set_value(adjustment.lower()));
 }
 
+#[cfg(test)]
+type TestManualUpdateReceiver = mpsc::Receiver<anyhow::Result<crate::updates::ManualUpdateCheck>>;
+
+#[cfg(test)]
+thread_local! {
+    // Outer Some enables fail-closed injection; inner None rejects an unplanned check.
+    static TEST_MANUAL_UPDATE_CHECK: RefCell<Option<Option<TestManualUpdateReceiver>>> = const { RefCell::new(None) };
+}
+
 fn show_manual_update_check(
     window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
@@ -1323,6 +1332,7 @@ fn show_manual_update_check(
     let confirm = gtk::Button::with_label("Update");
     confirm.add_css_class("suggested-action");
     confirm.set_sensitive(false);
+    confirm.set_visible(false);
     body.append(&confirm);
     root.append(&body);
     dialog.set_child(Some(&root));
@@ -1355,6 +1365,7 @@ fn show_manual_update_check(
             };
             confirm.set_sensitive(false);
             if let Some(spinner) = spinner.upgrade() {
+                spinner.set_visible(true);
                 spinner.start();
             }
             status.set_label("Preparing the confirmed update…");
@@ -1370,16 +1381,35 @@ fn show_manual_update_check(
             let install_ready = install_ready.clone();
             let dialog = dialog.clone();
             let spinner = spinner.clone();
+            let mut receiver = Some(receiver);
             glib::timeout_add_local(Duration::from_millis(50), move || {
-                if closed.get()
-                    || model.borrow().account_epoch != epoch
+                if closed.get() {
+                    return glib::ControlFlow::Break;
+                }
+                if model.borrow().account_epoch != epoch
                     || model.borrow().logout_pending
                     || online::account_session() != session
                 {
+                    drop(receiver.take());
+                    if let Some(spinner) = spinner.upgrade() {
+                        spinner.stop();
+                        spinner.set_visible(false);
+                    }
+                    confirm.set_visible(false);
+                    status
+                        .set_label("Your sign-in session changed. Close this check and try again.");
                     return glib::ControlFlow::Break;
                 }
-                match receiver.try_recv() {
+                let result = match receiver.as_ref().unwrap().try_recv() {
                     Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    result => result,
+                };
+                drop(receiver.take());
+                if let Some(spinner) = spinner.upgrade() {
+                    spinner.stop();
+                    spinner.set_visible(false);
+                }
+                match result {
                     Ok(Ok(
                         crate::updates::ManualUpdateQueued::Depot
                         | crate::updates::ManualUpdateQueued::OfflineDownload,
@@ -1398,10 +1428,10 @@ fn show_manual_update_check(
                         status.set_label(&format!("Could not queue the update: {error}"));
                         confirm.set_sensitive(true);
                     }
-                    Err(_) => status.set_label("The update worker stopped. Close and check again."),
-                }
-                if let Some(spinner) = spinner.upgrade() {
-                    spinner.stop();
+                    Err(_) => {
+                        confirm.set_visible(false);
+                        status.set_label("The update worker stopped. Close and check again.");
+                    }
                 }
                 glib::ControlFlow::Break
             });
@@ -1459,44 +1489,69 @@ fn show_manual_update_check(
             }
         }
     });
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = sender.send(crate::updates::check_installed_update(
-            &game, &installed, &token, session,
-        ));
-    });
+    let start_check = move || {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(crate::updates::check_installed_update(
+                &game, &installed, &token, session,
+            ));
+        });
+        receiver
+    };
+    #[cfg(test)]
+    let receiver = TEST_MANUAL_UPDATE_CHECK
+        .with(|slot| {
+            slot.borrow_mut()
+                .as_mut()
+                .map(|receiver| receiver.take().expect("unplanned manual update check"))
+        })
+        .unwrap_or_else(start_check);
+    #[cfg(not(test))]
+    let receiver = start_check();
     let model = model.clone();
+    let mut receiver = Some(receiver);
     glib::timeout_add_local(Duration::from_millis(50), move || {
-        if closed.get()
-            || model.borrow().account_epoch != epoch
+        if closed.get() {
+            return glib::ControlFlow::Break;
+        }
+        if model.borrow().account_epoch != epoch
             || model.borrow().logout_pending
             || online::account_session() != session
         {
+            drop(receiver.take());
+            spinner.stop();
+            spinner.set_visible(false);
+            status.set_label("Your sign-in session changed. Close this check and try again.");
             return glib::ControlFlow::Break;
         }
-        match receiver.try_recv() {
+        let result = match receiver.as_ref().unwrap().try_recv() {
             Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+            result => result,
+        };
+        drop(receiver.take());
+        spinner.stop();
+        spinner.set_visible(false);
+        match result {
             Ok(Ok(crate::updates::ManualUpdateCheck::UpToDate)) => status
                 .set_label("No update is available. You can keep playing the installed version."),
             Ok(Ok(crate::updates::ManualUpdateCheck::Available(found))) => {
                 let found = *found;
                 status.set_label(&format!("An update{} is available. Nothing has been queued. Your automatic update preferences will stay unchanged.", found.version.as_ref().map(|version| format!(" ({version})")).unwrap_or_default()));
-                confirm.set_label(
-                    if found.source == crate::domain::InstallationSource::GalaxyDepot {
-                        "Download and apply update"
-                    } else if found.download_required {
-                        "Download update"
-                    } else {
-                        "Review installer update"
-                    },
-                );
-                confirm.set_sensitive(true);
+                let action = if found.source == crate::domain::InstallationSource::GalaxyDepot {
+                    "Download and apply update"
+                } else if found.download_required {
+                    "Download update"
+                } else {
+                    "Review installer update"
+                };
                 offer.replace(Some(found));
+                confirm.set_label(action);
+                confirm.set_visible(true);
+                confirm.set_sensitive(true);
             }
             Ok(Err(error)) => status.set_label(&format!("Could not check for updates: {error}")),
             Err(_) => status.set_label("The update check stopped. Close and try again."),
         }
-        spinner.stop();
         glib::ControlFlow::Break
     });
     dialog.present(Some(window));
@@ -3475,6 +3530,216 @@ pub(super) fn show_dlc_page(w: &Widgets, model: &Rc<RefCell<AppModel>>, parent_i
 #[cfg(test)]
 mod installation_progress_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "private p382b HOME/all XDG/TMP, GTK and D-Bus; injected check results only"]
+    fn manual_update_terminal_feedback_hides_unusable_controls() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p382b-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn nodes(root: &impl IsA<gtk::Widget>) -> Vec<gtk::Widget> {
+            let mut result = vec![root.as_ref().clone()];
+            for child in
+                std::iter::successors(root.as_ref().first_child(), |child| child.next_sibling())
+            {
+                result.extend(nodes(&child));
+            }
+            result
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.ManualUpdateFeedbackTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(400)
+            .default_height(600)
+            .build();
+        window.set_content(Some(&gtk::Box::new(gtk::Orientation::Vertical, 0)));
+        window.present();
+        let game = Game {
+            product_id: 1,
+            title: "Synthetic installed game".into(),
+            ..Game::default()
+        };
+        let installed = crate::domain::InstalledGame {
+            product_id: 1,
+            library_id: "inert".into(),
+            installed_version: None,
+            installation_directory: std::path::PathBuf::from(std::env::var_os("HOME").unwrap())
+                .join("absent-game"),
+            installer_revision_id: None,
+            installer_job_id: None,
+            installer_files: Vec::new(),
+            installer_complete: true,
+            installer_operating_system: Some("linux".into()),
+            installer_language: None,
+            compatibility: None,
+            primary_executable: None,
+            launch_arguments: Vec::new(),
+            state: crate::domain::InstallationState::Installed,
+            error: None,
+            installed_at: None,
+            verified_at: None,
+            last_played_at: None,
+            playtime_seconds: 0,
+            created_at: 0,
+            updated_at: 0,
+        };
+        let model = Rc::new(RefCell::new(AppModel {
+            games: vec![game.clone()],
+            installed_games: HashMap::from([(1, installed.clone())]),
+            network_available: true,
+            account_token: Some(auth::Token {
+                access_token: "inert".into(),
+                refresh_token: "inert".into(),
+                user_id: "synthetic".into(),
+                expires_at: i64::MAX,
+            }),
+            ..AppModel::default()
+        }));
+        let detail = DetailPageModel::game(game, false);
+        let long_error = "Unable to inspect the synthetic update source. ".repeat(8);
+        for case in [
+            "up-to-date",
+            "error",
+            "disconnected",
+            "epoch",
+            "logout",
+            "closed",
+        ] {
+            model.borrow_mut().logout_pending = false;
+            let (sender, receiver) = mpsc::channel();
+            let mut sender = Some(sender);
+            TEST_MANUAL_UPDATE_CHECK.with(|slot| *slot.borrow_mut() = Some(Some(receiver)));
+            show_manual_update_check(&window, &model, &detail);
+            TEST_MANUAL_UPDATE_CHECK.with(|slot| assert!(matches!(&*slot.borrow(), Some(None))));
+            let dialog = window.visible_dialog().unwrap();
+            let spinner = nodes(&dialog)
+                .into_iter()
+                .find_map(|widget| widget.downcast::<gtk::Spinner>().ok())
+                .unwrap();
+            let confirm = nodes(&dialog)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some("Update"))
+                .unwrap();
+            let status = nodes(&dialog)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                .find(|label| label.text() == "Checking for an update…")
+                .unwrap();
+            wait(|| spinner.is_mapped() && status.width() > 0);
+            let close = nodes(&dialog)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.has_css_class("close"))
+                .unwrap();
+            wait(|| close.is_mapped() && close.width() > 0);
+            assert!(spinner.is_spinning());
+            assert!(!confirm.get_visible() && !confirm.is_sensitive());
+            match case {
+                "up-to-date" => assert!(
+                    sender
+                        .as_ref()
+                        .unwrap()
+                        .send(Ok(crate::updates::ManualUpdateCheck::UpToDate))
+                        .is_ok()
+                ),
+                "error" => assert!(
+                    sender
+                        .as_ref()
+                        .unwrap()
+                        .send(Err(anyhow::anyhow!(long_error.clone())))
+                        .is_ok()
+                ),
+                "disconnected" => drop(sender.take()),
+                "epoch" => model.borrow_mut().account_epoch += 1,
+                "logout" => model.borrow_mut().logout_pending = true,
+                "closed" => close.emit_clicked(),
+                _ => unreachable!(),
+            }
+            if case == "closed" {
+                wait(|| {
+                    sender
+                        .as_ref()
+                        .unwrap()
+                        .send(Ok(crate::updates::ManualUpdateCheck::UpToDate))
+                        .is_err()
+                });
+                assert_eq!(status.text(), "Checking for an update…");
+            } else {
+                wait(|| !spinner.is_spinning());
+                assert!(!spinner.get_visible());
+                assert!(!confirm.get_visible() && !confirm.is_sensitive());
+                assert_eq!(
+                    status.text(),
+                    match case {
+                        "up-to-date" =>
+                            "No update is available. You can keep playing the installed version."
+                                .to_owned(),
+                        "error" => format!("Could not check for updates: {long_error}"),
+                        "disconnected" => "The update check stopped. Close and try again.".into(),
+                        _ => "Your sign-in session changed. Close this check and try again.".into(),
+                    }
+                );
+                if let Some(sender) = sender.as_ref() {
+                    assert!(
+                        sender
+                            .send(Ok(crate::updates::ManualUpdateCheck::UpToDate))
+                            .is_err()
+                    );
+                }
+                wait(|| status.is_mapped() && close.is_mapped());
+                let close_bounds = close.compute_bounds(&window).unwrap();
+                assert!(
+                    close_bounds.x() >= 0.0
+                        && close_bounds.y() >= 0.0
+                        && close_bounds.x() + close_bounds.width() <= window.width() as f32
+                        && close_bounds.y() + close_bounds.height() <= window.height() as f32
+                );
+                let status_bounds = status.compute_bounds(&window).unwrap();
+                assert!(status.wraps() && !status.layout().is_ellipsized());
+                assert!(
+                    status_bounds.x() >= 0.0
+                        && status_bounds.x() + status_bounds.width() <= window.width() as f32
+                );
+                close.emit_clicked();
+            }
+            wait(|| window.visible_dialog().is_none());
+            assert_eq!(model.borrow().installed_games.get(&1), Some(&installed));
+        }
+        TEST_MANUAL_UPDATE_CHECK.with(|slot| *slot.borrow_mut() = None);
+        window.destroy();
+    }
 
     #[test]
     #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]

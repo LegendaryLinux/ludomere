@@ -2,6 +2,16 @@
 
 ## R111 interactive audit
 
+- P383 (in_progress, file_summary; proposal/reviewer performance_audit): move Files completion
+  plausibility checks off GTK without changing the predicate, transfer events or unmounted proxy
+  contract. Own isolated files.rs only; tracked request-local validation and truthful finalizing/
+  error feedback. Synthetic held-worker and actual proxy/terminal regression; no real agent data.
+- P384 (in_progress, ui_critic; proposal/reviewer performance_audit): move Cloud backup-folder
+  creation/validation off GTK, surface errors and guard original page/session through existing
+  explicit-action directory launcher. Own isolated game_settings.rs only; preserve offline use,
+  independent pending state and current metadata eligibility. No cloud policy/file-manager changes.
+  Root alone runs private tests and commits; implementation gates require independent review.
+
 - P322 (in_progress, ui_critic): human-oriented UI/control inventory and critique; source and sanitized
   Ludomere screenshots first, isolated UI interaction later. No real profile/keyring/desktop access.
   Return reproducible findings, expected behavior, severity and evidence; no product edits initially.
@@ -227,7 +237,7 @@
   account policy, destructive actions or broader styling changes before review.
   P382a(in_progress, ui_critic): independently approved idle-fallback positive-network-or-disk
   sample predicate only, existing renderer variants; own isolated downloads.rs. Preserve featured
-  active/paused/error controls and sampling/history. P382b implementation authorized in isolated
+  active/paused/error controls and sampling/history. P382b verified in isolated
   details.rs manual-update presentation: hide unavailable terminal actions and stopped spinner;
   preserve offer-before-enable and cleanup-before-reentry ordering. Root runtime, independent review.
 - P378 (complete, ui_critic; reviewer file_summary): human-style critique of root-approved app-only

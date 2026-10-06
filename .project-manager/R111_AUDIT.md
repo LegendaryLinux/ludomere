@@ -33,6 +33,29 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P382b actual-dialog initial-outcome fixture PASS twice (p382b-z7k06fmm and final
+  p382b-luxeqhzm). Initial Clippy rejected the cfg-known-None test interception; independently
+  reviewed closure correction removes the lint without suppression or changed worker behavior.
+  Final fmt/all-target Clippy/compile/build PASS. Available/confirmed update paths have source
+  ordering coverage only; no real available update was manufactured. Live no-update follow-up
+  remains pending alongside next layout preview. Hidden terminal Update and spinner verified.
+
+- P381 preview2: settled narrow/wide populated Files fit after wrapping header; platform and
+  language filtering work and values survive resizing. Actual paced native keyboard traversal
+  selects Logs/Files/Overview and reveals offscreen first/last tabs after settled allocation.
+  Private normal/enlarged native-focus API diagnostics also complete; they are supplementary,
+  not real-key evidence. Retained P354 renderer PASS (p354-4f5b1ctv), compile/fmt/Clippy PASS.
+- P381 still blocked by actual completed-download panel: wallpaper-only delete/redownload
+  succeeds, but settled Download Complete status pushes gear/favorite offscreen at1150x700.
+  Evidence detail-preview2-complete-status-narrow.png. Bounded separate status-row proposal
+  requested before further changes; preview patch temporarily removed for independent P382b gate.
+- File-menu test correction: GTK uses a separate X11 popup excluded by main-window screenshots.
+  Menus/actions were opening; repeated inputs spawned additional choosers, all dismissed without
+  further downloads. Actual one-file wallpaper Delete confirms first click dismisses underlying
+  menu but leaves confirmation; second click deletes. Direct-row Download then succeeds on first
+  confirmation click. Possible retained popup grab is under source review; no cause claim yet.
+  Wallpaper restored (about1.7MB), game/three installer files preserved;14GB reservation remains.
+
 - P379 commit44f13da exact build PASS. P382a idle graph predicate passes the extended actual
   Downloads renderer (p378-99n30h98), fmt/Clippy and compile. Initial private display startup
   was sandbox-blocked before tests; rerun with authorized private socket creation passed.
