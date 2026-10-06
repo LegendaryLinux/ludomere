@@ -2,6 +2,12 @@
 
 ## R111 interactive audit
 
+- P399 (in_progress proposal, ui_critic; reviewer performance_audit): runtime-log folder opening
+  failure is overwritten by unrelated periodic reader success. Propose minimal distinct local
+  feedback in logs.rs using existing async launcher and guards; no polling-policy change,
+  actual desktop helper or generic feedback framework. Implementation only after source review;
+  use existing fixture/seam if possible, preserve Follow/selection/Copy behavior.
+
 - P398 (complete, ui_critic; reviewer performance_audit): Downloads folder-button eligibility
   uses nonempty path, not a GTK-thread directory stat; existing off-thread validation/launcher
   reports missing/inaccessible paths on explicit click. Own isolated details.rs helper expression
@@ -10,11 +16,12 @@
   for nonempty missing destinations as bounded R111 feedback/performance improvement.
   Independent exact one-expression/source-callsite review, formatting and build PASS.
 
-- P397 (in_progress, performance_audit; reviewer file_summary): operation-log refresh registers
+- P397 (complete, performance_audit; reviewer file_summary): operation-log refresh registers
   activity before spawn and retains original session through profile I/O/publication. Own
   isolated details.rs log worker and existing focused fixture only. Preserve partial results,
   explicit Retry and loading-row ownership; no locks across I/O or cancellation/rollback claim.
   No actual logs/account/reset by agents; root private gates/build.
+  Exact actual-worker/private persistence gate p255-3fwlcft_ PASS; fmt/compile/Clippy PASS.
 
 - P396 (complete, file_summary; reviewer ui_critic): guard generic async directory opening by
   original raw auth/account and visible parent, reusing launch_validated_directory. Own isolated

@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At54345f2 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library
+  tests, six integration tests, five Python helper tests and build.92 library entries ignored
+  by default; affected UI gates run separately.68 exact post-commit builds PASS. Evidence
+  /tmp/ludomere-r111-full-build-uv_o7udz/build.log. Actual profile/helpers/network excluded.
+
 - At99eeb3d consolidated private build PASS: fmt, all-target Clippy with warnings denied,
   574 library tests, six integration tests, five Python helper tests and build.86 library tests
   ignored by default; affected GTK tests separately passed.58 exact post-commit builds PASS.
@@ -37,6 +42,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P397 exact private actual-worker gate PASS p255-3fwlcft_: activity exists before worker entry,
+  frozen/retired admission cannot create log/database paths, staged revocation prevents later DB/
+  publication work, partial errors/Retry and newer-row ownership retained. Independent source GO;
+  compile/fmt/Clippy PASS, known private GSettings warnings only. Actual user logs/helpers untouched.
+  P395 copy and P398 folder predicate preserved by contextual integration.
 
 - P398 one-expression GTK stat removal independently reviewed; only Downloads folder-button
   construction changes. Nonempty missing paths now use existing asynchronous validation/error

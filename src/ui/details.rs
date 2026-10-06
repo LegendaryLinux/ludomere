@@ -3076,30 +3076,45 @@ fn refresh_product_logs(
     loading.append(&spinner);
     loading.append(&gtk::Label::new(Some("Loading operation logs…")));
     container.append(&loading);
+    if container.first_child().as_ref() != Some(loading.upcast_ref()) {
+        return;
+    }
     let (sender, receiver) = mpsc::channel();
+    if online::account_session() != session {
+        drop(sender);
+        monitor_product_logs(container, product_id, window, session, loading, receiver);
+        return;
+    }
+    let activity = match crate::profile_reset::begin_activity("loading operation logs") {
+        Ok(activity) => activity,
+        Err(error) => {
+            let _ = sender.send(ProductLogs {
+                read_error: Some(format!("Could not load operation logs: {error:#}")),
+                ..ProductLogs::default()
+            });
+            monitor_product_logs(container, product_id, window, session, loading, receiver);
+            return;
+        }
+    };
     std::thread::spawn(move || {
+        let _activity = activity;
+        #[cfg(test)]
+        let probe = installation_progress_tests::log_probe();
+        #[cfg(test)]
+        if let Some(probe) = &probe {
+            installation_progress_tests::wait_log_barrier(&probe.before_paths);
+        }
         if online::account_session() != session {
             return;
         }
-        let _activity = match crate::profile_reset::begin_activity("loading operation logs") {
-            Ok(activity) => activity,
-            Err(error) => {
-                let _ = sender.send(ProductLogs {
-                    read_error: Some(format!("Could not load operation logs: {error:#}")),
-                    ..ProductLogs::default()
-                });
-                return;
-            }
-        };
+        let installation_log = crate::installation::installation_log_path(product_id).ok();
+        if online::account_session() != session {
+            return;
+        }
+        let uninstallation_log = crate::installation::uninstallation_log_path(product_id).ok();
         let logs = [
-            (
-                "Installer log",
-                crate::installation::installation_log_path(product_id).ok(),
-            ),
-            (
-                "Uninstaller log",
-                crate::installation::uninstallation_log_path(product_id).ok(),
-            ),
+            ("Installer log", installation_log),
+            ("Uninstaller log", uninstallation_log),
         ]
         .into_iter()
         .filter_map(|(title, path)| path.filter(|path| path.is_file()).map(|path| (title, path)))
@@ -3114,6 +3129,13 @@ fn refresh_product_logs(
                 .then_some(snapshot.message)
                 .flatten()
             });
+        #[cfg(test)]
+        if let Some(probe) = &probe {
+            installation_progress_tests::wait_log_barrier(&probe.before_database);
+        }
+        if online::account_session() != session {
+            return;
+        }
         let (download_failures, read_error) =
             match StateStore::open().and_then(|store| store.download_jobs()) {
                 Ok(jobs) => (
@@ -3131,6 +3153,13 @@ fn refresh_product_logs(
                     )),
                 ),
             };
+        #[cfg(test)]
+        if let Some(probe) = &probe {
+            installation_progress_tests::wait_log_barrier(&probe.before_result);
+        }
+        if online::account_session() != session {
+            return;
+        }
         let _ = sender.send(ProductLogs {
             files: logs,
             installation_error,
@@ -3544,6 +3573,31 @@ pub(super) fn show_dlc_page(w: &Widgets, model: &Rc<RefCell<AppModel>>, parent_i
 mod installation_progress_tests {
     use super::*;
 
+    type LogBarrier = (mpsc::Sender<()>, mpsc::Receiver<()>);
+    #[derive(Default)]
+    pub(super) struct LogProbe {
+        pub(super) before_paths: Option<LogBarrier>,
+        pub(super) before_database: Option<LogBarrier>,
+        pub(super) before_result: Option<LogBarrier>,
+    }
+    static LOG_PROBES: std::sync::Mutex<Option<std::collections::VecDeque<LogProbe>>> =
+        std::sync::Mutex::new(None);
+
+    pub(super) fn log_probe() -> Option<LogProbe> {
+        LOG_PROBES.lock().unwrap().as_mut().map(|probes| {
+            probes
+                .pop_front()
+                .expect("missing private operation-log probe")
+        })
+    }
+
+    pub(super) fn wait_log_barrier(barrier: &Option<LogBarrier>) {
+        if let Some((entered, proceed)) = barrier {
+            entered.send(()).unwrap();
+            proceed.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
+    }
+
     #[test]
     #[ignore = "private p382b HOME/all XDG/TMP, GTK and D-Bus; injected check results only"]
     fn manual_update_terminal_feedback_hides_unusable_controls() {
@@ -3934,13 +3988,27 @@ mod installation_progress_tests {
     }
 
     #[test]
-    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    #[ignore = "requires private p255 HOME/all XDG/TMP, GTK and D-Bus; synthetic operation logs only"]
     fn operation_logs_show_partial_failures_retry_and_reject_stale_results() {
-        assert!(
-            std::env::var("HOME")
-                .unwrap()
-                .starts_with("/tmp/ludomere-p255-")
-        );
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p255-"),
+                "{key}"
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(!crate::identity::installation_logs().exists());
+        *LOG_PROBES.lock().unwrap() = Some(std::collections::VecDeque::new());
         adw::init().unwrap();
         fn text(widget: &gtk::Widget) -> String {
             let mut result = widget
@@ -3963,6 +4031,19 @@ mod installation_progress_tests {
             }
             assert!(check());
         }
+        fn barrier() -> (LogBarrier, mpsc::Receiver<()>, mpsc::Sender<()>) {
+            let (entered, entry) = mpsc::channel();
+            let (release, proceed) = mpsc::channel();
+            ((entered, proceed), entry, release)
+        }
+        let enqueue = |probe| {
+            LOG_PROBES
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .push_back(probe)
+        };
         let app = adw::Application::builder()
             .application_id("io.github.ludomere.OperationLogsTest")
             .flags(gio::ApplicationFlags::NON_UNIQUE)
@@ -3972,7 +4053,7 @@ mod installation_progress_tests {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 12);
         window.set_content(Some(&container));
         window.present();
-        let session = online::account_session();
+        let mut session = online::account_session();
         let product_id = 9255001;
         render_product_logs(
             &container,
@@ -4000,9 +4081,94 @@ mod installation_progress_tests {
 
         let database = crate::identity::database();
         assert!(database.starts_with(std::env::var_os("XDG_DATA_HOME").unwrap()));
+        let log_directory = crate::identity::installation_logs();
+        let frozen = crate::profile_reset::reserve().unwrap();
+        refresh_product_logs(&container, product_id, &window, session);
+        wait_until(|| text(container.upcast_ref()).contains("Profile reset"));
+        assert!(text(container.upcast_ref()).contains("Retry"));
+        assert!(LOG_PROBES.lock().unwrap().as_ref().unwrap().is_empty());
+        assert!(!database.exists() && !log_directory.exists());
+        drop(frozen);
+
+        // Loading-row insertion can synchronously revoke the captured session.
+        let children = container.observe_children();
+        let revoked = Rc::new(std::cell::Cell::new(false));
+        let changed = children.connect_items_changed({
+            let container = container.downgrade();
+            let revoked = revoked.clone();
+            move |_, _, _, added| {
+                if added > 0
+                    && !revoked.get()
+                    && container.upgrade().is_some_and(|container| {
+                        text(container.upcast_ref()).contains("Loading operation logs")
+                    })
+                {
+                    revoked.set(true);
+                    online::invalidate_library_session();
+                }
+            }
+        });
+        refresh_product_logs(&container, product_id, &window, session);
+        wait_until(|| text(container.upcast_ref()).contains("Account changed"));
+        children.disconnect(changed);
+        assert!(revoked.get());
+        assert!(LOG_PROBES.lock().unwrap().as_ref().unwrap().is_empty());
+        assert!(!database.exists() && !log_directory.exists());
+        session = online::account_session();
+
+        let (before_paths, entered, release) = barrier();
+        enqueue(LogProbe {
+            before_paths: Some(before_paths),
+            ..LogProbe::default()
+        });
+        refresh_product_logs(&container, product_id, &window, session);
+        assert!(
+            crate::profile_reset::reserve().is_err(),
+            "activity must exist before worker entry"
+        );
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let heartbeat = Rc::new(std::cell::Cell::new(0));
+        let clock = glib::timeout_add_local(Duration::from_millis(10), {
+            let heartbeat = heartbeat.clone();
+            move || {
+                heartbeat.set(heartbeat.get() + 1);
+                glib::ControlFlow::Continue
+            }
+        });
+        wait_until(|| heartbeat.get() >= 3);
+        assert!(!database.exists() && !log_directory.exists());
+        online::invalidate_library_session();
+        release.send(()).unwrap();
+        wait_until(|| crate::profile_reset::reserve().is_ok());
+        wait_until(|| text(container.upcast_ref()).contains("Account changed"));
+        assert!(!database.exists() && !log_directory.exists());
+        clock.remove();
+        session = online::account_session();
+
+        let (before_database, entered, release) = barrier();
+        enqueue(LogProbe {
+            before_database: Some(before_database),
+            ..LogProbe::default()
+        });
+        refresh_product_logs(&container, product_id, &window, session);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(crate::profile_reset::reserve().is_err());
+        assert!(
+            log_directory.is_dir(),
+            "the existing path helpers retain their creation policy"
+        );
+        assert!(!database.exists());
+        online::invalidate_library_session();
+        release.send(()).unwrap();
+        wait_until(|| crate::profile_reset::reserve().is_ok());
+        wait_until(|| text(container.upcast_ref()).contains("Account changed"));
+        assert!(!database.exists());
+        session = online::account_session();
+
         std::fs::create_dir_all(&database).unwrap();
         let log = crate::installation::installation_log_path(product_id).unwrap();
         std::fs::write(&log, "synthetic installation output").unwrap();
+        enqueue(LogProbe::default());
         refresh_product_logs(&container, product_id, &window, session);
         assert!(text(container.upcast_ref()).contains("Loading operation logs"));
         wait_until(|| {
@@ -4017,11 +4183,27 @@ mod installation_progress_tests {
             .and_downcast::<gtk::Button>()
             .unwrap();
         std::fs::remove_dir(&database).unwrap();
+        enqueue(LogProbe::default());
         retry.emit_clicked();
         assert!(text(container.upcast_ref()).contains("Loading operation logs"));
         wait_until(|| text(container.upcast_ref()).contains("Installer log"));
         assert!(!text(container.upcast_ref()).contains("Could not load"));
         assert!(!text(container.upcast_ref()).contains("Retry"));
+
+        let (before_result, entered, release) = barrier();
+        enqueue(LogProbe {
+            before_result: Some(before_result),
+            ..LogProbe::default()
+        });
+        refresh_product_logs(&container, product_id, &window, session);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(crate::profile_reset::reserve().is_err());
+        online::invalidate_library_session();
+        release.send(()).unwrap();
+        wait_until(|| crate::profile_reset::reserve().is_ok());
+        wait_until(|| text(container.upcast_ref()).contains("Account changed"));
+        assert!(!text(container.upcast_ref()).contains("Installer log"));
+        session = online::account_session();
 
         for stale_session in [false, true] {
             while let Some(child) = container.first_child() {
@@ -4083,6 +4265,8 @@ mod installation_progress_tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(text(container.upcast_ref()), "Newer refresh result");
+        assert!(LOG_PROBES.lock().unwrap().take().unwrap().is_empty());
+        assert!(crate::profile_reset::reserve().is_ok());
         window.close();
     }
 
