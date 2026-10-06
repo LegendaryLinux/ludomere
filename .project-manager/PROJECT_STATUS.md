@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADb3f9227. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEADc3bc9ef. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered34 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered35 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -56,7 +56,8 @@ Last meaningful update: 2026-10-06.
   whole reconciliation and cannot be repaired from current Properties. Needs separate safe
   per-game recovery/writer protection; no malformed actual user data was inspected or claimed.
 - Use normal windowquit for game windows and app tray Close; X11 windowclose destroys a window
-  without proving process exit. Live client c9f5b99 closed normally before next verified restart.
+  without proving process exit. Live client b3f9227: native Gungeon removal completed and retained
+  both registered archives; Download/arrow updated in place. Cached Linux reinstall next.
   Actual game markers/data remain private; subagents receive only normalized diagnostic facts.
 
 ## R110 complete — 0.3.2 release and new PR

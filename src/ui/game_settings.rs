@@ -1075,6 +1075,71 @@ pub(super) fn show_game_settings(
     window.present();
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BranchActionState {
+    Idle,
+    Preparing,
+    Started,
+}
+
+fn connect_branch_selection(
+    branches: &[Option<String>],
+    installed_branch: Option<&Option<String>>,
+    selector: &gtk::DropDown,
+    switch: &gtk::Button,
+    forget: &gtk::Button,
+    state: &Rc<std::cell::Cell<BranchActionState>>,
+) -> Rc<dyn Fn()> {
+    let refresh: Rc<dyn Fn()> = {
+        let branches = branches.to_vec();
+        let installed_branch = installed_branch.cloned();
+        let selector = selector.downgrade();
+        let switch = switch.downgrade();
+        let forget = forget.downgrade();
+        let state = state.clone();
+        Rc::new(move || {
+            let (Some(selector), Some(switch), Some(forget)) =
+                (selector.upgrade(), switch.upgrade(), forget.upgrade())
+            else {
+                return;
+            };
+            let branch = branches.get(selector.selected() as usize);
+            let switch_reason = match state.get() {
+                BranchActionState::Preparing => Some("Wait for branch preparation to finish."),
+                BranchActionState::Started => Some(
+                    "Branch switch already started. Close and reopen Properties after it finishes.",
+                ),
+                BranchActionState::Idle => match branch {
+                    None => Some("Choose a branch before switching."),
+                    Some(branch) if Some(branch) == installed_branch.as_ref() => {
+                        Some("This branch is already installed.")
+                    }
+                    Some(_) => None,
+                },
+            };
+            let forget_reason = if state.get() == BranchActionState::Preparing {
+                Some("Wait for branch preparation to finish before forgetting a password.")
+            } else {
+                match branch {
+                    None => Some("Choose a named branch before forgetting its password."),
+                    Some(None) => Some("Master does not use a saved branch password."),
+                    Some(Some(_)) => None,
+                }
+            };
+            switch.set_sensitive(switch_reason.is_none());
+            switch.set_tooltip_text(switch_reason);
+            forget.set_sensitive(forget_reason.is_none());
+            forget.set_tooltip_text(forget_reason);
+        })
+    };
+    selector.connect_selected_notify({
+        let refresh = refresh.clone();
+        move |_| refresh()
+    });
+    refresh();
+    refresh
+}
+
 #[allow(clippy::too_many_arguments)]
 fn wire_branch_actions(
     model: &Rc<RefCell<AppModel>>,
@@ -1095,13 +1160,33 @@ fn wire_branch_actions(
         .map(|profile| profile.user_id.clone())
         .unwrap_or_default();
     let product_id = game.product_id;
+    let action_state = Rc::new(std::cell::Cell::new(BranchActionState::Idle));
+    let refresh_actions = connect_branch_selection(
+        &branches,
+        marker.galaxy_depot.as_ref().map(|depot| &depot.branch),
+        &selector,
+        &switch,
+        &forget,
+        &action_state,
+    );
     {
         let branches = branches.clone();
         let selector = selector.clone();
         let status = status.clone();
         let user_id = user_id.clone();
+        let action_state = action_state.clone();
         forget.connect_clicked(move |_| {
-            let Some(Some(branch)) = branches.get(selector.selected() as usize) else {
+            if action_state.get() == BranchActionState::Preparing {
+                status.set_label(
+                    "Wait for branch preparation to finish before forgetting a password.",
+                );
+                return;
+            }
+            let Some(branch) = branches.get(selector.selected() as usize) else {
+                status.set_label("Choose a named branch before forgetting its password.");
+                return;
+            };
+            let Some(branch) = branch else {
                 status.set_label("Master does not use a saved branch password.");
                 return;
             };
@@ -1135,7 +1220,10 @@ fn wire_branch_actions(
         .and_then(|depot| depot.architecture.clone());
     let epoch = model.borrow().account_epoch;
     let model = model.clone();
-    switch.connect_clicked(move |button| {
+    switch.connect_clicked(move |_| {
+        if action_state.get() != BranchActionState::Idle {
+            return;
+        }
         if model.borrow().account_epoch != epoch || model.borrow().logout_pending {
             status.set_label("The account changed. Reopen game settings.");
             return;
@@ -1153,10 +1241,10 @@ fn wire_branch_actions(
             status.set_label("Installation has no library root.");
             return;
         };
-        let selected_branch = branches
-            .get(selector.selected() as usize)
-            .cloned()
-            .flatten();
+        let Some(selected_branch) = branches.get(selector.selected() as usize).cloned() else {
+            status.set_label("Choose a branch before switching.");
+            return;
+        };
         if marker
             .galaxy_depot
             .as_ref()
@@ -1165,7 +1253,8 @@ fn wire_branch_actions(
             status.set_label("This branch is already installed.");
             return;
         }
-        button.set_sensitive(false);
+        action_state.set(BranchActionState::Preparing);
+        refresh_actions();
         status.remove_css_class("error");
         status.set_label("Authenticating and preparing branch switch…");
         let supplied = (!password.text().is_empty())
@@ -1229,7 +1318,8 @@ fn wire_branch_actions(
             let _ = sender.send(result);
         });
         let status = status.clone();
-        let button = button.clone();
+        let action_state = action_state.clone();
+        let refresh_actions = refresh_actions.clone();
         let model = model.clone();
         glib::timeout_add_local(Duration::from_millis(100), move || {
             if model.borrow().account_epoch != epoch
@@ -1241,13 +1331,16 @@ fn wire_branch_actions(
             }
             match receiver.try_recv() {
                 Ok(Ok(_)) => {
+                    action_state.set(BranchActionState::Started);
+                    refresh_actions();
                     status.set_label("Branch switch started.");
                     glib::ControlFlow::Break
                 }
                 Ok(Err(error)) => {
                     status.add_css_class("error");
                     status.set_label(&format!("Could not switch branch: {error}"));
-                    button.set_sensitive(true);
+                    action_state.set(BranchActionState::Idle);
+                    refresh_actions();
                     glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -1255,7 +1348,8 @@ fn wire_branch_actions(
                     status.add_css_class("error");
                     status
                         .set_label("Branch preparation stopped unexpectedly. Try switching again.");
-                    button.set_sensitive(true);
+                    action_state.set(BranchActionState::Idle);
+                    refresh_actions();
                     glib::ControlFlow::Break
                 }
             }
@@ -2576,6 +2670,175 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires private p363 HOME/all XDG, GTK and D-Bus; no branch workers or keyring"]
+    fn branch_controls_track_selection_preparation_and_started_handoff() {
+        let home = std::env::var("HOME").unwrap();
+        assert!(home.starts_with("/tmp/ludomere-p363-"));
+        let root = std::path::Path::new(&home).parent().unwrap();
+        for key in [
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(std::path::Path::new(&std::env::var_os(key).unwrap()).starts_with(root));
+        }
+        adw::init().unwrap();
+        let branches = [None, Some("beta".into()), Some("stable".into())];
+        let names = gtk::StringList::new(&["Master", "beta", "stable"]);
+        let selector = gtk::DropDown::new(Some(names.clone()), gtk::Expression::NONE);
+        selector.set_selected(1);
+        let switch = gtk::Button::with_label("Switch");
+        let forget = gtk::Button::with_label("Forget Password");
+        let state = Rc::new(std::cell::Cell::new(BranchActionState::Idle));
+        let refresh = connect_branch_selection(
+            &branches,
+            Some(&branches[1]),
+            &selector,
+            &switch,
+            &forget,
+            &state,
+        );
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.BranchEligibilityTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::new(&app);
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.append(&selector);
+        content.append(&switch);
+        content.append(&forget);
+        window.set_content(Some(&content));
+        window.present();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !forget.is_mapped() && std::time::Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(forget.is_mapped());
+        assert!(!switch.is_sensitive());
+        assert_eq!(
+            switch.tooltip_text().as_deref(),
+            Some("This branch is already installed.")
+        );
+        assert!(
+            forget.is_sensitive(),
+            "named-branch forgetting remains idempotent without probing credentials"
+        );
+        selector.set_selected(0);
+        assert!(switch.is_sensitive(), "Master is a valid different branch");
+        assert!(!forget.is_sensitive());
+        assert_eq!(
+            forget.tooltip_text().as_deref(),
+            Some("Master does not use a saved branch password.")
+        );
+        selector.set_selected(2);
+        assert!(switch.is_sensitive());
+        assert!(forget.is_sensitive());
+        assert!(switch.tooltip_text().is_none());
+        assert!(forget.tooltip_text().is_none());
+        names.splice(0, names.n_items(), &[]);
+        assert_eq!(selector.selected(), gtk::INVALID_LIST_POSITION);
+        assert!(!switch.is_sensitive());
+        assert!(!forget.is_sensitive());
+        assert_eq!(
+            switch.tooltip_text().as_deref(),
+            Some("Choose a branch before switching.")
+        );
+        assert_eq!(
+            forget.tooltip_text().as_deref(),
+            Some("Choose a named branch before forgetting its password.")
+        );
+        names.splice(0, 0, &["Master", "beta", "stable"]);
+        selector.set_selected(2);
+        state.set(BranchActionState::Preparing);
+        refresh();
+        for selection in [1, 0, 2] {
+            selector.set_selected(selection);
+            assert!(!switch.is_sensitive());
+            assert!(!forget.is_sensitive());
+            assert_eq!(
+                switch.tooltip_text().as_deref(),
+                Some("Wait for branch preparation to finish.")
+            );
+            assert!(forget.tooltip_text().unwrap().contains("before forgetting"));
+        }
+        // Errors recompute the current selection, not the branch originally submitted.
+        selector.set_selected(1);
+        state.set(BranchActionState::Idle);
+        refresh();
+        assert!(!switch.is_sensitive());
+        assert!(forget.is_sensitive());
+        selector.set_selected(2);
+        assert!(switch.is_sensitive());
+        // Disconnection also returns to Idle, including when no branch is selectable.
+        state.set(BranchActionState::Preparing);
+        refresh();
+        names.splice(0, names.n_items(), &[]);
+        state.set(BranchActionState::Idle);
+        refresh();
+        assert!(!switch.is_sensitive());
+        assert!(!forget.is_sensitive());
+        names.splice(0, 0, &["Master", "beta", "stable"]);
+        selector.set_selected(2);
+        state.set(BranchActionState::Preparing);
+        refresh();
+        state.set(BranchActionState::Started);
+        refresh();
+        assert!(!switch.is_sensitive());
+        assert!(forget.is_sensitive());
+        assert!(switch.tooltip_text().unwrap().contains("already started"));
+        selector.set_selected(0);
+        assert!(!switch.is_sensitive());
+        assert!(!forget.is_sensitive());
+        selector.set_selected(1);
+        assert!(!switch.is_sensitive());
+        assert!(forget.is_sensitive());
+
+        // A known installed Master is distinct from absent provenance.
+        let master_selector = gtk::DropDown::from_strings(&["Master", "beta", "stable"]);
+        let master_switch = gtk::Button::new();
+        let master_forget = gtk::Button::new();
+        let idle = Rc::new(std::cell::Cell::new(BranchActionState::Idle));
+        let _master_refresh = connect_branch_selection(
+            &branches,
+            Some(&None),
+            &master_selector,
+            &master_switch,
+            &master_forget,
+            &idle,
+        );
+        content.append(&master_selector);
+        content.append(&master_switch);
+        content.append(&master_forget);
+        assert!(!master_switch.is_sensitive());
+        assert!(!master_forget.is_sensitive());
+        master_selector.set_selected(1);
+        assert!(master_switch.is_sensitive());
+        assert!(master_forget.is_sensitive());
+        let unknown_selector = gtk::DropDown::from_strings(&["Master", "beta", "stable"]);
+        let unknown_switch = gtk::Button::new();
+        let unknown_forget = gtk::Button::new();
+        let _unknown_refresh = connect_branch_selection(
+            &branches,
+            None,
+            &unknown_selector,
+            &unknown_switch,
+            &unknown_forget,
+            &idle,
+        );
+        assert!(
+            unknown_switch.is_sensitive(),
+            "absent provenance must not imply installed Master"
+        );
+        assert!(!unknown_forget.is_sensitive());
+        window.destroy();
+    }
 
     #[test]
     fn offline_migration_plan_preserves_saved_options_and_missing_row_fallback() {

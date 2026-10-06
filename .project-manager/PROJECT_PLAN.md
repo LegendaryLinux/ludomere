@@ -134,6 +134,20 @@
   Require never-realized disposal, real detach/reinsert, mapped teardown and pending-timeout
   regression without GTK children-left warning; preserve existing history and P359 fixtures.
   Stop for review if destroy timing fails; no unsafe disposal or lifecycle framework expansion.
+- P363 (complete, ui_critic; reviewer file_summary): reviewed Branch Switch/Forget Password
+  eligibility feedback. Own isolated game_settings.rs; disable known current/Master/invalid no-ops
+  and preserve preparation/success handoff state across selection changes. Forget stays disabled
+  during preparation that may save a password. No credential probe or real data; synthetic actual
+  controls regression required, existing handlers/session/password semantics unchanged.
+- P364 (in_progress, performance_audit; reviewer ui_critic): Settings-local check busy/result feedback,
+  guarded duplicate clicks and weak click-time session-bound completion. Own isolated update_policies.rs.
+  Review rejects shared main progress clearing: keep pending feedback local and main terminal
+  notification policy unchanged. Already-running must not promise a notification. Synthetic actual
+  dispatch/lifecycle/redaction/order tests required; no backend policy/queue/cancel/timeout changes.
+- P365 (in_progress diagnosis, file_summary): assess reused Properties snapshots after installation
+  changes, including stale launch/profile persistence on focus leave/unmap. Source-only proposal
+  before edits; require stale-save rejection, no blind close/rebuild that flushes obsolete data.
+  Exclude P363 branch eligibility ownership and any actual profile/account inspection.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

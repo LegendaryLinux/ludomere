@@ -24,6 +24,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- Onb3f9227 initial Offline Installers shows both retained Gungeon archives/checkmarks/638MB.
+  Confirmed native removal with archive deletion unchecked reports one game directory removed,
+  zero prefixes and two archives retained. Detail changes to Download without reopening; arrow
+  offers Install from Offline Installer. Chooser selects downloaded Linux2.1.9 and correct root.
+  Cached install completes, Play launches native executable without Windows setup/repair, and
+  the fresh marker is schema1/base.operating_system=linux with no UMU field. Game intro and main
+  menu render; normal quit ends EtG.x86_64 and restores Play/white title/search in place.
+  No extra transfer or deliberate cloud/save deletion; reservation remains9GB of40GB.
+
 - Archive-only Gungeon macOS transfer paused at134.8/260MB. Initial featured trash clicks showed
   no dialog despite responsive navigation; after revisiting Downloads, ordinary clicks show Cancel
   download confirmation. Confirmed cancellation removes that transfer, preserving both completed
@@ -80,6 +89,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P363 — explain unavailable branch actions
+
+- Branch Switch is disabled for invalid/current branch, Forget Password for invalid/Master, with
+  useful tooltips. Preparation disables both actions; selection changes cannot bypass it. After
+  handoff Switch stays disabled while named-branch Forget returns. Errors restore current eligibility.
+- No credential-presence probe, branch backend or password policy changed. Independent review,
+  actual mapped controls/lifecycle fixture (p363-0w7fepo0), formatting, Clippy and compilation PASS.
+  Fixture invokes no real branch/password worker; no real branch switch claimed.
 
 ### P362 — retain notification hover across remapping and clean up on destruction
 
