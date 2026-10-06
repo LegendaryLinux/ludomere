@@ -193,6 +193,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deleted inert parent for simulated transfer completion; production deletion was not changed.
 - Formatting, all-target Clippy and build PASS. Live evidence originally reproduced both colors.
 
+### P338 — batch installer chooser polling
+
+- Keep one lazy job index per poll, preserving canonical artifact identity, newest/last-tie
+  selection, managed-file precedence, completed-file validation and independent read fallbacks.
+  Empty malformed artifact records cannot panic the new index. No timer/session/UI receiver changes.
+- Source-derived job reads fall fromU to at most1 forU groups requiring fallback; all-managed
+  groups perform no job read. Saved-job identity work falls fromU×J toJ per pass.
+- Independent review, three private pure/file regressions and actual-row GTK regression PASS;
+  formatting, all-target Clippy and build PASS.
+
 ## Remaining findings
 
 - Gungeon uninstall completed through its own Yes/remove, Yes/keep-saves and final OK prompts.

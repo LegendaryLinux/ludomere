@@ -45,7 +45,7 @@
   sidebar filter invalidation after game exit. Live Coffee Talk Stop shows all rows despite query
   and count. Also clear stale GTK selection flags before row reorder. Strict mapped regression,
   independent re-review, formatting/Clippy/build PASS; preserve both sorts and navigation.
-- P338 (in_progress, performance_audit): batch archive chooser job polling in an isolated checkout,
+- P338 (complete, performance_audit; reviewer file_summary): batch archive chooser job polling in an isolated checkout,
   preserving canonical identity, latest-record/tie semantics and independent read failures.
 - P339 (complete, file_summary; reviewer performance_audit): label detail/DLC size as Downloaded files, retaining the
   existing live summary replacement contract. Isolated details/mod strings and P329 regression.
@@ -59,8 +59,10 @@
   because libraries do not retain mount identity. Isolated chooser/helper regression only.
 - P343 (in_progress, ui_critic): normal uninstall hides irrelevant Retry and collapses alternative
   removal methods, expanding recovery after failure. Preserve Browse, all warnings and consent.
-- P345 (proposal, file_summary): live uninstall changes Play to Download but retains green styling;
-  inspect missing idle download-state refresh and propose focused transition coverage.
+- P345 (in_progress, file_summary): synchronize idle download-state class and reuse existing helper
+  for paused/failed archive restoration; isolated details-only transitions regression.
+- P346 (proposal, performance_audit): installer chooser shows mountpoint instead of actual selected
+  library and irrelevant Galaxy feedback for offline sources; propose truthful source-scoped display.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

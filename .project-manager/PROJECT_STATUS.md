@@ -4,6 +4,10 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P341 committed5862b7a exact post-commit build PASS. P338 independent review and four private
+  regressions (identity/ties, bounded reads, file validity and GTK selection), formatting/all-target
+  Clippy/build PASS; separate commit next. P342/P340 await gates; P343/P345 isolated.
+
 - P339 committed4fd61fa exact post-commit build PASS. P341 independent review and three focused
   GTK state/queue regressions PASS, formatting/all-target Clippy/build PASS. One fixture recreated
   the simulated download parent after real cleanup removed it; production cleanup unchanged.

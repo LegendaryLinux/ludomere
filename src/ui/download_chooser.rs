@@ -4829,13 +4829,9 @@ fn populate_download_selector(
                     .collect::<Vec<_>>();
                 std::thread::spawn(move || {
                     let paths = managed_artifact_paths();
-                    let states = groups
-                        .into_iter()
-                        .map(|group| {
-                            let state = dialog_artifact_state(&group, &paths);
-                            (group.job_id, state)
-                        })
-                        .collect::<HashMap<_, _>>();
+                    let states = dialog_artifact_states(&groups, &paths, || {
+                        StateStore::open()?.download_jobs()
+                    });
                     let _ = sender.send((states, available));
                 });
             }
@@ -4980,7 +4976,49 @@ pub(super) fn dialog_artifact_state(
     group: &ArtifactGroup,
     managed_paths: &HashSet<ManagedArtifactIdentity>,
 ) -> DialogArtifactState {
-    let refs = group.artifacts.iter().collect::<Vec<_>>();
+    dialog_artifact_state_with(group, managed_paths, || {
+        matching_download_job(&group.artifacts.iter().collect::<Vec<_>>())
+    })
+}
+
+fn dialog_artifact_states(
+    groups: &[ArtifactGroup],
+    managed_paths: &HashSet<ManagedArtifactIdentity>,
+    load_jobs: impl FnOnce() -> anyhow::Result<Vec<DownloadJobRecord>>,
+) -> HashMap<String, DialogArtifactState> {
+    let jobs = std::cell::LazyCell::new(|| {
+        let mut latest = HashMap::<String, DownloadJobRecord>::new();
+        for job in load_jobs().unwrap_or_default() {
+            if job.artifacts.is_empty() {
+                continue;
+            }
+            let identity = download::job_id(&job.artifacts.iter().collect::<Vec<_>>());
+            // max_by_key in matching_download_job keeps the last database row on ties.
+            if latest
+                .get(&identity)
+                .is_none_or(|previous| job.updated_at >= previous.updated_at)
+            {
+                latest.insert(identity, job);
+            }
+        }
+        latest
+    });
+    groups
+        .iter()
+        .map(|group| {
+            let state = dialog_artifact_state_with(group, managed_paths, || {
+                jobs.get(&group.job_id).cloned()
+            });
+            (group.job_id.clone(), state)
+        })
+        .collect()
+}
+
+fn dialog_artifact_state_with(
+    group: &ArtifactGroup,
+    managed_paths: &HashSet<ManagedArtifactIdentity>,
+    matching_job: impl FnOnce() -> Option<DownloadJobRecord>,
+) -> DialogArtifactState {
     if group.artifacts.iter().all(|artifact| {
         let identity = artifact
             .provider_file_id
@@ -4990,7 +5028,7 @@ pub(super) fn dialog_artifact_state(
     }) {
         return DialogArtifactState::Downloaded;
     }
-    let Some(job) = matching_download_job(&refs) else {
+    let Some(job) = matching_job() else {
         return DialogArtifactState::Available;
     };
     if download_job_is_complete(&job) {
@@ -5490,6 +5528,422 @@ pub(super) struct DetailFileManagement {
     pub(super) menu: gtk::MenuButton,
     pub(super) status: gtk::Label,
     pub(super) progress: gtk::ProgressBar,
+}
+
+#[cfg(test)]
+mod archive_poll_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn group(product_id: i64, provider: bool) -> ArtifactGroup {
+        let artifacts = (1..=2)
+            .map(|part| {
+                serde_json::from_value::<RemoteArtifact>(serde_json::json!({
+                    "product_id": product_id, "kind": "installer", "name": "Fixture",
+                    "operating_system": "windows", "language": "English", "version": "1",
+                    "part_number": part, "part_count": 2, "size_bytes": 10,
+                    "provider_group_id": provider.then_some("group"),
+                    "provider_category": provider.then_some("installer"),
+                    "provider_file_id": provider.then(|| part.to_string()),
+                    "download_path": format!("/synthetic/{product_id}/{part}")
+                }))
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        download_selection::group_artifacts(&artifacts)
+            .pop()
+            .unwrap()
+    }
+
+    fn job(
+        group: &ArtifactGroup,
+        id: &str,
+        state: DownloadState,
+        updated_at: i64,
+    ) -> DownloadJobRecord {
+        DownloadJobRecord {
+            job_id: id.into(),
+            product_id: group.product_id,
+            title: "Fixture".into(),
+            artifacts: group.artifacts.clone(),
+            state,
+            destination: PathBuf::from("/unused").join(id),
+            bytes_downloaded: 0,
+            total_bytes: Some(20),
+            completed_files: Vec::new(),
+            error: None,
+            status_message: None,
+            queue_position: None,
+            retry_started_at: None,
+            next_retry_at: None,
+            created_at: 0,
+            updated_at,
+            completed_at: None,
+        }
+    }
+
+    #[test]
+    fn batch_job_matching_preserves_artifact_identity_and_last_row_timestamp_ties() {
+        let official = group(11, true);
+        let legacy = group(12, false);
+        let mut revision = official.artifacts.clone();
+        revision[0].download_path.push_str("-new-revision");
+        revision[0].size_bytes = Some(11);
+        let revision = download_selection::group_artifacts(&revision)
+            .pop()
+            .unwrap();
+        let missing = group(13, true);
+        let groups = [official, legacy, revision, missing];
+        let mut legacy_job = job(
+            &groups[1],
+            "legacy-destination-id",
+            DownloadState::Paused,
+            30,
+        );
+        // The existing matcher trusts the artifacts' identity rather than these stored columns.
+        legacy_job.product_id = -1;
+        let mut empty = job(&groups[0], "empty-artifacts", DownloadState::Queued, 999);
+        empty.artifacts.clear();
+        let mut jobs = vec![
+            job(&groups[0], "old-destination", DownloadState::Queued, 10),
+            job(&groups[0], "new-destination", DownloadState::Failed, 20),
+            job(
+                &groups[0],
+                "tied-last-destination",
+                DownloadState::Queued,
+                20,
+            ),
+            legacy_job,
+            job(&groups[2], "revised-destination", DownloadState::Failed, 40),
+            empty,
+        ];
+        for reverse in [false, true] {
+            if reverse {
+                jobs.reverse();
+            }
+            let calls = std::cell::Cell::new(0);
+            let states = dialog_artifact_states(&groups, &HashSet::new(), || {
+                calls.set(calls.get() + 1);
+                Ok(jobs.clone())
+            });
+            assert_eq!(calls.get(), 1);
+            for group in &groups {
+                let expected = jobs
+                    .iter()
+                    .filter(|job| {
+                        !job.artifacts.is_empty()
+                            && download::job_id(&job.artifacts.iter().collect::<Vec<_>>())
+                                == group.job_id
+                    })
+                    .max_by_key(|job| job.updated_at)
+                    .map_or(DialogArtifactState::Available, |job| {
+                        if job.state == DownloadState::Queued {
+                            DialogArtifactState::Busy
+                        } else {
+                            DialogArtifactState::Resumable
+                        }
+                    });
+                assert!(states[&group.job_id] == expected);
+            }
+            assert!(
+                states[&groups[0].job_id]
+                    == if reverse {
+                        DialogArtifactState::Resumable
+                    } else {
+                        DialogArtifactState::Busy
+                    }
+            );
+            assert!(states[&groups[1].job_id] == DialogArtifactState::Resumable);
+            assert!(states[&groups[2].job_id] == DialogArtifactState::Resumable);
+            assert!(states[&groups[3].job_id] == DialogArtifactState::Available);
+        }
+    }
+
+    #[test]
+    fn batch_job_loader_runs_once_and_managed_groups_keep_independent_fallbacks() {
+        let groups = (1..=100)
+            .map(|id| group(id, id % 2 == 0))
+            .collect::<Vec<_>>();
+        let calls = std::cell::Cell::new(0);
+        let states = dialog_artifact_states(&groups, &HashSet::new(), || {
+            calls.set(calls.get() + 1);
+            Ok(vec![job(&groups[0], "queued", DownloadState::Queued, 1)])
+        });
+        assert_eq!(calls.get(), 1);
+        assert!(states[&groups[0].job_id] == DialogArtifactState::Busy);
+        assert_eq!(
+            states
+                .values()
+                .filter(|state| **state == DialogArtifactState::Available)
+                .count(),
+            99
+        );
+        let mut managed = groups
+            .iter()
+            .flat_map(|group| {
+                group.artifacts.iter().map(|artifact| {
+                    (
+                        group.product_id,
+                        artifact
+                            .provider_file_id
+                            .clone()
+                            .unwrap_or_else(|| artifact.download_path.clone()),
+                        artifact.version.clone(),
+                    )
+                })
+            })
+            .collect::<HashSet<_>>();
+        let states = dialog_artifact_states(&groups, &managed, || {
+            panic!("fully managed groups must not read jobs")
+        });
+        assert!(
+            states
+                .values()
+                .all(|state| *state == DialogArtifactState::Downloaded)
+        );
+        let artifact = &groups[1].artifacts[0];
+        managed.remove(&(
+            groups[1].product_id,
+            artifact.provider_file_id.clone().unwrap(),
+            artifact.version.clone(),
+        ));
+        // Wrong-version and download-path entries cannot replace a provider-file identity.
+        managed.insert((
+            groups[1].product_id,
+            artifact.provider_file_id.clone().unwrap(),
+            Some("old".into()),
+        ));
+        managed.insert((
+            groups[1].product_id,
+            artifact.download_path.clone(),
+            artifact.version.clone(),
+        ));
+        let states = dialog_artifact_states(&groups, &managed, || {
+            anyhow::bail!("inert jobs read failure")
+        });
+        assert!(states[&groups[1].job_id] == DialogArtifactState::Available);
+        assert_eq!(
+            states
+                .values()
+                .filter(|state| **state == DialogArtifactState::Downloaded)
+                .count(),
+            99
+        );
+        // Empty managed input is the unchanged managed-read failure fallback; valid jobs still work.
+        let states = dialog_artifact_states(&groups, &HashSet::new(), || {
+            Ok(vec![job(&groups[1], "paused", DownloadState::Paused, 1)])
+        });
+        assert!(states[&groups[1].job_id] == DialogArtifactState::Resumable);
+    }
+
+    #[test]
+    fn batch_completed_jobs_require_existing_files_and_managed_matches_take_precedence() {
+        let root = tempfile::tempdir().unwrap();
+        let groups = [group(14, true)];
+        let path = root.path().join("completed.bin");
+        std::fs::write(&path, b"inert downloaded artifact").unwrap();
+        let mut completed = job(&groups[0], "complete", DownloadState::Complete, 1);
+        for files in [
+            vec![path.clone()],
+            vec![path.clone(), root.path().join("missing")],
+            vec![],
+        ] {
+            completed.completed_files = files;
+            let states =
+                dialog_artifact_states(&groups, &HashSet::new(), || Ok(vec![completed.clone()]));
+            assert!(
+                states[&groups[0].job_id]
+                    == if completed.completed_files == [path.clone()] {
+                        DialogArtifactState::Downloaded
+                    } else {
+                        DialogArtifactState::Resumable
+                    }
+            );
+        }
+        let managed = groups[0]
+            .artifacts
+            .iter()
+            .map(|artifact| {
+                (
+                    14,
+                    artifact.provider_file_id.clone().unwrap(),
+                    artifact.version.clone(),
+                )
+            })
+            .collect();
+        assert!(
+            dialog_artifact_states(&groups, &managed, || Ok(vec![job(
+                &groups[0],
+                "new-failure",
+                DownloadState::Failed,
+                99
+            )]))[&groups[0].job_id]
+                == DialogArtifactState::Downloaded
+        );
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn batch_poll_results_update_existing_rows_without_resetting_selection_or_focus() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p338-")
+            );
+        }
+        adw::init().unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.ArchivePollTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::new(&app);
+        let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let focus_target = gtk::Entry::new();
+        body.append(&focus_target);
+        let groups = [group(21, true), group(22, false)];
+        let rows = groups
+            .iter()
+            .map(|group| {
+                let check = gtk::CheckButton::with_label(&group.name);
+                body.append(&check);
+                DownloadDialogRow {
+                    group: group.clone(),
+                    check,
+                    state: DialogArtifactState::Available,
+                }
+            })
+            .collect::<Vec<_>>();
+        let plan_boxes = groups
+            .iter()
+            .map(|group| {
+                let plan = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                body.append(&plan);
+                (group.product_id, plan)
+            })
+            .collect();
+        let widgets = Rc::new(DownloadDialogWidgets {
+            rows,
+            products: groups
+                .iter()
+                .map(|group| DownloadDialogProduct {
+                    product_id: group.product_id,
+                    slug: "fixture".into(),
+                    parent_slug: None,
+                    title: "Fixture".into(),
+                    artwork: None,
+                    groups: vec![group.clone()],
+                    is_primary: true,
+                })
+                .collect(),
+            warnings: HashMap::new(),
+            product_content: HashMap::new(),
+            category_expanders: HashMap::new(),
+            plan_boxes,
+            product_toggles: HashMap::new(),
+            language_summary: gtk::Label::new(None),
+            summary: gtk::Label::new(None),
+            confirm: gtk::Button::with_label("Add to Download Queue"),
+            authenticated: true,
+            online: true,
+            artifact_states: RefCell::new(HashMap::new()),
+            libraries_available: RefCell::new(vec![LibraryKind::OfflineInstallers]),
+        });
+        body.append(&widgets.summary);
+        body.append(&widgets.confirm);
+        let state = Rc::new(RefCell::new(DownloadDialogState {
+            selected_products: HashSet::from([21, 22]),
+            selected_operating_systems: BTreeSet::from(["windows".into()]),
+            selected_languages: BTreeSet::from(["English".into()]),
+            selected_groups: HashSet::new(),
+            include_extras: false,
+            include_patches: false,
+            applying: false,
+        }));
+        window.set_content(Some(&body));
+        window.present();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !focus_target.is_mapped() && std::time::Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(focus_target.is_mapped() && focus_target.grab_focus());
+        let focus = gtk::prelude::GtkWindowExt::focus(&window);
+        let checks = widgets
+            .rows
+            .iter()
+            .map(|row| row.check.clone())
+            .collect::<Vec<_>>();
+        *widgets.artifact_states.borrow_mut() =
+            dialog_artifact_states(&groups, &HashSet::new(), || Ok(Vec::new()));
+        refresh_download_selector(&state, &widgets, true);
+        assert!(
+            checks
+                .iter()
+                .all(|check| check.is_active() && check.is_sensitive())
+        );
+        assert!(widgets.summary.text().starts_with("2 downloads"));
+        assert!(widgets.confirm.is_sensitive());
+        *widgets.artifact_states.borrow_mut() =
+            dialog_artifact_states(&groups, &HashSet::new(), || {
+                Ok(vec![
+                    job(&groups[0], "queued", DownloadState::Queued, 1),
+                    job(&groups[1], "failed", DownloadState::Failed, 1),
+                ])
+            });
+        refresh_download_selector(&state, &widgets, false);
+        assert!(!checks[0].is_active() && !checks[0].is_sensitive());
+        assert!(checks[1].is_active() && checks[1].is_sensitive());
+        assert_eq!(
+            state.borrow().selected_groups,
+            HashSet::from([groups[1].job_id.clone()])
+        );
+        assert!(widgets.summary.text().starts_with("1 download"));
+        assert!(!widgets.confirm.is_sensitive());
+        let managed = groups[0]
+            .artifacts
+            .iter()
+            .map(|artifact| {
+                (
+                    21,
+                    artifact.provider_file_id.clone().unwrap(),
+                    artifact.version.clone(),
+                )
+            })
+            .collect();
+        *widgets.artifact_states.borrow_mut() = dialog_artifact_states(&groups, &managed, || {
+            Ok(vec![job(&groups[1], "paused", DownloadState::Paused, 2)])
+        });
+        refresh_download_selector(&state, &widgets, false);
+        assert!(!checks[0].is_active() && checks[0].is_sensitive());
+        assert!(checks[1].is_active() && checks[1].is_sensitive());
+        assert!(widgets.confirm.is_sensitive());
+        assert!(
+            widgets.plan_boxes[&21]
+                .first_child()
+                .and_downcast::<gtk::Label>()
+                .unwrap()
+                .text()
+                .contains("already downloaded")
+        );
+        for (row, check) in widgets.rows.iter().zip(checks) {
+            assert_eq!(row.check, check);
+            assert_eq!(check.parent().as_ref(), Some(body.upcast_ref()));
+        }
+        assert_eq!(window.content().as_ref(), Some(body.upcast_ref()));
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&window), focus);
+        assert!(window.visible_dialog().is_none());
+        window.destroy();
+    }
 }
 
 #[cfg(test)]
