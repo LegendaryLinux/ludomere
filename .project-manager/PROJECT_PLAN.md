@@ -11,11 +11,20 @@
   especially offline/Depot behavior and stale/busy controls. Read-only source audit first.
 - P325 (complete, performance_audit): preserve search/filter intersections, keep search visible
   and enabled with active chips; own library.rs/window.rs and focused same-file tests. P322 reviews.
-- P326 (verified, reliability_audit): Downloads featured selection must show active work before
+- P326 (complete, reliability_audit): Downloads featured selection must show active work before
   paused/failed entries and show full featured errors. Own downloads.rs; begin after P325 build.
-- P328 (pending): propagate current authenticated session through direct Depot actions, avoiding
+- P328 (complete, reliability_audit; reviewer performance_audit): propagate current authenticated session through direct Depot actions, avoiding
   redundant wallet reads. Independent proposal review requires auth/online-generation, expiry,
   account-match and pre-persistence checks; no token serialization or new global cache.
+- P329 (ready, file_summary): move managed-file summary reads/stats off GTK with current-view,
+  session and request guards. Isolated checkout /tmp/ludomere-r111-file-summary at ec29d3d;
+  own ui/mod.rs helper and necessary call-site plumbing in ui/files.rs. No main-tree edits.
+- P330 (review, reliability_audit; reviewer performance_audit): ensure saved-login reads use existing credential-provider discovery/activation,
+  not just interactive sign-in. Live KDE6.29 advertises org.kde.secretservicecompat; activation
+  restored org.freedesktop.secrets and user unlocked normally. No wallet configuration changes.
+- P331 (in_progress diagnosis, reliability_audit): investigate Coffee Talk's official .NET4.5.2
+  helper exit194 after successful DirectX setup. Verify Windows-to-Unix exit translation and
+  narrowly scoped success/reboot semantics before any implementation; no skipped requirements.
 - P327 (pending): Depot cancellation confirmation/background cleanup and terminal failure handling;
   inspect data impact before assigning minimal implementation. Preserve files on safety refusal.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,

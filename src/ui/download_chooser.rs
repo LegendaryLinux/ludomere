@@ -321,6 +321,23 @@ pub(super) fn choose_download_libraries(
 
 pub(super) type ManagedArtifactIdentity = (i64, String, Option<String>);
 
+pub(super) fn current_depot_session(
+    model: &Rc<RefCell<AppModel>>,
+) -> anyhow::Result<crate::gog::depot_service::DepotSession> {
+    let state = model.borrow();
+    anyhow::ensure!(
+        !state.logout_pending,
+        "Sign-out is in progress. Sign in again to continue."
+    );
+    crate::gog::depot_service::DepotSession::new(
+        state
+            .account_token
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("Sign in to GOG before starting a Depot operation."))?,
+        (online::account_session(), auth::session()),
+    )
+}
+
 pub(super) fn review_depot_resume(
     window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
@@ -329,6 +346,7 @@ pub(super) fn review_depot_resume(
 ) {
     let epoch = model.borrow().account_epoch;
     let session = crate::online::account_session();
+    let authentication = current_depot_session(model);
     let dialog = adw::Dialog::builder()
         .title("Preparing Resume")
         .content_width(560)
@@ -358,19 +376,17 @@ pub(super) fn review_depot_resume(
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let result = (|| -> anyhow::Result<_> {
+            let authentication = authentication?;
+            authentication.validate()?;
             anyhow::ensure!(
-                session == crate::online::account_session(),
+                token == authentication.token.access_token
+                    && session == crate::online::account_session(),
                 "Account changed before Resume preparation"
             );
-            crate::installation::prepare_depot_resume(operation_id, token)
-        })()
-        .and_then(|request| {
-            anyhow::ensure!(
-                session == crate::online::account_session(),
-                "Account changed during Resume preparation"
-            );
-            Ok(request)
-        });
+            let request = crate::installation::prepare_depot_resume(operation_id, token)?;
+            authentication.validate()?;
+            Ok((request, authentication))
+        })();
         let _ = sender.send(result);
     });
     let window = window.clone();
@@ -380,7 +396,7 @@ pub(super) fn review_depot_resume(
             return glib::ControlFlow::Break;
         }
         match receiver.try_recv() {
-            Ok(Ok(request)) => { confirm_depot_plan(&window,&model,request,&dialog); }
+            Ok(Ok((request, authentication))) => { confirm_depot_plan(&window,&model,request,authentication,&dialog); }
             Ok(Err(error)) => status.set_label(&notifications::failure_message("Could not prepare Resume. Close and retry, or use Offline installers and extras from Manage game.",&format!("{error:#}"))),
             Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
             Err(mpsc::TryRecvError::Disconnected) => status.set_label("Preparation stopped. Close and retry Resume."),
@@ -393,6 +409,7 @@ fn confirm_depot_plan(
     window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
     request: crate::installation::DepotOperationRequest,
+    authentication: crate::gog::depot_service::DepotSession,
     dialog: &adw::Dialog,
 ) {
     if model.borrow().logout_pending
@@ -508,10 +525,12 @@ fn confirm_depot_plan(
         admission_progress.set_visible(true);
         admission_progress.pulse();
         let request = request.clone();
+        let authentication = authentication.clone();
         let operation_id = request.operation_id.clone();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             let result = (|| -> anyhow::Result<()> {
+                authentication.validate()?;
                 anyhow::ensure!(crate::online::account_session()==session,"Account changed before queuing setup");
                 anyhow::ensure!(crate::installation::enqueue_depot_operation(request),
                     "Operation conflicts with active work or could not be saved. Reopen installation choices to retry.");
@@ -1412,12 +1431,6 @@ fn present_existing_depot_operation_dialog(
     dialog.set_default_response(Some("start"));
     dialog.set_close_response("cancel");
     dialog.set_response_appearance("start", adw::ResponseAppearance::Suggested);
-    let user_id = model
-        .borrow()
-        .account_profile
-        .as_ref()
-        .map(|profile| profile.user_id.clone())
-        .unwrap_or_default();
     let branches = marker
         .galaxy_depot
         .as_ref()
@@ -1473,16 +1486,20 @@ fn present_existing_depot_operation_dialog(
         pending.connect_closed({let closed=closed.clone(); move |_|closed.set(true)});
         pending.present(Some(&result_window));
         let session=crate::online::account_session();
+        let authentication = current_depot_session(&model);
         let (sender,receiver)=mpsc::channel();
         std::thread::spawn(move || {
-            let result = (|| -> anyhow::Result<crate::installation::DepotOperationRequest> {
+            let result = (|| -> anyhow::Result<_> {
+                let authentication = authentication?;
+                authentication.validate()?;
                 let store = StateStore::open()?;
                 let client = reqwest::blocking::Client::new();
                 let builds = crate::gog::depot_service::list_builds(
                     &store,
                     &client,
+                    &authentication,
                     &crate::gog::depot_service::BuildRequest {
-                        user_id,
+                        user_id: authentication.token.user_id.clone(),
                         product_id,
                         platform: "windows".into(),
                         generation: 2,
@@ -1497,6 +1514,7 @@ fn present_existing_depot_operation_dialog(
                 let request=crate::gog::depot_service::prepare_operation(
                     &store,
                     &client,
+                    &authentication,
                     crate::gog::depot_service::PrepareOperationRequest {
                         build,
                         selection: crate::gog::depot_acquisition::Selection {
@@ -1517,7 +1535,7 @@ fn present_existing_depot_operation_dialog(
                     },
                 )?;
                 anyhow::ensure!(crate::online::account_session()==session,"Account changed during preparation");
-                Ok(request)
+                Ok((request, authentication))
             })();
             let _=sender.send(result);
         });
@@ -1525,7 +1543,7 @@ fn present_existing_depot_operation_dialog(
             if closed.get() { return glib::ControlFlow::Break; }
             if model.borrow().account_epoch != epoch || model.borrow().logout_pending || crate::online::account_session()!=session { pending.close(); return glib::ControlFlow::Break; }
             match receiver.try_recv() {
-                Ok(Ok(request)) => { confirm_depot_plan(&result_window,&model,request,&pending); }
+                Ok(Ok((request, authentication))) => { confirm_depot_plan(&result_window,&model,request,authentication,&pending); }
                 Ok(Err(error)) => status.set_label(&notifications::failure_message("Could not prepare required components. Close and retry, or choose offline installers.", &format!("{error:#}"))),
                 Err(mpsc::TryRecvError::Empty) => { progress.pulse(); return glib::ControlFlow::Continue; }
                 Err(mpsc::TryRecvError::Disconnected) => status.set_label("Preparation stopped. Close and retry, or choose offline installers."),
@@ -3018,12 +3036,6 @@ fn populate_install_dialog(
             .filter(|dlc| dlc.owned)
             .map(|dlc| dlc.product_id)
             .collect::<BTreeSet<_>>();
-        let user_id = model
-            .borrow()
-            .account_profile
-            .as_ref()
-            .map(|profile| profile.user_id.clone())
-            .unwrap_or_default();
         let branch_password = branch_password.clone();
         let action_epoch = model.borrow().account_epoch;
         let action_model = model.clone();
@@ -3217,6 +3229,14 @@ fn populate_install_dialog(
                 if preparing.get() {
                     return;
                 }
+                let authentication = match current_depot_session(&action_model) {
+                    Ok(authentication) => authentication,
+                    Err(error) => {
+                        status.set_label(&error.to_string());
+                        status.add_css_class("error");
+                        return;
+                    }
+                };
                 let selected_branch = branches
                     .borrow()
                     .get(branch.selected() as usize)
@@ -3273,7 +3293,7 @@ fn populate_install_dialog(
                     )
                 });
                 let build_request = crate::gog::depot_service::BuildRequest {
-                    user_id: user_id.clone(),
+                    user_id: authentication.token.user_id.clone(),
                     product_id,
                     platform: "windows".into(),
                     generation: 2,
@@ -3288,6 +3308,7 @@ fn populate_install_dialog(
                 });
                 std::thread::spawn(move || {
                     let result = StateStore::open().and_then(|store| {
+                        authentication.validate()?;
                         let preferences = preferences.recv().map_err(|_| {
                             anyhow::anyhow!("Game language preferences stopped loading")
                         })??;
@@ -3296,6 +3317,7 @@ fn populate_install_dialog(
                             let builds = crate::gog::depot_service::list_builds(
                                 &store,
                                 &client,
+                                &authentication,
                                 &build_request,
                             )?;
                             build = builds
@@ -3314,13 +3336,17 @@ fn populate_install_dialog(
                             preferences.as_ref(),
                         )
                         .language;
-                        let operation =
-                            crate::gog::depot_service::prepare_operation(&store, &client, request)?;
+                        let operation = crate::gog::depot_service::prepare_operation(
+                            &store,
+                            &client,
+                            &authentication,
+                            request,
+                        )?;
                         anyhow::ensure!(
                             crate::online::account_session() == session,
                             "Account changed during preparation"
                         );
-                        Ok(operation)
+                        Ok((operation, authentication))
                     });
                     let _ = sender.send(result);
                 });
@@ -3335,8 +3361,14 @@ fn populate_install_dialog(
                         return glib::ControlFlow::Break;
                     }
                     match receiver.try_recv() {
-                        Ok(Ok(request)) => {
-                            confirm_depot_plan(&plan_window, &plan_model, request, &dialog_result);
+                        Ok(Ok((request, authentication))) => {
+                            confirm_depot_plan(
+                                &plan_window,
+                                &plan_model,
+                                request,
+                                authentication,
+                                &dialog_result,
+                            );
                             glib::ControlFlow::Break
                         }
                         Ok(Err(error)) => {
@@ -5360,6 +5392,42 @@ pub(super) struct DetailFileManagement {
 #[cfg(test)]
 mod installer_version_tests {
     use super::*;
+
+    #[test]
+    fn depot_action_captures_current_token_and_rejects_unavailable_sessions() {
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        assert!(current_depot_session(&model).is_err());
+        model.borrow_mut().account_token = Some(auth::Token {
+            access_token: "first-access".into(),
+            refresh_token: "refresh".into(),
+            user_id: "user".into(),
+            expires_at: chrono::Utc::now().timestamp() + 3600,
+        });
+        let first = current_depot_session(&model).unwrap();
+        model
+            .borrow_mut()
+            .account_token
+            .as_mut()
+            .unwrap()
+            .access_token = "renewed-access".into();
+        assert_eq!(
+            current_depot_session(&model).unwrap().token.access_token,
+            "renewed-access"
+        );
+        assert_eq!(first.token.access_token, "first-access");
+        model.borrow_mut().logout_pending = true;
+        assert!(current_depot_session(&model).is_err());
+        model.borrow_mut().logout_pending = false;
+        model
+            .borrow_mut()
+            .account_token
+            .as_mut()
+            .unwrap()
+            .expires_at = chrono::Utc::now().timestamp();
+        assert!(current_depot_session(&model).is_err());
+        model.borrow_mut().account_token = None;
+        assert!(current_depot_session(&model).is_err());
+    }
 
     #[test]
     #[ignore = "private HOME/all XDG, D-Bus and GTK; captures queues without downloads or helpers"]

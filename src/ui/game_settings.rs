@@ -1133,7 +1133,22 @@ fn wire_branch_actions(
         .galaxy_depot
         .as_ref()
         .and_then(|depot| depot.architecture.clone());
+    let epoch = model.borrow().account_epoch;
+    let model = model.clone();
     switch.connect_clicked(move |button| {
+        if model.borrow().account_epoch != epoch || model.borrow().logout_pending {
+            status.set_label("The account changed. Reopen game settings.");
+            return;
+        }
+        let authentication = match super::download_chooser::current_depot_session(&model) {
+            Ok(authentication) => authentication,
+            Err(error) => {
+                status.set_label(&error.to_string());
+                status.add_css_class("error");
+                return;
+            }
+        };
+        let session = (online::account_session(), auth::session());
         let Some(library_root) = library_root.clone() else {
             status.set_label("Installation has no library root.");
             return;
@@ -1156,7 +1171,7 @@ fn wire_branch_actions(
         let supplied = (!password.text().is_empty())
             .then(|| crate::gog::depot_service::BranchPassword::new(password.text().to_string()));
         let request = crate::gog::depot_service::BuildRequest {
-            user_id: user_id.clone(),
+            user_id: authentication.token.user_id.clone(),
             product_id,
             platform: "windows".into(),
             generation: 2,
@@ -1174,7 +1189,12 @@ fn wire_branch_actions(
             let result = (|| -> anyhow::Result<String> {
                 let store = StateStore::open()?;
                 let client = reqwest::blocking::Client::new();
-                let builds = crate::gog::depot_service::list_builds(&store, &client, &request)?;
+                let builds = crate::gog::depot_service::list_builds(
+                    &store,
+                    &client,
+                    &authentication,
+                    &request,
+                )?;
                 let build = crate::gog::depot_service::resolve_operation_build(
                     &builds,
                     &marker,
@@ -1185,6 +1205,7 @@ fn wire_branch_actions(
                 crate::gog::depot_service::start_operation(
                     &store,
                     &client,
+                    &authentication,
                     crate::gog::depot_service::PrepareOperationRequest {
                         build,
                         selection: crate::gog::depot_acquisition::Selection {
@@ -1209,7 +1230,15 @@ fn wire_branch_actions(
         });
         let status = status.clone();
         let button = button.clone();
+        let model = model.clone();
         glib::timeout_add_local(Duration::from_millis(100), move || {
+            if model.borrow().account_epoch != epoch
+                || model.borrow().logout_pending
+                || session.0 != online::account_session()
+                || !auth::session_is_current(session.1)
+            {
+                return glib::ControlFlow::Break;
+            }
             match receiver.try_recv() {
                 Ok(Ok(_)) => {
                     status.set_label("Branch switch started.");

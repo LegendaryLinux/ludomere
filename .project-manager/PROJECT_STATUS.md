@@ -8,17 +8,22 @@ Last meaningful update: 2026-10-06.
   repair/reinstall of existing managed test games, normal cloud sync but no deliberate cloud deletion,
   under2 GB additional games and total under40 GB. New branch and separate local commits per fix.
 - PR8 remains open; local main fast-forwarded cleanly to5c0d5cb and new audit branch created.
-  No upstream main mutation or PR merge. No source changes yet.
+  No upstream main mutation or PR merge. Product fixes are separate local commits.
 - Root launched tested target/debug/ludomere on KDE Wayland via X11 backend for scoped input.
   App-only initial screenshot shows library synchronization. User asked to allow wallet prompt.
   Private evidence /tmp/ludomere-r111; do not publish account screenshots or logs unredacted.
   P322/P323/P324 audits returned findings; P325 first fix independently reviewed and focused GTK
   regression/formatting/all-target Clippy pass. Live reproduction confirms query reset/hiding.
   Cutoff2026-10-06 20:13:55 UTC. Detailed findings and evidence in R111_AUDIT.md.
-- P325 committed717e8da with exact post-commit build PASS. P326 independently reviewed, four
-  focused tests and formatting/Clippy/build PASS. Root preparing its separate commit.
-- Live offline Windows Gungeon download/automatic install succeeded, Play updated in place.
-  Approximately0.383 GB transferred; launch test underway. Depot wallet propagation queuedP328.
+- P325 committed717e8da and P326 committedec29d3d; exact post-commit builds PASS.
+- Live offline Windows Gungeon download/automatic install and launch succeeded; Play/Stop updated
+  in place and running title turned green. Coffee Talk Depot transfer reached setup after root
+  activated the advertised KDE Secret Service provider and user unlocked. Its .NET4.5.2 helper
+  returned194 after successful DirectX setup; P331 diagnosis underway. No wallet settings changed.
+- P328 authenticated Depot handoff independently reviewed; eight focused isolated regressions,
+  formatting, all-target Clippy and cargo build --locked PASS. Preparing separate commit.
+  P330 provider activation patch independently reviewed, focused execution still pending.
+  P329 off-thread file summaries independently reviewing in an isolated checkout.
 
 ## R110 complete — 0.3.2 release and new PR
 

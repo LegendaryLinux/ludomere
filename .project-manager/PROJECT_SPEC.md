@@ -2,6 +2,10 @@
 
 ## R111 interactive UX, reliability and performance audit (2026-10-06)
 
+Additional user direction during live testing: Ludomere should find and attempt to use the
+appropriate wallet on the user's system. User successfully unlocked after root activated the
+already-advertised KDE Secret Service provider; no credential-service configuration changed.
+
 User requests discovery and correction of UI annoyances, technical problems, bottlenecks,
 performance issues and other worthwhile defects. Explicitly requests a subagent acting as a
 human UI critic (interaction, rendering, spacing, feedback) and root launching/interacting with
