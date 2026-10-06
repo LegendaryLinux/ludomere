@@ -2,6 +2,32 @@
 
 ## R111 interactive audit
 
+- P405 (in_progress, ui_critic; reviewer performance_audit): show Installation directory as a
+  full-width selectable ActionRow subtitle instead of ellipsized suffix, matching existing
+  destination rows. Isolated game_settings.rs one-row presentation only; markup disabled,
+  native wrapping, no file I/O/identity/callback/generic-info-row change. Root actual normal/
+  narrow screenshot gate and source native wrapping check; stop if layout fails, no geometry
+  framework. Old label already selectable; claim improved readability, not newly enabled copy.
+
+- P404 (complete, file_summary; reviewer ui_critic): distinct narrower successor to deferred
+  P393: remove explicit Rust ownership cycles in three management popup capture blocks. Strict
+  actual-builder never-opened release with retained harmless buttons/controller; separately
+  preserve mapped Hide/Favorite/submenu action and close order. No native mapped-release,
+  whole-window or eager-per-library-row savings claim. Independent narrower proposal GO;
+  root private gates, isolated files.rs only. P393 original mapped gate remains unmet.
+  Identical strict unopened test fails old production at weak-release wait (p404-ixo6aymj),
+  passes after weak captures (p404-pbsnm7lk). Separate mapped dispatch/order gate p404-c5c_3fnl
+  PASS; independent final source review/fmt/compile/Clippy PASS. Known private schema warnings.
+
+- P403 (in_progress, performance_audit; reviewer ui_critic): guard existing background archive chooser
+  polling across profile freeze/logout and stale/closed dialog results. Proposal preserves500ms
+  cadence, single worker, batching/fallbacks/actions; pre-spawn activity and original raw/model
+  generations, weak owners and post-refresh recheck. Isolated download_chooser.rs and focused
+  actual-wiring private test; no cache/event redesign or real account/reset/files. Independent
+  proposal review before implementation. The I/O was already off-thread, not a GTK migration.
+  Proposal independently approved; preserve raw counters, guard through send and post-setter
+  admission. Root gates actual wiring with private inert worker barriers plus P338 equivalence.
+
 - P402 (complete, ui_critic; reviewer performance_audit): correct singular file count in
   Properties archive category and its confirmation. Two strings only, preserve count/bytes/
   delete consent and behavior; isolated files.rs, source/fmt/build and root one-file visual gate.
@@ -69,11 +95,14 @@
   Four literals in achievements.rs/logs.rs/details.rs only; no extra fixture or behavior change.
   Both operation-log entry/result messages shortened to avoid additional unwrapped width.
 
-- P393 (review, file_summary; reviewer performance_audit): source-audit game-management popup strong
+- P393 (blocked/deferred, file_summary; reviewer performance_audit): source-audit game-management popup strong
   captures in close handlers (files.rs main/manage action loops) after unparented context use.
   Bounded component-lifetime proposal only; no whole-window release claim or broad conversion.
   Independent proposal GO: three weak-target blocks, unchanged signal/action/close ordering,
   actual builder in existing focused fixture; preserve P385 file-row popup behavior.
+  Native baseline retains mapped popovers even without application builder. Original strict
+  mapped-component release gate is unmet; candidate not integrated. P404 is a separately
+  reviewed narrower explicit-cycle task, not a relabeling of this gate as passed.
 
 - P392 (complete, performance_audit; reviewer file_summary): tray recent-game menu/launch inspection
   accesses profile without activity admission; bounded guards/session proposal separate from

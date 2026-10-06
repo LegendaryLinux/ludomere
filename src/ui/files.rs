@@ -784,8 +784,12 @@ pub(super) fn detail_file_management(
     manage.set_popover(Some(&manage_popover));
     let hover = gtk::EventControllerMotion::new();
     {
-        let manage_popover = manage_popover.clone();
-        hover.connect_enter(move |_, _, _| manage_popover.popup());
+        let manage_popover = manage_popover.downgrade();
+        hover.connect_enter(move |_, _, _| {
+            if let Some(manage_popover) = manage_popover.upgrade() {
+                manage_popover.popup();
+            }
+        });
     }
     manage.add_controller(hover);
     actions.append(&manage);
@@ -860,15 +864,23 @@ pub(super) fn detail_file_management(
         });
     }
     for action in main_actions {
-        let popover = popover.clone();
-        action.connect_clicked(move |_| popover.popdown());
+        let popover = popover.downgrade();
+        action.connect_clicked(move |_| {
+            if let Some(popover) = popover.upgrade() {
+                popover.popdown();
+            }
+        });
     }
     for action in manage_submenu_actions {
-        let popover = popover.clone();
-        let manage_popover = manage_popover.clone();
+        let popover = popover.downgrade();
+        let manage_popover = manage_popover.downgrade();
         action.connect_clicked(move |_| {
-            manage_popover.popdown();
-            popover.popdown();
+            if let Some(manage_popover) = manage_popover.upgrade() {
+                manage_popover.popdown();
+            }
+            if let Some(popover) = popover.upgrade() {
+                popover.popdown();
+            }
         });
     }
 
@@ -7162,14 +7174,52 @@ mod unified_row_tests {
     }
 
     #[test]
-    #[ignore = "requires isolated HOME/XDG, Xvfb and private D-Bus; exercises GTK action dispatch while sidebar popover detaches"]
-    fn sidebar_visibility_action_precedes_popover_detachment() {
+    #[ignore = "requires private p404 HOME/all XDG/TMP and GTK; unopened actual management components"]
+    fn unopened_management_components_release_with_retained_actions() {
+        exercise_management_components(false);
+    }
+
+    #[test]
+    #[ignore = "requires private p404 HOME/all XDG/TMP and GTK; mapped inert actions, no release claim"]
+    fn mapped_management_actions_preserve_dispatch_and_close_order() {
+        exercise_management_components(true);
+    }
+
+    fn exercise_management_components(mapped: bool) {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p404-")
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
         adw::init().expect("private display required");
+        #[track_caller]
+        fn wait_until(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
         let app = adw::Application::builder()
             .application_id("io.github.legendarylinux.Ludomere.HideTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
             .build();
         app.register(gio::Cancellable::NONE).unwrap();
         let window = adw::ApplicationWindow::new(&app);
+        window.set_default_size(700, 650);
         let list = gtk::ListBox::new();
         let row = gtk::ListBoxRow::new();
         row.set_child(Some(&gtk::Label::new(Some("Fixture game"))));
@@ -7177,6 +7227,7 @@ mod unified_row_tests {
         window.set_content(Some(&list));
         let hidden = Rc::new(std::cell::Cell::new(false));
         let calls = Rc::new(std::cell::Cell::new(0));
+        let events = Rc::new(RefCell::new(Vec::new()));
         list.set_filter_func({
             let hidden = hidden.clone();
             move |_| !hidden.get()
@@ -7186,68 +7237,188 @@ mod unified_row_tests {
             let hidden = hidden.clone();
             let calls = calls.clone();
             let list = list.clone();
+            let events = events.clone();
             move |_, value| {
                 assert_eq!(value.and_then(|value| value.get::<i64>()), Some(42));
                 hidden.set(!hidden.get());
                 calls.set(calls.get() + 1);
+                events.borrow_mut().push("hidden");
                 list.invalidate_filter();
             }
         });
         window.add_action(&action);
-        let button = gtk::Button::with_label("Hide game locally");
-        bind_management_action(&button, &window, "hidden", 42);
-        let popover = gtk::Popover::new();
-        popover.set_child(Some(&button));
-        popover.set_parent(&row);
-        popover.connect_closed(|popover| popover.unparent());
-        button.connect_clicked({
-            let popover = popover.clone();
-            move |_| popover.popdown()
-        });
-        window.present();
-        while glib::MainContext::default().iteration(false) {}
-        popover.popup();
-        while glib::MainContext::default().iteration(false) {}
-        button.emit_clicked();
-        while glib::MainContext::default().iteration(false) {}
-        assert_eq!(calls.get(), 1);
-        assert!(hidden.get());
-        assert!(!row.is_child_visible());
-        button.emit_clicked();
-        assert_eq!(calls.get(), 2);
-        assert!(!hidden.get());
-        assert!(row.is_child_visible());
-        if popover.parent().is_some() {
-            popover.unparent();
-        }
         let favorite = Rc::new(std::cell::Cell::new(false));
+        let favorite_calls = Rc::new(std::cell::Cell::new(0));
         let action = gio::SimpleAction::new("favorite", Some(&i64::static_variant_type()));
         action.connect_activate({
             let favorite = favorite.clone();
+            let favorite_calls = favorite_calls.clone();
+            let events = events.clone();
             move |_, value| {
                 assert_eq!(value.and_then(|value| value.get::<i64>()), Some(73));
                 favorite.set(!favorite.get());
+                favorite_calls.set(favorite_calls.get() + 1);
+                events.borrow_mut().push("favorite");
             }
         });
         window.add_action(&action);
-        let button = gtk::Button::with_label("Add to Favorites");
-        bind_management_action(&button, &window, "favorite", 73);
-        let popover = gtk::Popover::new();
-        popover.set_child(Some(&button));
-        popover.set_parent(&row);
-        popover.connect_closed(|popover| popover.unparent());
-        button.connect_clicked({
-            let popover = popover.clone();
-            move |_| popover.popdown()
-        });
-        popover.popup();
-        while glib::MainContext::default().iteration(false) {}
-        button.emit_clicked();
-        while glib::MainContext::default().iteration(false) {}
-        assert!(favorite.get());
-        assert!(popover.parent().is_none());
-        button.emit_clicked();
-        assert!(!favorite.get());
+        window.present();
+        wait_until(|| row.is_mapped());
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        for (id, label) in [(42, "Hide game locally"), (73, "Add to Favorites")] {
+            events.borrow_mut().clear();
+            let management = detail_file_management(
+                &DetailPageModel::game(
+                    Game {
+                        product_id: id,
+                        title: "Synthetic management game".into(),
+                        ..Game::default()
+                    },
+                    false,
+                ),
+                &window,
+                &model,
+                None,
+                {
+                    let events = events.clone();
+                    Rc::new(move || events.borrow_mut().push("refresh"))
+                },
+                Rc::new(|| panic!("primary backend action must not run")),
+            );
+            let weak_menu = management.menu.downgrade();
+            let popover = management.menu.popover().unwrap();
+            let actions = popover.child().unwrap();
+            let button = std::iter::successors(actions.first_child(), |child| child.next_sibling())
+                .filter_map(|child| child.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some(label))
+                .unwrap();
+            let manage = std::iter::successors(actions.first_child(), |child| child.next_sibling())
+                .find_map(|child| child.downcast::<gtk::MenuButton>().ok())
+                .unwrap();
+            let submenu = manage.popover().unwrap();
+            let controllers = manage.observe_controllers();
+            let hover = (0..controllers.n_items())
+                .find_map(|index| {
+                    controllers
+                        .item(index)?
+                        .downcast::<gtk::EventControllerMotion>()
+                        .ok()
+                })
+                .unwrap();
+            drop(controllers);
+            let refresh = std::iter::successors(submenu.child().unwrap().first_child(), |child| {
+                child.next_sibling()
+            })
+            .filter_map(|child| child.downcast::<gtk::Button>().ok())
+            .find(|button| button.label().as_deref() == Some("Refresh local state"))
+            .unwrap();
+            let weak_outer = popover.downgrade();
+            let weak_submenu = submenu.downgrade();
+            let weak_manage = manage.downgrade();
+            let ever_mapped = Rc::new(std::cell::Cell::new(false));
+            for popup in [&popover, &submenu] {
+                let ever_mapped = ever_mapped.clone();
+                popup.connect_map(move |_| ever_mapped.set(true));
+            }
+            if mapped {
+                management.menu.set_popover(gtk::Popover::NONE);
+                popover.connect_closed({
+                    let events = events.clone();
+                    move |popover| {
+                        events.borrow_mut().push("outer");
+                        popover.unparent();
+                    }
+                });
+                submenu.connect_closed({
+                    let events = events.clone();
+                    move |_| events.borrow_mut().push("submenu")
+                });
+                popover.set_parent(&row);
+                popover.popup();
+                wait_until(|| button.is_mapped());
+                events.borrow_mut().clear();
+                if id == 73 {
+                    hover.emit_by_name::<()>("enter", &[&0.0_f64, &0.0_f64]);
+                    wait_until(|| refresh.is_mapped());
+                    refresh.emit_clicked();
+                    wait_until(|| popover.parent().is_none() && !submenu.is_mapped());
+                    assert_eq!(*events.borrow(), ["refresh", "submenu", "outer"]);
+                    popover.set_parent(&row);
+                    popover.popup();
+                    wait_until(|| button.is_mapped());
+                    events.borrow_mut().clear();
+                }
+                button.emit_clicked();
+                wait_until(|| popover.parent().is_none());
+                assert_eq!(
+                    *events.borrow(),
+                    [if id == 42 { "hidden" } else { "favorite" }, "outer"]
+                );
+                if id == 42 {
+                    assert_eq!(calls.get(), 1);
+                    assert!(hidden.get());
+                    assert!(!row.is_child_visible());
+                } else {
+                    assert_eq!(favorite_calls.get(), 1);
+                    assert!(favorite.get());
+                }
+            } else {
+                assert!(!popover.is_mapped() && !submenu.is_mapped());
+                assert!(!ever_mapped.get());
+            }
+            drop(actions);
+            drop(manage);
+            drop(submenu);
+            drop(popover);
+            drop(management);
+            if !mapped {
+                wait_until(|| {
+                    weak_outer.upgrade().is_none()
+                        && weak_submenu.upgrade().is_none()
+                        && weak_manage.upgrade().is_none()
+                        && weak_menu.upgrade().is_none()
+                });
+                assert!(!ever_mapped.get());
+                assert!(events.borrow().is_empty());
+                hover.emit_by_name::<()>("enter", &[&0.0_f64, &0.0_f64]);
+                assert!(events.borrow().is_empty());
+                button.emit_clicked();
+                assert_eq!(
+                    *events.borrow(),
+                    [if id == 42 { "hidden" } else { "favorite" }]
+                );
+                if id == 42 {
+                    assert_eq!(calls.get(), 1);
+                    assert!(hidden.get() && !row.is_child_visible());
+                } else {
+                    assert_eq!(favorite_calls.get(), 1);
+                    assert!(favorite.get());
+                }
+                refresh.emit_clicked();
+                assert_eq!(
+                    *events.borrow(),
+                    [if id == 42 { "hidden" } else { "favorite" }, "refresh"]
+                );
+            }
+            assert!(window.is_visible() && window.is_mapped());
+            events.borrow_mut().clear();
+            button.emit_clicked();
+            assert_eq!(
+                *events.borrow(),
+                [if id == 42 { "hidden" } else { "favorite" }]
+            );
+            if id == 42 {
+                assert_eq!(calls.get(), 2);
+                assert!(!hidden.get());
+                assert!(row.is_child_visible());
+            } else {
+                assert_eq!(favorite_calls.get(), 2);
+                assert!(!favorite.get());
+            }
+        }
+        assert!(window.visible_dialog().is_none());
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
         window.close();
     }
 

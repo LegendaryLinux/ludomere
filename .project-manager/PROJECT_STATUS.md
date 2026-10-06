@@ -8,12 +8,12 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified71 separate audit commits through5764b79, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified72 separate audit commits through37aa551, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
-- Latest consolidated private build PASS at54345f2: fmt, all-target Clippy-Dwarnings,
-  574 library tests, six integration tests, five Python helper tests and build.92 library tests
+- Latest consolidated private build PASS at37aa551: fmt, all-target Clippy-Dwarnings,
+  574 library tests, six integration tests, five Python helper tests and build.93 library tests
   ignored by default; affected GTK gates run separately. Log:
-  /tmp/ludomere-r111-full-build-uv_o7udz/build.log. No real account/helpers/network in gate.
+  /tmp/ludomere-r111-full-build-9gwc2kj3/build.log. No real account/helpers/network in gate.
 - Latest verified fixes: P365a narrow launch-preference persistence; P366 Account spacing;
   P367 repair chooser layout; P368 tracked repair inspection; P369 asynchronous cached Cloud
   settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound

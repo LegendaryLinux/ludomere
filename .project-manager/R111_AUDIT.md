@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At37aa551 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library
+  tests, six integration tests, five Python helper tests and build.93 ignored library entries;
+  affected GTK gates run separately.72 exact post-commit builds PASS. Evidence
+  /tmp/ludomere-r111-full-build-9gwc2kj3/build.log. Actual profile/helpers/network excluded.
+
 - At54345f2 consolidated private build PASS: fmt, all-target Clippy-Dwarnings,574 library
   tests, six integration tests, five Python helper tests and build.92 library entries ignored
   by default; affected UI gates run separately.68 exact post-commit builds PASS. Evidence
@@ -42,6 +47,31 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P404 actual unopened-builder negative/positive gate proves explicit Rust capture-cycle
+  removal: old code fails strict weak-release at files.rs7363 in p404-ixo6aymj; identical
+  fixture passes with three weak-capture blocks in p404-pbsnm7lk. Retained harmless actions/
+  controller still work after release. Mapped action/filter/submenu close-order test passes
+  p404-c5c_3fnl. Independent final review/fmt/compile/Clippy PASS; only known private GSettings
+  schema warnings. P393 mapped native retention remains deferred, not solved or relabeled.
+
+- Read-only actual Gungeon Properties Installation/Installed Files/Updates/Compatibility pages
+  inspected; source/version/native explanation and automatic-save guidance render. No policies,
+  runtime or files changed. Installation directory is heavily ellipsized; targeted UI/source
+  proposal requested. Named app-only screenshots properties-*-audit.png, app-properties-pages-audit.log
+  has no panic/Gtk-/GLib-GIO-CRITICAL; application exited normally.
+
+- Documentation assessment finds README/runtime/PKGBUILD consistently use bundled UMU1.4.4
+  and Cometv0.3.2; current user-supplied AGENTS standalone /usr/bin/umu-run sentence diverges.
+  No dependency/runtime/package or user-instruction change made. Keep this discrepancy for
+  user decision; no automatic host fallback or architecture migration added during audit.
+
+- P393 native-only diagnostic p393-rqkua9mf: never-mapped ownership transfer releases its
+  popover; both filtered-anchor and ordinary visible-anchor mapped dismissal retain one native
+  reference after close/unparent. This reproduces retention without the application builder,
+  narrowing it beyond Hide-specific behavior; it does not establish a toolkit cause or fix.
+  Temporary diagnostic removed, original strict acceptance still unmet. Candidate stays out.
+  P402 commit37aa551 exact post-build PASS,72 built audit commits.
 
 - P402 live one-file summary and confirmation PASS (p402-one-file-summary.png and
   p402-confirmation-properties.png); three-file category remains plural. Confirmation canceled,
