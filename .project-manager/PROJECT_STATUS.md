@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P346 final independent visibility review and both private chooser/multipart regressions PASS;
+  fmt/Clippy/build PASS. Destination frame timing fixed in fixture; actual hidden-parent visibility
+  bug corrected with own-property checks, weak captures avoid status-widget cycles. Obsolete mount
+  helpers removed after their last caller disappeared. Separate commit then consolidated build.
+
+- P348 committed87d896e exact post-commit build PASS. P346 gate caught obsolete mount helpers,
+  a status-widget ownership cycle and hidden-parent visibility feedback bug; minimal corrections
+  underway, strict mapped regression retained, no commit yet. Existing multipart queue test PASS.
+  P349/P350 independent source review PASS; P351 isolated. Consolidated suite awaits P346 gate.
+
 - P348 independent implementation review, five focused private cancellation regressions,
   formatting/all-target Clippy/build PASS. Fixture-only missing glib import corrected before run.
   No blocking recovery-generation read on the permanent-cancel path; busy refusal retains state.

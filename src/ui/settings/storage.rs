@@ -1335,36 +1335,6 @@ fn filesystem_storage(path: &Path) -> Option<(u64, u64)> {
     ))
 }
 
-pub(in crate::ui) fn filesystem_mount_point(path: &Path) -> String {
-    #[cfg(target_os = "linux")]
-    {
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_owned());
-        if let Ok(mounts) = fs::read_to_string("/proc/self/mountinfo")
-            && let Some(mount) = mounts
-                .lines()
-                .filter_map(|line| line.split(" - ").next())
-                .filter_map(|prefix| prefix.split_whitespace().nth(4))
-                .map(decode_mount_path)
-                .filter(|mount| canonical.starts_with(mount))
-                .max_by_key(|mount| mount.as_os_str().len())
-        {
-            return mount.display().to_string();
-        }
-    }
-    path.display().to_string()
-}
-
-#[cfg(target_os = "linux")]
-fn decode_mount_path(value: &str) -> PathBuf {
-    PathBuf::from(
-        value
-            .replace("\\040", " ")
-            .replace("\\011", "\t")
-            .replace("\\012", "\n")
-            .replace("\\134", "\\"),
-    )
-}
-
 fn directory_size(path: &Path) -> u64 {
     let Ok(metadata) = path.symlink_metadata() else {
         return 0;

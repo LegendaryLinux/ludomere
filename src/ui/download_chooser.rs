@@ -1664,7 +1664,6 @@ struct InstallPreparation {
     installed_dlc_ids: HashSet<i64>,
     candidates: crate::installation::InstallerCandidates,
     dlc_candidates: HashMap<i64, crate::installation::InstallerCandidates>,
-    mount_points: Vec<String>,
     galaxy_preflight: Result<(), String>,
     galaxy_selection: crate::gog::depot_acquisition::Selection,
     library_statuses: Vec<crate::storage::LibraryStatus>,
@@ -1820,11 +1819,6 @@ fn load_install_choices(
                     ),
                 );
             }
-            let mount_points = config
-                .game_libraries
-                .iter()
-                .map(|library| settings::storage::filesystem_mount_point(&library.path))
-                .collect();
             let galaxy_selection =
                 default_galaxy_selection(&prepared_detail, &config, preferences.as_ref());
             let galaxy_preflight =
@@ -1888,7 +1882,6 @@ fn load_install_choices(
                 installed_dlc_ids,
                 candidates,
                 dlc_candidates,
-                mount_points,
                 galaxy_preflight,
                 galaxy_selection,
                 library_statuses,
@@ -1960,7 +1953,6 @@ fn populate_install_dialog(
         installed_dlc_ids,
         candidates,
         mut dlc_candidates,
-        mount_points,
         galaxy_preflight,
         galaxy_selection,
         library_statuses,
@@ -2017,6 +2009,17 @@ fn populate_install_dialog(
     let body = adw::PreferencesPage::new();
     let installer_group = adw::PreferencesGroup::new();
     installer_group.set_title("Installer");
+    let galaxy_feedback = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    galaxy_feedback.set_widget_name("install-galaxy-feedback");
+    let galaxy_preflight_label = gtk::Label::new(None);
+    galaxy_preflight_label.set_widget_name("install-galaxy-preflight");
+    galaxy_preflight_label.set_xalign(0.0);
+    galaxy_preflight_label.set_wrap(true);
+    galaxy_preflight_label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    galaxy_preflight_label.set_selectable(true);
+    galaxy_preflight_label.set_visible(false);
+    galaxy_feedback.append(&galaxy_preflight_label);
+    installer_group.add(&galaxy_feedback);
     let galaxy_builds = detail
         .galaxy_builds
         .iter()
@@ -2030,11 +2033,12 @@ fn populate_install_dialog(
         .cloned()
         .collect::<Vec<_>>();
     if let Some(Err(error)) = &galaxy_preflight {
-        installer_group.set_description(Some(&if galaxy_request.is_some() {
+        galaxy_preflight_label.set_label(&if galaxy_request.is_some() {
             "Downloaded installers remain available while Galaxy data loads.".into()
         } else {
             format!("Galaxy build unavailable: {error}")
-        }));
+        });
+        galaxy_preflight_label.set_visible(true);
     }
     let galaxy_ready = Rc::new(std::cell::Cell::new(!galaxy_builds.is_empty()));
     let mut ranked_sources = if repair || existing_installation.is_some() {
@@ -2646,6 +2650,7 @@ fn populate_install_dialog(
         .unwrap_or(0);
     library.set_selected(default_library as u32);
     let library_choices = gtk::ListBox::new();
+    library_choices.set_widget_name("install-game-libraries");
     library_choices.set_selection_mode(gtk::SelectionMode::Single);
     library_choices.add_css_class("install-library-list");
     let storage_locked = existing_installation.is_some();
@@ -2653,11 +2658,13 @@ fn populate_install_dialog(
         let row = gtk::ListBoxRow::new();
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 10);
         content.append(&gtk::Image::from_icon_name("drive-harddisk-symbolic"));
-        let mount = gtk::Label::new(mount_points.get(index).map(String::as_str));
-        mount.set_xalign(0.0);
-        mount.set_hexpand(true);
-        mount.add_css_class("install-library-path");
-        content.append(&mount);
+        let path = gtk::Label::new(Some(&game_library.path.display().to_string()));
+        path.set_xalign(0.0);
+        path.set_hexpand(true);
+        path.set_wrap(true);
+        path.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        path.add_css_class("install-library-path");
+        content.append(&path);
         if game_library.default {
             let star = gtk::Image::from_icon_name("starred-symbolic");
             star.add_css_class("storage-default-library");
@@ -2721,17 +2728,38 @@ fn populate_install_dialog(
     });
     destination_group.add(&library_choices);
     let path_row = adw::ActionRow::new();
+    path_row.set_widget_name("install-destination");
+    path_row.set_title("Installation folder");
     path_row.set_use_markup(false);
+    path_row.set_subtitle_selectable(true);
+    destination_group.add(&path_row);
     body.add(&destination_group);
-
+    let update_destination = {
+        let libraries = config.game_libraries.clone();
+        let existing = existing_installation
+            .as_ref()
+            .map(|installed| installed.installation_directory.clone());
+        let slug = detail.slug.clone();
+        move |library: &gtk::DropDown| {
+            path_row.set_subtitle(
+                &existing
+                    .clone()
+                    .or_else(|| {
+                        libraries
+                            .get(library.selected() as usize)
+                            .map(|library| library.path.join(&slug))
+                    })
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| "No game library configured".into()),
+            );
+        }
+    };
+    update_destination(&library);
+    library.connect_selected_notify(update_destination);
     update_install_plan_preview(
         &installer_detail,
-        &path_row,
         &candidates.usable,
         candidate.selected() as usize,
-        &config.game_libraries,
-        library.selected() as usize,
-        &detail.slug,
     );
     let scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
@@ -2750,24 +2778,52 @@ fn populate_install_dialog(
     spacer.set_hexpand(true);
     footer.append(&spacer);
     let status = gtk::Label::new(None);
-    status.set_xalign(0.0);
-    status.set_hexpand(true);
-    status.set_wrap(true);
-    status.set_wrap_mode(gtk::pango::WrapMode::WordChar);
-    status.set_selectable(true);
+    status.set_widget_name("install-status");
+    let galaxy_status = gtk::Label::new(None);
+    galaxy_status.set_widget_name("install-galaxy-status");
+    let statuses = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    for label in [&status, &galaxy_status] {
+        label.set_xalign(0.0);
+        label.set_hexpand(true);
+        label.set_wrap(true);
+        label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+        label.set_selectable(true);
+        statuses.append(label);
+    }
     let status_scroll = gtk::ScrolledWindow::builder()
-        .child(&status)
+        .child(&statuses)
         .max_content_height(160)
         .propagate_natural_height(true)
         .hscrollbar_policy(gtk::PolicyType::Never)
         .build();
-    status_scroll.set_visible(false);
-    status.connect_label_notify({
-        let status_scroll = status_scroll.clone();
-        move |label| {
-            status_scroll.set_visible(!label.label().is_empty());
+    status_scroll.set_widget_name("install-status-scroll");
+    let refresh_status: Rc<dyn Fn()> = Rc::new({
+        let status_scroll = status_scroll.downgrade();
+        let status = status.downgrade();
+        let galaxy_status = galaxy_status.downgrade();
+        let galaxy_selected = galaxy_selected.clone();
+        move || {
+            let (Some(status_scroll), Some(status), Some(galaxy_status)) = (
+                status_scroll.upgrade(),
+                status.upgrade(),
+                galaxy_status.upgrade(),
+            ) else {
+                return;
+            };
+            status.set_visible(!status.label().is_empty());
+            galaxy_status.set_visible(galaxy_selected.get() && !galaxy_status.label().is_empty());
+            status_scroll.set_visible(status.get_visible() || galaxy_status.get_visible());
         }
     });
+    for label in [&status, &galaxy_status] {
+        let refresh = refresh_status.clone();
+        label.connect_label_notify(move |_| refresh());
+    }
+    source.connect_selected_notify({
+        let refresh = refresh_status.clone();
+        move |_| refresh()
+    });
+    refresh_status();
     root.append(&status_scroll);
     let close = gtk::Button::with_label("Cancel");
     footer.append(&close);
@@ -2876,7 +2932,7 @@ fn populate_install_dialog(
         row.add_suffix(&spinner);
         let retry = gtk::Button::with_label("Retry");
         row.add_suffix(&retry);
-        installer_group.add(&row);
+        galaxy_feedback.append(&row);
         let closed = Rc::new(std::cell::Cell::new(false));
         dialog.connect_closed({
             let closed = closed.clone();
@@ -2896,7 +2952,7 @@ fn populate_install_dialog(
         let icon = detail.icon.clone();
         let title = detail.title.clone();
         let has_library = !config.game_libraries.is_empty();
-        let installer_group = installer_group.clone();
+        let galaxy_preflight_label = galaxy_preflight_label.clone();
         retry.connect_clicked(move |retry| {
             if closed.get() || model.borrow().account_epoch!=epoch {return;}
             retry.set_sensitive(false);spinner.set_spinning(true);row.set_subtitle("Checking Galaxy installation data…");
@@ -2905,14 +2961,14 @@ fn populate_install_dialog(
             std::thread::spawn(move || {let _=sender.send(online::fetch_product_section(&game,online::DetailSection::Builds,Some(&token),language.as_deref(),session).map_err(|error|error.to_string()));});
             let model=model.clone();let builds=builds.clone();let branches=branches.clone();let closed=closed.clone();
             let spinner=spinner.clone();let row=row.clone();let retry=retry.clone();let branch=branch.clone();let branch_row=branch_row.clone();let branch_password=branch_password.clone();
-            let galaxy_selected=galaxy_selected.clone();let galaxy_ready=galaxy_ready.clone();let install=install.clone();let buttons=buttons.clone();let values=values.clone();let icon=icon.clone();let title=title.clone();let installer_group=installer_group.clone();
+            let galaxy_selected=galaxy_selected.clone();let galaxy_ready=galaxy_ready.clone();let install=install.clone();let buttons=buttons.clone();let values=values.clone();let icon=icon.clone();let title=title.clone();let galaxy_preflight_label=galaxy_preflight_label.clone();
             glib::timeout_add_local(Duration::from_millis(32),move || {
                 if closed.get() || model.borrow().account_epoch!=epoch {return glib::ControlFlow::Break;}
                 let result=match receiver.try_recv(){Ok(result)=>result,Err(mpsc::TryRecvError::Empty)=>return glib::ControlFlow::Continue,Err(_)=>Err("Galaxy metadata loading stopped".into())};
                 spinner.set_spinning(false);retry.set_sensitive(true);
                 match result {
                     Ok(game)=>{
-                        installer_group.set_description(None);
+                        galaxy_preflight_label.set_visible(false);
                         let id=game.product_id;
                         let fresh=game.galaxy_builds.iter().filter(|build|build.generation==2 && build.currently_returned && build.operating_system.eq_ignore_ascii_case("windows")).cloned().collect::<Vec<_>>();
                         if let Some(current)=model.borrow_mut().games.iter_mut().find(|current|current.product_id==id){online::apply_product_section(current,game,online::DetailSection::Builds);}
@@ -2958,11 +3014,7 @@ fn populate_install_dialog(
     }
     {
         let detail_row = installer_detail.clone();
-        let path_row = path_row.clone();
         let candidates = candidates.usable.clone();
-        let libraries = config.game_libraries.clone();
-        let library = library.clone();
-        let slug = detail.slug.clone();
         let install = install.clone();
         let candidate_menu = candidate_menu.clone();
         let candidate_labels = candidate_labels.clone();
@@ -2998,15 +3050,7 @@ fn populate_install_dialog(
                 });
             }
             update_dlc_summary(&dlc_summary, &dlc_choices, repair);
-            update_install_plan_preview(
-                &detail_row,
-                &path_row,
-                &candidates,
-                selected,
-                &libraries,
-                library.selected() as usize,
-                &slug,
-            );
+            update_install_plan_preview(&detail_row, &candidates, selected);
             update_install_action(
                 &install,
                 &candidates,
@@ -3038,25 +3082,6 @@ fn populate_install_dialog(
             }
         });
     }
-    {
-        let detail_row = installer_detail.clone();
-        let path_row = path_row.clone();
-        let candidates = candidates.usable.clone();
-        let libraries = config.game_libraries.clone();
-        let candidate = candidate.clone();
-        let slug = detail.slug.clone();
-        library.connect_selected_notify(move |library| {
-            update_install_plan_preview(
-                &detail_row,
-                &path_row,
-                &candidates,
-                candidate.selected() as usize,
-                &libraries,
-                library.selected() as usize,
-                &slug,
-            );
-        });
-    }
     let refresh_source: Rc<dyn Fn()> = Rc::new({
         let source = source.clone();
         let values = source_values.clone();
@@ -3067,6 +3092,7 @@ fn populate_install_dialog(
         let statuses = library_statuses.clone();
         let install = install.clone();
         let galaxy_ready = galaxy_ready.clone();
+        let galaxy_feedback = galaxy_feedback.clone();
         let interactive = interactive_prompts.clone();
         let dlc_menu = dlc_menu.clone();
         let candidates = candidates.usable.clone();
@@ -3080,6 +3106,7 @@ fn populate_install_dialog(
                 .get(source.selected() as usize)
                 .map(|(_, source)| *source);
             let remote = matches!(selected, Some(InstallSource::RemoteOffline(_)));
+            galaxy_feedback.set_visible(matches!(selected, Some(InstallSource::GalaxyWindows)));
             archive_group.set_visible(remote);
             dlc_menu.set_visible(!remote && !dlcs.is_empty());
             interactive
@@ -3339,6 +3366,7 @@ fn populate_install_dialog(
                 return;
             }
             if galaxy_selected.get() {
+                let status = galaxy_status.clone();
                 if preparing.get() {
                     return;
                 }
@@ -3927,12 +3955,8 @@ fn install_library_free_space(path: &std::path::Path) -> std::io::Result<u64> {
 
 fn update_install_plan_preview(
     method_row: &adw::ActionRow,
-    path_row: &adw::ActionRow,
     candidates: &[crate::installation::InstallerCandidate],
     candidate_index: usize,
-    libraries: &[crate::config::GameLibrary],
-    library_index: usize,
-    slug: &str,
 ) {
     if let Some(candidate) = candidates.get(candidate_index) {
         let (title, method_description) = match candidate.method {
@@ -3961,25 +3985,6 @@ fn update_install_plan_preview(
         ));
         method_row.set_title(title);
     }
-    path_row.set_subtitle(
-        &libraries
-            .get(library_index)
-            .map(|library| {
-                let host = library.path.join(slug).display().to_string();
-                if candidates.get(candidate_index).is_some_and(|candidate| {
-                    candidate.method
-                        == crate::installation::InstallationMethod::WindowsCompatibility
-                }) {
-                    format!(
-                        "{host} · Windows: {}",
-                        crate::compatibility::windows_destination(slug)
-                    )
-                } else {
-                    host
-                }
-            })
-            .unwrap_or_else(|| "No game library configured".to_owned()),
-    );
 }
 
 pub(super) fn show_download_selector(
@@ -6185,6 +6190,376 @@ mod installer_version_tests {
     }
 
     #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn install_destinations_and_galaxy_feedback_follow_current_choices() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p346-")
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let libraries = [
+            root.path().join("nested/first-games"),
+            root.path()
+                .join("nested")
+                .join("configured-game-files-with-a-long-path-".repeat(4)),
+            root.path().join("unavailable"),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, path)| {
+            if index < 2 {
+                std::fs::create_dir_all(&path).unwrap();
+            }
+            GameLibrary {
+                id: index.to_string(),
+                name: format!("Library {index}"),
+                path,
+                default: index == 0,
+            }
+        })
+        .collect::<Vec<_>>();
+        let archive = GameLibrary {
+            id: "archive".into(),
+            name: "Archive".into(),
+            path: root.path().join("offline"),
+            default: true,
+        };
+        std::fs::create_dir(&archive.path).unwrap();
+        let config = Config {
+            game_libraries: libraries.clone(),
+            offline_libraries: vec![archive.clone()],
+            extras_libraries: vec![],
+            installation_source_order: vec![
+                crate::config::PreferredInstallationSource::LinuxOffline,
+                crate::config::PreferredInstallationSource::WindowsOffline,
+                crate::config::PreferredInstallationSource::WindowsGalaxy,
+            ],
+            ..Config::default()
+        };
+        let detail =
+            DetailPageModel::game(
+                Game {
+                    product_id: 9346001,
+                    slug: "fixture-game".into(),
+                    title: "Fixture".into(),
+                    galaxy_builds: vec![serde_json::from_value(serde_json::json!({
+                "build_id":"fixture", "product_id":9346001, "operating_system":"windows",
+                "tags":[], "public":true, "generation":2,
+                "repository_url":"https://invalid.test/unused", "currently_returned":true,
+                "first_seen_at":0, "last_seen_at":0
+            })).unwrap()],
+                    ..Game::default()
+                },
+                false,
+            );
+        let candidates = ["linux", "windows"]
+            .into_iter()
+            .map(|os| crate::installation::InstallerCandidate {
+                product_id: detail.product_id,
+                revision_id: None,
+                version: Some("1".into()),
+                operating_system: Some(os.into()),
+                language: Some("English".into()),
+                paths: vec![archive.path.join(format!("fixture-{os}"))],
+                launcher: None,
+                method: if os == "linux" {
+                    crate::installation::InstallationMethod::NativeLinux
+                } else {
+                    crate::installation::InstallationMethod::WindowsCompatibility
+                },
+                total_size: 4,
+                currently_offered: false,
+                complete: true,
+            })
+            .collect::<Vec<_>>();
+        let remote =
+            download_selection::group_artifacts(&[serde_json::from_value::<RemoteArtifact>(
+                serde_json::json!({
+                    "product_id":detail.product_id, "kind":"installer", "name":"Fixture",
+                    "operating_system":"windows", "language":"English", "version":"1",
+                    "part_number":1, "part_count":1, "provider_group_id":"english",
+                    "provider_file_id":"part", "download_path":"/synthetic/unused"
+                }),
+            )
+            .unwrap()]);
+        let preparation = |existing_installation, galaxy_preflight| InstallPreparation {
+            local_only: false,
+            config: config.clone(),
+            existing_installation,
+            installed_dlc_ids: HashSet::new(),
+            candidates: crate::installation::InstallerCandidates {
+                usable: candidates.clone(),
+                incomplete: vec![],
+                preferred: Some(0),
+            },
+            dlc_candidates: HashMap::new(),
+            galaxy_preflight,
+            galaxy_selection: default_galaxy_selection(&detail, &config, None),
+            library_statuses: libraries
+                .iter()
+                .map(|library| crate::storage::LibraryStatus {
+                    kind: LibraryKind::GameFiles,
+                    library_id: library.id.clone(),
+                    path: library.path.clone(),
+                    compatibility: if library.id == "2" {
+                        crate::storage::LibraryCompatibility::Unavailable(
+                            "Synthetic unavailable library".into(),
+                        )
+                    } else {
+                        crate::storage::LibraryCompatibility::Compatible
+                    },
+                    game_issues: vec![],
+                })
+                .chain(std::iter::once(crate::storage::LibraryStatus {
+                    kind: LibraryKind::OfflineInstallers,
+                    library_id: archive.id.clone(),
+                    path: archive.path.clone(),
+                    compatibility: crate::storage::LibraryCompatibility::Compatible,
+                    game_issues: vec![],
+                }))
+                .collect(),
+            remote_installers: remote.clone(),
+            offline_error: None,
+        };
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.ChooserFeedbackTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(900)
+            .default_height(760)
+            .build();
+        let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        window.set_content(Some(&page));
+        window.present();
+        // No token or model game: cached source choices cannot start metadata requests.
+        let model = Rc::new(RefCell::new(AppModel {
+            config: config.clone(),
+            ..AppModel::default()
+        }));
+        let dialog = adw::Dialog::builder()
+            .content_width(680)
+            .content_height(620)
+            .build();
+        populate_install_dialog(
+            &dialog,
+            &window,
+            &model,
+            &detail,
+            false,
+            preparation(None, Ok(())),
+        );
+        dialog.present(Some(&window));
+        wait(|| dialog.is_mapped());
+        let destination = find_named_descendant(dialog.upcast_ref(), "install-destination")
+            .and_downcast::<adw::ActionRow>()
+            .unwrap();
+        let choices = find_named_descendant(dialog.upcast_ref(), "install-game-libraries")
+            .and_downcast::<gtk::ListBox>()
+            .unwrap();
+        let menu = find_named_descendant(dialog.upcast_ref(), "install-source-menu")
+            .and_downcast::<gtk::MenuButton>()
+            .unwrap();
+        let install = find_named_descendant(dialog.upcast_ref(), "install-confirm")
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+        let feedback = find_named_descendant(dialog.upcast_ref(), "install-galaxy-feedback")
+            .and_downcast::<gtk::Box>()
+            .unwrap();
+        let preflight = find_named_descendant(dialog.upcast_ref(), "install-galaxy-preflight")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        let galaxy_status = find_named_descendant(dialog.upcast_ref(), "install-galaxy-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        let status = find_named_descendant(dialog.upcast_ref(), "install-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        let scroll = find_named_descendant(dialog.upcast_ref(), "install-status-scroll")
+            .and_downcast::<gtk::ScrolledWindow>()
+            .unwrap();
+        wait(|| destination.is_mapped() && destination.width() > 0);
+        assert!(destination.is_mapped());
+        assert_eq!(
+            destination.subtitle().unwrap(),
+            libraries[0].path.join(&detail.slug).display().to_string()
+        );
+        for (index, library) in libraries.iter().enumerate() {
+            let content = choices.row_at_index(index as i32).unwrap().child().unwrap();
+            let label = content
+                .first_child()
+                .unwrap()
+                .next_sibling()
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            assert_eq!(label.text(), library.path.display().to_string());
+            assert!(label.wraps());
+        }
+        assert!(!choices.row_at_index(2).unwrap().is_sensitive());
+        assert!(!feedback.is_mapped() && !scroll.is_mapped());
+        assert!(install.is_sensitive());
+        choices.select_row(choices.row_at_index(1).as_ref());
+        assert_eq!(
+            destination.subtitle().unwrap(),
+            libraries[1].path.join(&detail.slug).display().to_string()
+        );
+        let choose = |index| {
+            let button = find_named_descendant(
+                menu.popover().unwrap().upcast_ref(),
+                &format!("install-source-{index}"),
+            )
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+            assert!(button.is_sensitive());
+            button.emit_clicked();
+        };
+        // Local Linux, local Windows, remote Windows, then Depot, in configured order.
+        for index in 0..4 {
+            choose(index);
+            assert_eq!(
+                destination.subtitle().unwrap(),
+                libraries[1].path.join(&detail.slug).display().to_string()
+            );
+            assert_eq!(install.is_sensitive(), index != 2); // remote needs a signed-in account
+        }
+        preflight.set_label("Synthetic Galaxy metadata failure");
+        preflight.set_visible(true);
+        galaxy_status.set_label("Synthetic Galaxy preparation failure");
+        wait(|| feedback.is_mapped() && galaxy_status.is_mapped() && scroll.is_mapped());
+        choose(0);
+        wait(|| !feedback.is_mapped() && !galaxy_status.is_mapped() && !scroll.is_mapped());
+        assert!(menu.grab_focus());
+        let focus = gtk::prelude::GtkWindowExt::focus(&window);
+        let generation = model.borrow().detail_generation;
+        // The production notify wiring must keep a late Galaxy update hidden offline.
+        galaxy_status.set_label("Late synthetic Galaxy preparation failure");
+        preflight.set_label("Late synthetic Galaxy metadata failure");
+        assert!(!feedback.is_visible() && !galaxy_status.is_visible() && !scroll.is_visible());
+        assert!(install.is_sensitive());
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&window), focus);
+        assert_eq!(model.borrow().detail_generation, generation);
+        status.set_label("Synthetic offline failure");
+        wait(|| status.is_mapped() && scroll.is_mapped());
+        assert!(!galaxy_status.is_mapped());
+        status.set_label("");
+        choose(3);
+        wait(|| galaxy_status.is_mapped() && feedback.is_mapped());
+        assert_eq!(
+            galaxy_status.text(),
+            "Late synthetic Galaxy preparation failure"
+        );
+        assert_eq!(preflight.text(), "Late synthetic Galaxy metadata failure");
+        let content = dialog.child().unwrap();
+        wait(|| destination.width() > 0);
+        assert!(
+            content.width() <= 680,
+            "long paths must not widen the chooser"
+        );
+        assert!(destination.width() <= content.width());
+        assert_eq!(window.content().as_ref(), Some(page.upcast_ref()));
+        dialog.close();
+        wait(|| window.visible_dialog().is_none());
+
+        let installed = crate::domain::InstalledGame {
+            product_id: detail.product_id,
+            library_id: libraries[1].id.clone(),
+            installed_version: Some("1".into()),
+            installation_directory: libraries[1].path.join("actual-existing-folder"),
+            installer_revision_id: None,
+            installer_job_id: None,
+            installer_files: candidates[0].paths.clone(),
+            installer_complete: true,
+            installer_operating_system: Some("linux".into()),
+            installer_language: Some("English".into()),
+            compatibility: None,
+            primary_executable: None,
+            launch_arguments: vec![],
+            state: crate::domain::InstallationState::Installed,
+            error: None,
+            installed_at: None,
+            verified_at: None,
+            last_played_at: None,
+            playtime_seconds: 0,
+            created_at: 0,
+            updated_at: 0,
+        };
+        let dialog = adw::Dialog::builder()
+            .content_width(680)
+            .content_height(620)
+            .build();
+        populate_install_dialog(
+            &dialog,
+            &window,
+            &model,
+            &detail,
+            true,
+            preparation(
+                Some(installed.clone()),
+                Err("Synthetic unavailable Galaxy metadata".into()),
+            ),
+        );
+        dialog.present(Some(&window));
+        wait(|| dialog.is_mapped());
+        let destination = find_named_descendant(dialog.upcast_ref(), "install-destination")
+            .and_downcast::<adw::ActionRow>()
+            .unwrap();
+        wait(|| destination.is_mapped() && destination.width() > 0);
+        let choices = find_named_descendant(dialog.upcast_ref(), "install-game-libraries")
+            .and_downcast::<gtk::ListBox>()
+            .unwrap();
+        assert_eq!(
+            destination.subtitle().unwrap(),
+            installed.installation_directory.display().to_string()
+        );
+        choices.select_row(choices.row_at_index(0).as_ref());
+        assert_eq!(choices.selected_row(), choices.row_at_index(1));
+        assert_eq!(
+            destination.subtitle().unwrap(),
+            installed.installation_directory.display().to_string()
+        );
+        assert!(
+            !find_named_descendant(dialog.upcast_ref(), "install-galaxy-feedback")
+                .unwrap()
+                .is_mapped()
+        );
+        assert!(
+            find_named_descendant(dialog.upcast_ref(), "install-confirm")
+                .unwrap()
+                .is_sensitive()
+        );
+        dialog.close();
+        wait(|| window.visible_dialog().is_none());
+        window.destroy();
+    }
+
+    #[test]
     #[ignore = "private HOME/all XDG, D-Bus and GTK; captures queues without downloads or helpers"]
     fn unified_sources_queue_parts_with_initial_and_changed_libraries() {
         let _capture = DownloadQueueCapture::start();
@@ -6293,7 +6668,6 @@ mod installer_version_tests {
                     preferred: Some(0),
                 },
                 dlc_candidates: HashMap::new(),
-                mount_points: vec!["fixture".into()],
                 galaxy_preflight: Ok(()),
                 galaxy_selection: default_galaxy_selection(&detail, &config, None),
                 library_statuses: crate::storage::inspect_libraries(&config).unwrap(),

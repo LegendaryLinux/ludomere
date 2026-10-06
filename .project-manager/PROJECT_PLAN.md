@@ -63,13 +63,13 @@
   the uninstaller window. No process, focus, detection or execution changes.
 - P345 (complete, file_summary; reviewer ui_critic): synchronize idle download-state class and reuse existing helper
   for paused/failed archive restoration; isolated details-only transitions regression.
-- P346 (ready, performance_audit): show full selected library and actual installation folder;
+- P346 (complete, performance_audit; corrective review file_summary/ui_critic): show full selected library and actual installation folder;
   source-scope Galaxy feedback while preserving generic/offline failures and preparation behavior.
 - P347 (complete for source findings, file_summary): independent auth/session/cancellation/setup
   assurance found cancellation's GTK admission can wait on another operation's persistence.
 - P348 (complete, performance_audit; reviewer file_summary): remove that blocking cancellation admission without dropping
   recovery-generation, profile-activity or ownership safeguards; deterministic held-lock regression.
-- P349 (ready, performance_audit; reviewer file_summary): coalesce Home scroll cover-priority
+- P349 (review, performance_audit; reviewer file_summary): coalesce Home scroll cover-priority
   scans, skip filtered/unmapped rows and retain latest viewport/lifetime safeguards. Own library.rs
   in isolated checkout; source work-count evidence and strict mapped equivalence/lifecycle fixture.
   No grid virtualization, backend queue redesign, real data or main edits before review.
@@ -77,6 +77,9 @@
   totals; label busy/current results without navigation or changed scan semantics. Own storage.rs
   isolated with deterministic GTK regression. Drive-scope wording, Move enablement and Collections
   keyboard parity are separate pending proposals, not silently bundled into this correction.
+- P351 (review, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
+  individual Collections game tiles, preserving collection membership and index-button behavior.
+  Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

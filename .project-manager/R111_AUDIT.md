@@ -5,6 +5,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- Additional live controls: Comet manual check shows immediate checking/disabled button and
+  returns to up-to-date; downloaded-file index reports one indexed/matched archive without changing
+  payloads. Metadata refresh shows Game list500/569 and completes with Library synchronized in
+  Notifications. On-demand detail artwork subsequently loads; metadata-search incomplete reflects
+  intentionally lazy metadata, not a persistent synchronization spinner.
+- Gungeon Logs shows its saved run and successful exit; inner scrolling pauses follow mode with
+  an explanation, outer page scrolling exposes the full log panel and installation-log actions.
+  No log export, clipboard copy or unrelated desktop inspection performed.
+
 - Root launched Ludomere on the real KDE desktop with X11 for scoped automated input.
   User reports wallet already unlocked. No passwords or tokens captured or shared with agents.
 - Reproduced search deletion/hiding when enabling Installed; zero-result Home pane is blank.
@@ -247,8 +256,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   Minimal correction, independent re-review and the unchanged six-case regression now PASS;
   formatting/all-target Clippy/build PASS. No timers, execution or download states changed.
 
-## Remaining findings
-
 ### P348 — refuse busy cancellation promptly
 
 - Capture/check recovery generation with one nonblocking admission attempt instead of waiting on
@@ -261,13 +268,23 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   protected cleanup and confirmation. Formatting/all-target Clippy/build PASS. Initial test-local
   missing glib import fixed without adding a production GTK dependency.
 
-- P345 expanded regression exposed an existing Complete→Downloading stale visual-state latch:
-  completion restores idle content without clearing the active-state cell, so a later transfer
-  skips rendering Pause. Minimal reset approved; retain the strict repeated-operation regression.
+## Remaining gates and live evidence
 
-- Independent cross-check P347 found synchronous cancellation admission can wait on a mutex held
-  during another operation's journal fsync; P348 must remove this GTK wait without weakening
-  recovery/ownership safety before consolidated verification. No new auth/session/setup blocker found.
+### P346 — accurate install destinations and source-specific feedback
+
+- Show full configured Game Files roots and the actual existing installation folder or chosen
+  root/slug. Remove chooser-only mount-point lookup and its now-unused helpers. Long paths wrap.
+- Keep Galaxy preflight/preparation feedback scoped to Depot while generic/offline errors remain
+  visible; preserve source choice, preparation ownership and multipart queue behavior.
+- Strict mapped and existing multipart tests PASS, final independent reviews and fmt/Clippy/build
+  PASS. Gate caught and corrected a new hidden-parent visibility loop and widget ownership cycle;
+  fixture now waits for destination allocation without weakening geometry assertions.
+
+- P346 install chooser final runtime and review gates pass.
+  P349 grid-priority coalescing and P350 Storage feedback pass source review, runtime gates pending.
+  P351 Collections keyboard parity is isolated. Consolidated build suite has not yet run.
+- P347 cross-check's cancellation issue is corrected in P348; no new material auth/session/setup
+  issue was found in that bounded source review. This is not an exhaustive security assessment.
 - Gungeon Depot launch rendered the actual game menu; normal window-close ended EtG.exe. Details
   displayed completed setup history and Close remained accessible. Planned/recorded counter totals
   differ; potential clarification is deferred rather than treating approximate counters as corruption.
@@ -278,21 +295,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 - Gungeon uninstall completed through its own Yes/remove, Yes/keep-saves and final OK prompts.
   Ludomere restored Download without reopening details and retained its offline archive; external
-  prompt guidance needs improvement. Download retained old green Play styling, proposed P345.
+  prompt guidance and stale green Download styling are corrected in P344/P345; live retest pending.
 
 - Real Gungeon archive-only deletion/re-download verified: one confirmation removes one archive,
   restores single Download/counts while preserving installed Play; explicit library Download
   transfers/registers382.7MB, restores archive menu/checkmark/counts, and does not run installation.
-  Conservative budget reservation now5GB including existing payload/prefixes and repeated transfer.
+  Subsequent Depot tests raise the conservative aggregate reservation to7GB of40GB.
 
-- Explain zero-result Home searches rather than showing blank content.
-- Downloads must feature active work before past failures and show featured error details.
-- Depot cancellation needs confirmation, off-thread cleanup and terminal cleanup error feedback.
-- Remove repeated keyring reads for already-authenticated Depot actions without weakening session
-  revocation or storing credentials in serialized operation requests.
-- Move managed-file summary database/stat work off GTK; batch repeated archive state reads.
-- Avoid opening SQLite twice per game during cached metadata readiness load.
-- Enable keyboard activation for game tiles; improve nested Genre list scroll discoverability.
+- Deferred proposals: clearer drive-wide capacity wording, same-destination Move enablement,
+  nested Genre scroll discoverability, initial Files page synchronous reads and grid size rebuilds.
+  Missing-library creation needs mount-identity evidence; no speculative automatic recreation added.
 
 Source findings are proposals until assigned, implemented and verified. Full interactive or game
 coverage is not claimed from source review alone. Reports: `/tmp/ludomere-r111-{ui-critic,performance,reliability,depot-auth}.md`.
