@@ -36,8 +36,86 @@ struct StorageListView {
     list: gtk::ListBox,
     checks: Rc<RefCell<HashMap<i64, gtk::CheckButton>>>,
     count: gtk::Label,
-    selected: gtk::Label,
-    move_button: gtk::Button,
+    update_selection: Rc<dyn Fn()>,
+}
+
+fn connect_move_selection(
+    items: &Rc<RefCell<Vec<InstalledStorageItem>>>,
+    checks: &Rc<RefCell<HashMap<i64, gtk::CheckButton>>>,
+    libraries: &Rc<RefCell<Vec<GameLibrary>>>,
+    target: &gtk::DropDown,
+    selected: &gtk::Label,
+    button: &gtk::Button,
+    moving: &Rc<std::cell::Cell<bool>>,
+) -> Rc<dyn Fn()> {
+    let update: Rc<dyn Fn()> = {
+        let items = items.clone();
+        let checks = Rc::downgrade(checks);
+        let libraries = libraries.clone();
+        let target = target.downgrade();
+        let selected = selected.downgrade();
+        let button = button.downgrade();
+        let moving = moving.clone();
+        Rc::new(move || {
+            let (Some(checks), Some(target), Some(selected), Some(button)) = (
+                checks.upgrade(),
+                target.upgrade(),
+                selected.upgrade(),
+                button.upgrade(),
+            ) else {
+                return;
+            };
+            let items = items.borrow();
+            let checks = checks.borrow();
+            let chosen = items
+                .iter()
+                .filter(|item| {
+                    checks
+                        .get(&item.game.product_id)
+                        .is_some_and(gtk::CheckButton::is_active)
+                })
+                .collect::<Vec<_>>();
+            let count = chosen.len();
+            selected.set_label(&if count == 0 {
+                "No games selected".to_owned()
+            } else {
+                format!("{count} game{} selected", if count == 1 { "" } else { "s" })
+            });
+            let libraries = libraries.borrow();
+            let destination = libraries.get(target.selected() as usize);
+            let reason = if moving.get() {
+                Some("Wait for the current move to finish.")
+            } else if chosen.is_empty() {
+                Some("Select at least one game to move.")
+            } else if chosen.iter().any(|item| {
+                item.game.compatibility.is_some()
+                    || item
+                        .game
+                        .installer_operating_system
+                        .as_deref()
+                        .is_some_and(|os| os.eq_ignore_ascii_case("windows"))
+            }) {
+                Some(
+                    "Windows games cannot be moved here because their compatibility prefix would also need to move. Uninstall and reinstall into the other library.",
+                )
+            } else if let Some(destination) = destination {
+                chosen
+                    .iter()
+                    .all(|item| item.game.library_id == destination.id)
+                    .then_some("Choose a different destination library.")
+            } else {
+                Some("Choose a destination library.")
+            };
+            button.set_sensitive(reason.is_none());
+            button.set_tooltip_text(reason);
+        })
+    };
+    target.connect_selected_notify({
+        let update = update.clone();
+        move |_| update()
+    });
+    update();
+    update
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -519,12 +597,21 @@ fn build_storage_section(
 
     let items = Rc::new(RefCell::new(Vec::<InstalledStorageItem>::new()));
     let checks = Rc::new(RefCell::new(HashMap::<i64, gtk::CheckButton>::new()));
+    let moving = Rc::new(std::cell::Cell::new(false));
+    let update_selection = connect_move_selection(
+        &items,
+        &checks,
+        &libraries,
+        &target,
+        &selected,
+        &move_button,
+        &moving,
+    );
     let list_view = StorageListView {
         list: list.clone(),
         checks: checks.clone(),
         count: item_count.clone(),
-        selected: selected.clone(),
-        move_button: move_button.clone(),
+        update_selection: update_selection.clone(),
     };
     let refresh = {
         let list_view = list_view.clone();
@@ -1198,8 +1285,8 @@ fn build_storage_section(
         let update_library = update_library.clone();
         let status = path_label.clone();
         let progress = move_progress.clone();
-        let moving = Rc::new(std::cell::Cell::new(false));
-        move |button| {
+        let moving = moving.clone();
+        move |_| {
             if moving.get() {
                 status.set_label("Moving game files… Please wait for the current move to finish.");
                 return;
@@ -1250,7 +1337,7 @@ fn build_storage_section(
             confirmation.add_responses(&[("cancel", "Cancel"), ("move", "Move")]);
             confirmation.set_response_appearance("move", adw::ResponseAppearance::Suggested);
             confirmation.set_default_response(Some("move"));
-            let button = button.clone();
+            let update_selection = update_selection.clone();
             let update_library = update_library.clone();
             let model = model.clone();
             let epoch = model.borrow().account_epoch;
@@ -1262,8 +1349,8 @@ fn build_storage_section(
                 if response != "move" || model.borrow().account_epoch != epoch || model.borrow().logout_pending {
                     return;
                 }
-                button.set_sensitive(false);
                 moving.set(true);
+                update_selection();
                 status.set_label("Moving game files… This may take several minutes.");
                 progress.set_visible(true);
                 progress.pulse();
@@ -1296,17 +1383,17 @@ fn build_storage_section(
                     })();
                     let _ = sender.send(result);
                 });
-                let button = button.clone();
+                let update_selection = update_selection.clone();
                 let update_library = update_library.clone();
                 glib::timeout_add_local(Duration::from_millis(100), move || {
                     if model.borrow().account_epoch != epoch || model.borrow().logout_pending {
-                        moving.set(false); progress.set_visible(false); button.set_sensitive(true);
+                        moving.set(false); progress.set_visible(false); update_selection();
                         return glib::ControlFlow::Break;
                     }
                     match receiver.try_recv() {
                         Ok(Ok(())) => {
                             moving.set(false); progress.set_visible(false);
-                            button.set_sensitive(true);
+                            update_selection();
                             update_library();
                             super::refresh_installed_state_after_library_change(&w, &model);
                             status.set_label("Games moved successfully. Refreshing the library…");
@@ -1320,12 +1407,12 @@ fn build_storage_section(
                             update_library();
                             super::refresh_installed_state_after_library_change(&w, &model);
                             show_status(&w, &format!("Could not move all selected games: {error:#}. Some files may have moved; both libraries have been refreshed."));
-                            button.set_sensitive(true);
+                            update_selection();
                             glib::ControlFlow::Break
                         }
                         Err(mpsc::TryRecvError::Empty) => { progress.pulse(); glib::ControlFlow::Continue },
                         Err(mpsc::TryRecvError::Disconnected) => {
-                            moving.set(false); progress.set_visible(false); button.set_sensitive(true);
+                            moving.set(false); progress.set_visible(false); update_selection();
                             status.set_label("Moving stopped unexpectedly. Recheck both libraries before trying again.");
                             update_library();
                             super::refresh_installed_state_after_library_change(&w, &model);
@@ -1442,27 +1529,11 @@ fn render_storage_items(view: &StorageListView, items: &[InstalledStorageItem], 
         view.checks
             .borrow_mut()
             .insert(item.game.product_id, check.clone());
-        let checks = view.checks.clone();
-        let selected = view.selected.clone();
-        let move_button = view.move_button.clone();
-        check.connect_toggled(move |_| {
-            let count = checks
-                .borrow()
-                .values()
-                .filter(|check| check.is_active())
-                .count();
-            let text = if count == 0 {
-                "No games selected".to_owned()
-            } else {
-                format!("{count} game{} selected", if count == 1 { "" } else { "s" })
-            };
-            selected.set_label(&text);
-            move_button.set_sensitive(count > 0);
-        });
+        let update_selection = view.update_selection.clone();
+        check.connect_toggled(move |_| update_selection());
         view.list.append(&row);
     }
-    view.selected.set_label("No games selected");
-    view.move_button.set_sensitive(false);
+    (view.update_selection)();
 }
 
 fn format_stored_playtime(seconds: u64) -> String {
@@ -1737,6 +1808,193 @@ fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    #[ignore = "requires private p361 HOME/all XDG, GTK and D-Bus; no file moves or helpers"]
+    fn move_controls_require_eligible_selection_and_preserve_busy_state() {
+        let home = std::env::var("HOME").unwrap();
+        assert!(home.starts_with("/tmp/ludomere-p361-"));
+        let root = Path::new(&home).parent().unwrap();
+        for key in [
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(Path::new(&std::env::var_os(key).unwrap()).starts_with(root));
+        }
+        adw::init().unwrap();
+        let libraries = Rc::new(RefCell::new(
+            ["source", "target"]
+                .into_iter()
+                .map(|id| GameLibrary {
+                    id: id.into(),
+                    name: id.into(),
+                    path: root.join(id),
+                    default: id == "source",
+                })
+                .collect::<Vec<_>>(),
+        ));
+        let items = Rc::new(RefCell::new([(1, "linux", "source"), (2, "WiNdOwS", "source"), (3, "linux", "target")]
+            .into_iter().map(|(id, os, library)| InstalledStorageItem {
+                game: serde_json::from_value(serde_json::json!({
+                    "product_id":id, "library_id":library,
+                    "installation_directory":root.join(library).join(format!("game-{id}")),
+                    "installer_files":[], "installer_complete":true, "installer_operating_system":os,
+                    "launch_arguments":[], "state":"installed", "playtime_seconds":0,
+                    "created_at":1, "updated_at":1
+                })).unwrap(), title: format!("Synthetic game {id}"), artwork: None, size: 0,
+            }).collect::<Vec<_>>()));
+        let checks = Rc::new(RefCell::new(HashMap::new()));
+        let target = gtk::DropDown::from_strings(&["Source", "Target"]);
+        let selected = gtk::Label::new(None);
+        let button = gtk::Button::with_label("Move");
+        let moving = Rc::new(std::cell::Cell::new(false));
+        let update = connect_move_selection(
+            &items, &checks, &libraries, &target, &selected, &button, &moving,
+        );
+        let view = StorageListView {
+            list: gtk::ListBox::new(),
+            checks: checks.clone(),
+            count: gtk::Label::new(None),
+            update_selection: update.clone(),
+        };
+        render_storage_items(&view, &items.borrow(), 1);
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.MoveEligibilityTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::new(&app);
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.append(&view.list);
+        content.append(&target);
+        content.append(&selected);
+        content.append(&button);
+        window.set_content(Some(&content));
+        window.present();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !button.is_mapped() && std::time::Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(button.is_mapped());
+        let native = checks.borrow()[&1].clone();
+        let windows = checks.borrow()[&2].clone();
+        let already_at_target = checks.borrow()[&3].clone();
+        assert!(!button.is_sensitive());
+        assert_eq!(selected.text(), "No games selected");
+        assert_eq!(
+            target.selected(),
+            0,
+            "eligibility must not select a destination"
+        );
+        native.set_active(true);
+        assert!(!button.is_sensitive());
+        assert_eq!(selected.text(), "1 game selected");
+        assert_eq!(
+            button.tooltip_text().as_deref(),
+            Some("Choose a different destination library.")
+        );
+        target.set_selected(1);
+        assert!(button.is_sensitive());
+        assert!(button.tooltip_text().is_none());
+        // A nonempty DropDown autoselects; invalid set_selected does not clear it.
+        let names = target
+            .model()
+            .unwrap()
+            .downcast::<gtk::StringList>()
+            .unwrap();
+        names.splice(0, names.n_items(), &[]);
+        assert_eq!(target.selected(), gtk::INVALID_LIST_POSITION);
+        assert!(!button.is_sensitive());
+        assert_eq!(
+            button.tooltip_text().as_deref(),
+            Some("Choose a destination library.")
+        );
+        names.splice(0, 0, &["Source", "Target"]);
+        target.set_selected(1);
+        already_at_target.set_active(true);
+        assert!(
+            button.is_sensitive(),
+            "existing backend permits a mixed selection with a game to move"
+        );
+        native.set_active(false);
+        assert!(!button.is_sensitive());
+        already_at_target.set_active(false);
+        windows.set_active(true);
+        assert!(!button.is_sensitive());
+        assert!(
+            button
+                .tooltip_text()
+                .unwrap()
+                .contains("compatibility prefix")
+        );
+        native.set_active(true);
+        assert!(
+            !button.is_sensitive(),
+            "a Windows selection must explain the existing refusal"
+        );
+        windows.set_active(false);
+        assert!(button.is_sensitive());
+        moving.set(true);
+        update();
+        assert!(!button.is_sensitive());
+        target.set_selected(0);
+        target.set_selected(1);
+        native.set_active(false);
+        native.set_active(true);
+        assert!(
+            !button.is_sensitive(),
+            "selection callbacks must not override active Move"
+        );
+        assert_eq!(
+            button.tooltip_text().as_deref(),
+            Some("Wait for the current move to finish.")
+        );
+        moving.set(false);
+        update();
+        assert!(button.is_sensitive());
+        // Compatibility metadata alone is also refused by the existing click-time policy.
+        items.borrow_mut()[0].game.compatibility =
+            Some(crate::compatibility::GameCompatibilityPreferences {
+                backend: crate::compatibility::CompatibilityBackendKind::Umu,
+                prefix_slug: "synthetic".into(),
+                profile: crate::compatibility::UmuProfile::fallback(),
+                pending_profile: None,
+            });
+        native.set_active(false);
+        native.set_active(true);
+        assert!(!button.is_sensitive());
+        assert!(button.tooltip_text().unwrap().contains("Windows games"));
+        items.borrow_mut()[0].game.compatibility = None;
+        moving.set(true);
+        update();
+        render_storage_items(&view, &items.borrow(), 0);
+        assert!(!button.is_sensitive());
+        assert_eq!(
+            button.tooltip_text().as_deref(),
+            Some("Wait for the current move to finish.")
+        );
+        moving.set(false);
+        update();
+        assert!(!button.is_sensitive());
+        assert_eq!(selected.text(), "No games selected");
+        assert_eq!(
+            button.tooltip_text().as_deref(),
+            Some("Select at least one game to move.")
+        );
+        assert!(
+            libraries
+                .borrow()
+                .iter()
+                .all(|library| !library.path.exists()),
+            "presentation must never move or create files"
+        );
+        window.destroy();
+    }
 
     #[test]
     #[ignore = "requires private HOME/all XDG under /tmp/ludomere-p357-, GTK and D-Bus"]

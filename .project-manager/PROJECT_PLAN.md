@@ -124,12 +124,16 @@
   raw private arguments/profile access, queue/catalog/schema changes or new API without review.
   Strict parsing alone would abort whole reconciliation and leave Properties unable to repair;
   require separate recoverable per-game policy before changes. Evidence p360-assessment.md.
-- P361 (in_progress, ui_critic; reviewer file_summary): reflect existing Storage Move eligibility
+- P361 (complete, ui_critic; reviewer file_summary): reflect existing Storage Move eligibility
   before click, including different target, selection, known Windows refusal and active Move.
   Own isolated ui/settings/storage.rs, explanation tooltip and recompute on input changes;
   preserve backend/click-time checks and no automatic destination choice. Synthetic controls only.
-- P362 (in_progress diagnosis, performance_audit): inspect notification-popover teardown warning
-  observed in private P359 fixture. Source-only lifecycle proposal; no edits or actual profile access.
+- P362 (in_progress, performance_audit; reviewer file_summary): replace notification-popover
+  unrealize cleanup with guarded weak cleanup on its actual anchor's destruction. Independent
+  proposal review approves local GTK API fit; isolated notifications.rs only, no real data.
+  Require never-realized disposal, real detach/reinsert, mapped teardown and pending-timeout
+  regression without GTK children-left warning; preserve existing history and P359 fixtures.
+  Stop for review if destroy timing fails; no unsafe disposal or lifecycle framework expansion.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

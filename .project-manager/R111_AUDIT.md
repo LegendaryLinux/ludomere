@@ -76,6 +76,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Fixes
 
+### P361 — explain unavailable Storage moves before clicking
+
+- Move follows current selection and destination: disabled for empty/missing/same-target choices,
+  existing Windows-prefix refusal, or active work. Tooltips explain why; changing selection or
+  rebuilding rows cannot re-enable active Move. Backend guards and destination choice unchanged.
+- Independent source review, mapped actual-controls regression and existing backend destination
+  preflight PASS; formatting, Clippy and compilation/build PASS. Initial fixture incorrectly
+  requested invalid selection in a nonempty autoselect dropdown. Corrected only the setup to empty
+  its real model, explicitly assert no selection, then retain every sensitivity/tooltip/busy check.
+  Evidence p361-q5cbyzon (initial), p361-5nevxott (pass), p361-htizftam (backend pass).
+
 ### P359 — keep Account session status current
 
 - Refresh the existing GOG session subtitle from in-memory network, token expiry and logout state.

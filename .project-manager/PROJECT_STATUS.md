@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADe4f8c17. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEAD5a14c9a. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered31 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered33 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -47,12 +47,16 @@ Last meaningful update: 2026-10-06.
 - P359 Account status source review, actual-row expiry/lifetime test and fmt/Clippy/build PASS.
   Initial fixture used nonexistent w.stack; corrected to w.content without weakened assertions.
   Initial stale-binary invocation correctly refused zero tests. P361 Move eligibility reviewed,
-  gate queued. P362 separately investigates notification-popover teardown warning from P359 test.
+  compile/Clippy/build and backend preflight pass. Controls fixture initially failed because GTK
+  ignored invalid selection on a nonempty dropdown; actual empty-model setup retains all strict
+  assertions and now passes (p361-5nevxott). Independent correction review passes.
+  P362 destruction-bound notification-popover cleanup approved after independent source review;
+  isolated implementation and strict lifecycle fixture underway.
   P360 malformed preference decoding assessment deferred: a strict-reader-only patch would abort
   whole reconciliation and cannot be repaired from current Properties. Needs separate safe
   per-game recovery/writer protection; no malformed actual user data was inspected or claimed.
 - Use normal windowquit for game windows and app tray Close; X11 windowclose destroys a window
-  without proving process exit. Current live client c9f5b99 is idle after native Gungeon test.
+  without proving process exit. Live client c9f5b99 closed normally before next verified restart.
   Actual game markers/data remain private; subagents receive only normalized diagnostic facts.
 
 ## R110 complete — 0.3.2 release and new PR
