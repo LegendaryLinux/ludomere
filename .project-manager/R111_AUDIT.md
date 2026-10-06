@@ -33,12 +33,37 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P378 independent correction review and exact private fixture PASS
+  (/tmp/ludomere-p378-60rgtjrj), compile/fmt/Clippy PASS. Initial failure is retained: box-drawing
+  glyph has1px negative ink bearing with visible overflow; revised assertion keeps logical bounds
+  strict and tests transformed ink against actual clipping ancestors/window, without tolerance
+  or product padding. Normal/enlarged text, divider thickness, compact empty queue, ordered history,
+  nonempty queue and paused Resume eligibility verified. No action/network worker launched.
+
+- Gungeon Achievements loads four unlocked entries; explicit Refresh visibly shows Loading
+  achievements and disables the action, then restores Up to date/current cache time and the
+  same page. No game launch or achievement mutation. Live screenshots gungeon-achievements-*.png.
+
+- Ona3641c1 Gungeon screenshot viewer opens at6/16; focused Right advances to7/16 and Left
+  returns6/16, with matching images. Initial SendEvent-style key did not advance; normal focused
+  keyboard input does. Screenshots gallery-open/right-focused/left-focused.png. No navigation fix
+  inferred. Overview's generic Location shows installer root despite installed native payload;
+  sidebar says1 games. P380 source assessment only.
+- P378 first exact private layout fixture fails at metric ink starting outside label allocation
+  (/tmp/ludomere-p378-4imeucus). Formatting, compilation and Clippy pass. Author adds measurement
+  diagnostics under independent review; no assertion weakening or build/commit acceptance yet.
+
 - P376 reviewed worker/eligibility correction passes actual synthetic SQLite reserved-lock,
   heartbeat, exact-key preservation, raw-session, activity and reentrant controls fixture
   (/tmp/ludomere-p376-cdf3kkr1), retained P363 branch controls (/tmp/ludomere-p363-1pvjukij),
   compilation/fmt/Clippy. New Forget IO is off GTK; no keyring/decrypt/network or global account
   mutex added. Current-selection restoration and Started handoff preserve busy feedback.
   Already-issued DELETE cannot be undone by revocation; no cross-window serialization claim.
+  Commitefa4410 and exact post-commit build PASS;49 separate audit commits built individually.
+- Actual completed-history trash presents explicit history-only confirmation. Enter default-
+  response test was blocked by approval because focused response was unverified; root instead
+  clicked the visible Cancel successfully, preserving all three records/files. No keyboard
+  activation PASS inferred. Screenshot history-cancelled.png confirms unchanged history.
 
 - P377 independently reviewed two-literal setup-stage correction verified by existing mapped
   setup report regression (/tmp/ludomere-p332-wglbg_xg), fmt/Clippy/compile PASS. Fresh installs

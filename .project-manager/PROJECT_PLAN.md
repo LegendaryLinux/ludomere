@@ -193,10 +193,30 @@
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
-- P378 (in_progress assessment, ui_critic): human-style critique of root-approved app-only
+- P379 (in_progress implementation, performance_audit; reviewer file_summary): Cloud save-folder override still opens/
+  writes SQLite on GTK and can race metadata discovery's stale locations. Source-only bounded
+  proposal for responsive save and preserving current explicit overrides across all discovery
+  writers. Trace transaction/session/reset semantics; no actual cloud/data/keyring access,
+  schema/backend policy changes. Independent proposal GO: atomic IMMEDIATE current-override
+  preservation plus committed effective return and tracked local saves; Choose/Retry share pending
+  admission through picker/save/receiver retirement, preserving offline local editing and reentry.
+  Own isolated state.rs/cloud_saves/mod.rs/game_settings.rs; root runs private tests after review.
+- P380 (in_progress assessment, ui_critic): live installed native Gungeon Overview labels its
+  Offline Installers path simply Location; determine intended semantics and a bounded truthful
+  presentation. Also assess singular sidebar count (1 games). Source-only proposal, no data,
+  schema, destination changes or implementation; preserve reactive detail state and avoid IO.
+- P381 (in_progress assessment, file_summary): actual app at minimum-width window clips gear/
+  favorite controls and right-side detail tabs while wide hero/status strip remains. Approved
+  app-only screenshot gungeon-narrow-window.png and source review; propose bounded responsive
+  presentation preserving primary actions/tabs/keyboard/scroll behavior. No implementation,
+  real profile access, unrelated screenshots, dependency or backend changes before review.
+- P378 (complete, ui_critic; reviewer file_summary): human-style critique of root-approved app-only
   downloads-real-history.png plus Downloads source. Assess idle/history readability, spacing,
-  action affordances and keyboard/accessibility; concrete bounded proposals only, no redesign
-  or implementation. No other actual data/screenshots/desktop/log access or runtime.
+  action affordances and keyboard/accessibility. Proposed scoped natural-thickness dividers,
+  compact empty queue block, truthful Disk write rate label, and remove obsolete navigate-away
+  paused instruction. Independently approved minimal downloads.rs/mod.rs correction; preserve
+  graph/history/actions/shared Completed-empty style. One mapped normal/enlarged font fixture;
+  no other actual data/screenshots/desktop/runtime. Root owns integration and gates.
 - P377 (complete, performance_audit; reviewer file_summary): two setup-stage wording corrections
   in chooser.rs only. Fresh install visibly says Saving repaired files; replace with Saving
   game files. Cached prerequisite processing must say Preparing required components rather
@@ -208,12 +228,14 @@
   restore. Stale eligibility persists across selection; refresh must re-read after signal-emitting
   setters and Switch success feedback precedes refresh. Real synthetic SQLite heartbeat/key
   isolation plus reentry/lifetime fixtures. No actual credentials/keyring/data or global locks.
-- P375 (in_progress diagnostic fixture, performance_audit; reviewer file_summary): repeated single GTK ancestor critical
+- P375 (complete assessment, live warning deferred, performance_audit; reviewer file_summary): repeated single GTK ancestor critical
   around Coffee Talk Repair confirmation-to-components transition onb2629ce and5a05fe8,
   with no observed failure. Independently approved one-stage animation-enabled actual-menu
   diagnostic in isolated chooser.rs, fail-closed inspection and preparation, weak focus
   observation; no product fix, actual data/desktop/log access, Cargo or helper execution.
-  Root owns runtime and actual timing; wait for evidence before correction or dismissal.
+  Root exact diagnostic passes without warning after strict descendant-mapping wait. Clientless
+  Broadway throttles frames, not live pointer/X11 reproduction; no justified product fix.
+  Keep diagnostic isolated, no main integration/package installation or live-memory tracing.
 - P374 (complete, ui_critic; independent reviewer performance_audit): source-confirmed
   Downloads write fraction uses full payload estimate although repairs reuse bytes. Assess
   constructor/updater parity, truthful actual-write/estimate wording and phase-scoped activity

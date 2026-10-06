@@ -591,16 +591,18 @@ pub(super) fn rebuild_downloads_page(w: &Widgets, model: &AppModel) {
         .iter()
         .filter(|operation| operation.state == "queued")
         .collect::<Vec<_>>();
-    page.append(&download_section_heading(
-        "Up Next",
-        queued.len() + queued_depots.len(),
-    ));
+    let queue_heading = download_section_heading("Up Next", queued.len() + queued_depots.len());
     if queued.is_empty() && queued_depots.is_empty() {
+        let empty_queue = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        empty_queue.add_css_class("downloads-empty-queue");
+        empty_queue.append(&queue_heading);
         let empty = gtk::Label::new(Some("There are no downloads waiting in the queue"));
         empty.set_xalign(0.0);
         empty.add_css_class("downloads-empty");
-        page.append(&empty);
+        empty_queue.append(&empty);
+        page.append(&empty_queue);
     } else {
+        page.append(&queue_heading);
         for job in queued {
             page.append(&download_job_card(job, model, w, false));
         }
@@ -1067,7 +1069,7 @@ fn transfer_stats(model: &AppModel, live: bool) -> gtk::Box {
         peak,
     ));
     row.append(&transfer_metric(
-        "<span foreground='#73c76b'>━</span> DISK USAGE",
+        "<span foreground='#73c76b'>━</span> DISK WRITE RATE",
         "active-disk-rate",
         disk,
     ));
@@ -1727,6 +1729,7 @@ pub(super) fn download_section_heading(title: &str, count: usize) -> gtk::Box {
     row.append(&title);
     let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
     separator.set_hexpand(true);
+    separator.set_valign(gtk::Align::Center);
     row.append(&separator);
     row
 }
@@ -1802,7 +1805,7 @@ pub(super) fn download_job_card(
             .error
             .clone()
             .unwrap_or_else(|| "Download failed".into()),
-        "paused" => "Paused — return to the game’s Offline Installers tab to resume".into(),
+        "paused" => "Paused".into(),
         "downloading" => job
             .status_message
             .clone()
@@ -2081,6 +2084,316 @@ mod active_transfer_tests {
             updated_at: 0,
             completed_at: None,
         }
+    }
+
+    #[test]
+    #[ignore = "private p378 HOME/all XDG/TMP, GTK and D-Bus; inert download records only"]
+    fn idle_downloads_keep_compact_headings_and_readable_metrics() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p378-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        let settings = gtk::Settings::default().unwrap();
+        settings.set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn nodes(root: &impl IsA<gtk::Widget>) -> Vec<gtk::Widget> {
+            let mut result = vec![root.as_ref().clone()];
+            for child in
+                std::iter::successors(root.as_ref().first_child(), |child| child.next_sibling())
+            {
+                result.extend(nodes(&child));
+            }
+            result
+        }
+        fn label(root: &impl IsA<gtk::Widget>, text: &str) -> gtk::Label {
+            nodes(root)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                .find(|label| label.text() == text)
+                .unwrap()
+        }
+        #[track_caller]
+        fn readable(label: &gtk::Label) {
+            assert!(label.is_mapped() && !label.layout().is_ellipsized());
+            let (ink, logical) = label.layout().pixel_extents();
+            let (x, y) = label.layout_offsets();
+            assert!(
+                x + logical.x() >= 0 && y + logical.y() >= 0,
+                "{} text starts outside allocation",
+                label.text()
+            );
+            assert!(
+                x + logical.x() + logical.width() <= label.width(),
+                "{} text exceeds width",
+                label.text()
+            );
+            assert!(
+                y + logical.y() + logical.height() <= label.height(),
+                "{} text exceeds height",
+                label.text()
+            );
+            // A visible-overflow label may draw glyph ink beyond its logical box.
+            // Require that ink to remain inside every actual clipping boundary.
+            for clip in
+                std::iter::successors(Some(label.clone().upcast::<gtk::Widget>()), |widget| {
+                    widget.parent()
+                })
+            {
+                if clip.overflow() != gtk::Overflow::Hidden
+                    && !clip.is::<gtk::Viewport>()
+                    && !clip.is::<gtk::ScrolledWindow>()
+                    && !clip.is::<gtk::Window>()
+                {
+                    continue;
+                }
+                let start = label
+                    .compute_point(
+                        &clip,
+                        &gtk::graphene::Point::new((x + ink.x()) as f32, (y + ink.y()) as f32),
+                    )
+                    .unwrap();
+                let end = label
+                    .compute_point(
+                        &clip,
+                        &gtk::graphene::Point::new(
+                            (x + ink.x() + ink.width()) as f32,
+                            (y + ink.y() + ink.height()) as f32,
+                        ),
+                    )
+                    .unwrap();
+                assert!(
+                    start.x() >= 0.0 && start.y() >= 0.0,
+                    "{} ink starts outside clipping boundary",
+                    label.text()
+                );
+                assert!(
+                    end.x() <= clip.width() as f32 && end.y() <= clip.height() as f32,
+                    "{} ink exceeds clipping boundary",
+                    label.text()
+                );
+            }
+        }
+        fn heading(root: &impl IsA<gtk::Widget>, text: &str) -> gtk::Widget {
+            let title = label(root, text);
+            readable(&title);
+            let row = title.parent().unwrap();
+            let separator = title
+                .next_sibling()
+                .unwrap()
+                .downcast::<gtk::Separator>()
+                .unwrap();
+            let natural = separator.measure(gtk::Orientation::Vertical, -1).1;
+            assert_eq!(separator.height(), natural);
+            assert!(separator.height() < title.height());
+            let line = separator.compute_bounds(&row).unwrap();
+            let text = title.compute_bounds(&row).unwrap();
+            assert!(
+                ((line.y() + line.height() / 2.0) - (text.y() + text.height() / 2.0)).abs() <= 1.0
+            );
+            row
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.IdleDownloadsTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(
+            &app,
+            &Config {
+                window_width: 1100,
+                window_height: 700,
+                ..Config::default()
+            },
+        );
+        widgets.content.set_visible_child_name("downloads");
+        widgets.window.present();
+        let old_font = settings.gtk_font_name();
+        let ordinary = old_font.clone().unwrap_or_else(|| "Sans 11".into());
+        let mut enlarged = gtk::pango::FontDescription::from_string(&ordinary);
+        enlarged.set_size((enlarged.size().max(11 * gtk::pango::SCALE) as f64 * 1.3) as i32);
+        let enlarged = enlarged.to_string();
+        let mut model = AppModel::default();
+        model
+            .transfer_history
+            .borrow_mut()
+            .push_back(TransferHistorySample {
+                download_bytes_per_second: 1_000_000.0,
+                disk_bytes_per_second: 2_000_000.0,
+            });
+        let destination =
+            std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("absent-downloads");
+        let now = chrono::Utc::now().timestamp();
+        for font in [ordinary.as_str(), enlarged.as_str()] {
+            settings.set_gtk_font_name(Some(font));
+            model.download_jobs = [1, 3, 2]
+                .into_iter()
+                .map(|order| {
+                    let mut record = job();
+                    record.job_id = format!("history-{order}");
+                    record.title = format!("Completed fixture {order}");
+                    record.state = DownloadState::Complete;
+                    record.updated_at = now - order;
+                    record.destination = destination.clone();
+                    record
+                })
+                .collect();
+            model.account_token = None;
+            rebuild_downloads_page(&widgets, &model);
+            let queue_title = label(&widgets.downloads, "Up Next (0)");
+            let rate = find_named_descendant(widgets.downloads.upcast_ref(), "active-disk-rate")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            wait(|| queue_title.is_mapped() && queue_title.height() > 0 && rate.width() > 0);
+            assert_eq!(widgets.window.width(), 1100);
+            let queue_heading = heading(&widgets.downloads, "Up Next (0)");
+            let completed_heading = heading(&widgets.downloads, "Completed (3)");
+            let compact = queue_heading
+                .parent()
+                .unwrap()
+                .downcast::<gtk::Box>()
+                .unwrap();
+            assert!(compact.has_css_class("downloads-empty-queue"));
+            assert_eq!(compact.spacing(), 6);
+            let empty = label(&compact, "There are no downloads waiting in the queue");
+            assert_eq!(empty.parent().as_ref(), Some(compact.upcast_ref()));
+            assert_eq!(
+                empty.measure(gtk::Orientation::Vertical, -1).1 - empty.layout().pixel_size().1,
+                6
+            );
+            let heading_bounds = queue_heading.compute_bounds(&compact).unwrap();
+            let empty_bounds = empty.compute_bounds(&compact).unwrap();
+            assert!(
+                (empty_bounds.y() - heading_bounds.y() - heading_bounds.height() - 6.0).abs()
+                    <= 1.0
+            );
+            let page = widgets.downloads.first_child().unwrap();
+            let ids = std::iter::successors(page.first_child(), |child| child.next_sibling())
+                .map(|child| child.widget_name().to_string())
+                .filter(|name| name.starts_with("history-"))
+                .collect::<Vec<_>>();
+            assert_eq!(ids, ["history-1", "history-2", "history-3"]);
+            assert!(
+                completed_heading.compute_bounds(&page).unwrap().y()
+                    > compact.compute_bounds(&page).unwrap().y()
+            );
+            let metric = rate.parent().unwrap();
+            let metric_title = metric
+                .first_child()
+                .unwrap()
+                .downcast::<gtk::Label>()
+                .unwrap();
+            assert_eq!(metric_title.text(), "━ DISK WRITE RATE");
+            assert_eq!(rate.text(), "0 B/s");
+            readable(&metric_title);
+            readable(&rate);
+            let metric_bounds = metric.compute_bounds(&widgets.downloads).unwrap();
+            assert!(
+                metric_bounds.x() >= 0.0
+                    && metric_bounds.x() + metric_bounds.width()
+                        <= widgets.downloads.width() as f32
+            );
+
+            model.download_jobs.clear();
+            rebuild_downloads_page(&widgets, &model);
+            let completed_empty = label(&widgets.downloads, "Completed downloads will appear here");
+            wait(|| completed_empty.is_mapped() && completed_empty.height() > 0);
+            heading(&widgets.downloads, "Up Next (0)");
+            heading(&widgets.downloads, "Completed (0)");
+            assert!(
+                label(
+                    &widgets.downloads,
+                    "There are no downloads waiting in the queue"
+                )
+                .is_mapped()
+            );
+            assert_eq!(
+                completed_empty.measure(gtk::Orientation::Vertical, -1).1
+                    - completed_empty.layout().pixel_size().1,
+                30,
+                "Completed placeholder keeps its original padding"
+            );
+
+            // A second paused record is featured, leaving the first in the actual paused-card list.
+            for resumable in [false, true] {
+                let mut queued = job();
+                queued.job_id = "queued-fixture".into();
+                queued.state = DownloadState::Queued;
+                queued.destination = destination.clone();
+                let mut paused = queued.clone();
+                paused.job_id = "paused-fixture".into();
+                paused.state = DownloadState::Paused;
+                if resumable {
+                    paused.artifacts.push(serde_json::from_value(serde_json::json!({"product_id": 42, "kind": "installer", "name": "inert", "download_path": "inert"})).unwrap());
+                }
+                let mut featured = paused.clone();
+                featured.job_id = "featured-paused-fixture".into();
+                model.account_token = resumable.then(|| auth::Token {
+                    access_token: "inert".into(),
+                    refresh_token: "inert".into(),
+                    user_id: "fixture".into(),
+                    expires_at: i64::MAX,
+                });
+                model.download_jobs = vec![queued, paused, featured];
+                rebuild_downloads_page(&widgets, &model);
+                let queued_title = label(&widgets.downloads, "Up Next (1)");
+                wait(|| queued_title.is_mapped() && queued_title.height() > 0);
+                let queued_heading = heading(&widgets.downloads, "Up Next (1)");
+                assert_eq!(
+                    queued_heading.next_sibling().unwrap().widget_name(),
+                    "queued-fixture"
+                );
+                assert!(
+                    !nodes(&widgets.downloads)
+                        .iter()
+                        .any(|widget| widget.has_css_class("downloads-empty-queue"))
+                );
+                let paused_row =
+                    find_named_descendant(widgets.downloads.upcast_ref(), "paused-fixture")
+                        .unwrap();
+                assert_eq!(
+                    find_named_descendant(&paused_row, "download-detail-paused-fixture")
+                        .and_downcast::<gtk::Label>()
+                        .unwrap()
+                        .text(),
+                    "Paused"
+                );
+                let resume = nodes(&paused_row)
+                    .into_iter()
+                    .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                    .find(|button| button.tooltip_text().as_deref() == Some("Resume download"))
+                    .unwrap();
+                assert_eq!(resume.is_sensitive(), resumable);
+                assert!(widgets.window.visible_dialog().is_none());
+            }
+        }
+        settings.set_gtk_font_name(old_font.as_deref());
+        assert_eq!(
+            widgets.content.visible_child_name().as_deref(),
+            Some("downloads")
+        );
+        widgets.window.destroy();
     }
 
     #[test]

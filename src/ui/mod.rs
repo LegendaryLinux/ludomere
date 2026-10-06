@@ -1078,8 +1078,8 @@ const CSS: &str = r#"
 .download-status-icon { min-width: 24px; min-height: 24px; }
 .downloads-title { font-size: 1.8em; font-weight: 800; }
 .download-section-heading { margin-top: 8px; }
-.download-section-heading separator { margin-top: 10px; }
 .downloads-empty { padding: 6px 14px 24px; color: alpha(@window_fg_color, .60); }
+.downloads-empty-queue > .downloads-empty { padding-bottom: 0; }
 .download-active-card { padding: 18px; background: alpha(@card_bg_color, .75); border: 1px solid alpha(@borders, .55); border-radius: 10px; }
 .active-transfer-header { min-height: 174px; background: #08121d; border: 1px solid alpha(@borders, .55); border-radius: 10px; }
 .active-transfer-background { background: #08121d; }
