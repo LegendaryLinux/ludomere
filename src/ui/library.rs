@@ -151,6 +151,9 @@ pub(super) fn rebuild_sidebar_presentation(w: &Widgets, model: &mut AppModel) {
             rows.insert(id, row);
         }
     }
+    // Clear each row's selected flag before detaching it; GTK clears the list's
+    // selected-row pointer on removal but retained rows can keep that flag.
+    w.game_list.unselect_all();
     while let Some(child) = w.game_list.first_child() {
         w.game_list.remove(&child);
     }

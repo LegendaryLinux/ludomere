@@ -41,11 +41,21 @@
   worker only; root coordinates integration with P334. No schema or new cache framework.
 - P336 (review, file_summary): prepare a private-profile consolidated build harness only;
   root reviews and executes later. No real desktop, credentials, games or product edits.
-- P337 (in_progress, ui_critic; reviewer performance_audit): release the mutable model borrow before
+- P337 (complete, ui_critic; reviewer performance_audit): release the mutable model borrow before
   sidebar filter invalidation after game exit. Live Coffee Talk Stop shows all rows despite query
-  and count. Own isolated details.rs and same-file regression; preserve both sorts and navigation.
-- P338 (proposal, performance_audit): inspect repeated archive chooser polling reads; propose a
-  bounded batch preserving row matching, latest-record semantics and error behavior. No edits yet.
+  and count. Also clear stale GTK selection flags before row reorder. Strict mapped regression,
+  independent re-review, formatting/Clippy/build PASS; preserve both sorts and navigation.
+- P338 (in_progress, performance_audit): batch archive chooser job polling in an isolated checkout,
+  preserving canonical identity, latest-record/tie semantics and independent read failures.
+- P339 (in_progress, file_summary): label detail/DLC size as Downloaded files, retaining the
+  existing live summary replacement contract. Isolated details/mod strings and P329 regression.
+- P340 (in_progress, ui_critic): native Home grid activation, accessible full-title labels and
+  visible keyboard focus. Isolated library/window/narrow CSS; preserve mouse/context/filter behavior.
+- P341 (review, file_summary; reviewer performance_audit): clear stale archive error styling on
+  new preparation and keep active Pause blue with proper terminal Play restoration. Isolated
+  files/details changes plus existing state-transition fixtures; no real agent data access.
+- P342 (proposal, file_summary): inspect chooser free-space directory creation and missing-root
+  recovery; propose read-only checks and explicit recovery without writes from simply opening UI.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

@@ -1,5 +1,26 @@
 use super::*;
 
+fn update_activity_after_exit(
+    w: &Widgets,
+    model: &Rc<RefCell<AppModel>>,
+    product_id: i64,
+    started_at: i64,
+    seconds: u64,
+) {
+    let mut state = model.borrow_mut();
+    let activity = state.product_activity.entry(product_id).or_default();
+    activity.last_played_at = Some(started_at);
+    activity.last_activity_at = Some(started_at);
+    activity.playtime_seconds = activity.playtime_seconds.saturating_add(seconds);
+    if state.sidebar_sort_mode == SidebarSortMode::LastPlayed {
+        rebuild_sidebar_presentation(w, &mut state);
+    } else {
+        // Gtk filter callbacks synchronously borrow the model during invalidation.
+        drop(state);
+        refresh_filters(w, &model.borrow());
+    }
+}
+
 pub(super) fn show_game(
     w: &Widgets,
     model: &Rc<RefCell<AppModel>>,
@@ -474,20 +495,13 @@ pub(super) fn render_detail_page(
                             )));
                             last_played_value.set_label(&format_last_played(Some(started_at)));
                             playtime_value.set_label(&format_playtime(previous_playtime + seconds));
-                            {
-                                let mut state = activity_model.borrow_mut();
-                                let activity =
-                                    state.product_activity.entry(detail.product_id).or_default();
-                                activity.last_played_at = Some(started_at);
-                                activity.last_activity_at = Some(started_at);
-                                activity.playtime_seconds =
-                                    activity.playtime_seconds.saturating_add(seconds);
-                                if state.sidebar_sort_mode == SidebarSortMode::LastPlayed {
-                                    rebuild_sidebar_presentation(&activity_widgets, &mut state);
-                                } else {
-                                    refresh_filters(&activity_widgets, &state);
-                                }
-                            }
+                            update_activity_after_exit(
+                                &activity_widgets,
+                                &activity_model,
+                                detail.product_id,
+                                started_at,
+                                seconds,
+                            );
                             glib::ControlFlow::Break
                         }
                         Ok(crate::installation::LaunchEvent::PrefixRecoveryRequired {
@@ -3437,6 +3451,185 @@ pub(super) fn show_dlc_page(w: &Widgets, model: &Rc<RefCell<AppModel>>, parent_i
 #[cfg(test)]
 mod installation_progress_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn exit_activity_keeps_search_results_and_current_detail_in_both_sorts() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p337-")
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.ExitFilterTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let w = Rc::new(window::create_widgets(&app, &Config::default()));
+        let model = Rc::new(RefCell::new(AppModel {
+            games: [(1, "Alpha"), (2, "Coffee Talk"), (3, "Zeta")]
+                .into_iter()
+                .map(|(product_id, title)| Game {
+                    product_id,
+                    title: title.into(),
+                    ..Game::default()
+                })
+                .collect(),
+            section_states: (1..=3)
+                .map(|id| ((id, online::DetailSection::Metadata), SectionState::Ready))
+                .collect(),
+            selected: Some(2),
+            detail_target: Some((2, None)),
+            detail_generation: 7,
+            ..AppModel::default()
+        }));
+        let rows = model
+            .borrow()
+            .games
+            .iter()
+            .map(|game| {
+                let row = game_row(game, false, false);
+                row.set_widget_name(&game.product_id.to_string());
+                w.game_list.append(&row);
+                let card = gtk::Label::new(Some(&game.title));
+                card.set_widget_name(&game.product_id.to_string());
+                w.home_grid.insert(&card, -1);
+                row
+            })
+            .collect::<Vec<_>>();
+        let cards = (0..3)
+            .map(|index| w.home_grid.child_at_index(index).unwrap())
+            .collect::<Vec<_>>();
+        window::connect_actions(&w, &model);
+        let detail = gtk::Label::new(Some("Existing game detail"));
+        detail.set_height_request(2000);
+        w.details.append(&detail);
+        w.content.set_visible_child_name("details");
+        w.window.present();
+        wait(|| {
+            w.search.is_mapped()
+                && w.details_scroll.vadjustment().upper()
+                    > w.details_scroll.vadjustment().page_size() + 50.0
+        });
+        w.details_scroll.vadjustment().set_value(50.0);
+        let detail_offset = w.details_scroll.vadjustment().value();
+        assert!(detail_offset > 0.0);
+        w.search.set_text("Coffee Talk");
+        w.search.emit_by_name::<()>("search-changed", &[]);
+        w.game_list.select_row(Some(&rows[1]));
+        assert!(w.search.grab_focus());
+        let focus = gtk::prelude::GtkWindowExt::focus(&w.window);
+        let started_at = chrono::Utc::now().timestamp();
+        for sort in [SidebarSortMode::Alphabetical, SidebarSortMode::LastPlayed] {
+            {
+                let mut state = model.borrow_mut();
+                state.sidebar_sort_mode = sort;
+                state.product_activity = HashMap::from([
+                    (
+                        2,
+                        ProductActivity {
+                            last_played_at: Some(started_at - 120),
+                            last_activity_at: Some(started_at - 120),
+                            playtime_seconds: 60,
+                        },
+                    ),
+                    (
+                        3,
+                        ProductActivity {
+                            last_played_at: Some(started_at - 60),
+                            last_activity_at: Some(started_at - 60),
+                            ..ProductActivity::default()
+                        },
+                    ),
+                ]);
+                rebuild_sidebar_presentation(&w, &mut state);
+            }
+            // Finish the setup rebuild's deferred invalidation before exercising exit.
+            while glib::MainContext::default().iteration(false) {}
+            assert!(
+                !rows[0].is_child_visible()
+                    && rows[1].is_child_visible()
+                    && !rows[2].is_child_visible()
+            );
+            if sort == SidebarSortMode::LastPlayed {
+                assert!(rows[2].index() < rows[1].index());
+            }
+            w.game_list.select_row(Some(&rows[1]));
+            let selected_row = w.game_list.selected_row();
+            assert_eq!(
+                selected_row,
+                Some(rows[1].clone()),
+                "fixture pre-exit selection"
+            );
+            // This is the exact shared activity-update path called by LaunchEvent::Exited.
+            update_activity_after_exit(&w, &model, 2, started_at, 30);
+            if sort == SidebarSortMode::Alphabetical {
+                // Check immediately: a later search signal must not conceal a bad filter pass.
+                assert!(!rows[0].is_child_visible() && !rows[2].is_child_visible());
+            }
+            while glib::MainContext::default().iteration(false) {}
+            for (index, row) in rows.iter().enumerate() {
+                assert_eq!(row.is_child_visible(), index == 1);
+                assert_eq!(cards[index].is_child_visible(), index == 1);
+                assert_eq!(row.parent().as_ref(), Some(w.game_list.upcast_ref()));
+                assert_eq!(
+                    w.home_grid.child_at_index(index as i32),
+                    Some(cards[index].clone())
+                );
+            }
+            if sort == SidebarSortMode::LastPlayed {
+                assert!(rows[1].index() < rows[2].index());
+            }
+            let state = model.borrow();
+            assert_eq!(
+                state.product_activity[&2],
+                ProductActivity {
+                    last_played_at: Some(started_at),
+                    last_activity_at: Some(started_at),
+                    playtime_seconds: 90,
+                }
+            );
+            assert_eq!(state.query, "Coffee Talk");
+            assert_eq!(state.selected, Some(2));
+            assert_eq!(state.detail_target, Some((2, None)));
+            assert_eq!(state.detail_generation, 7);
+            assert_eq!(w.search.text(), "Coffee Talk");
+            assert_eq!(w.count.text(), "1 games");
+            assert_eq!(
+                w.game_list.selected_row(),
+                selected_row,
+                "exit selection: {sort:?}"
+            );
+            assert_eq!(w.content.visible_child_name().as_deref(), Some("details"));
+            assert_eq!(w.details.first_child().as_ref(), Some(detail.upcast_ref()));
+            assert_eq!(w.details_scroll.vadjustment().value(), detail_offset);
+            assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focus);
+            assert!(w.window.visible_dialog().is_none());
+        }
+        w.window.destroy();
+    }
 
     #[test]
     #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]

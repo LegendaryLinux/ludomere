@@ -4,6 +4,19 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P337 strict both-sort mapped regression and final independent re-review PASS; related retained
+  GTK selection flag fixed before row reorder. Formatting/all-target Clippy/build PASS, commit next.
+
+- Live Coffee Talk normal window-close exited the process, completed the launch flow and restored
+  green Play/white title with Coffee-only search still intact. P337 fixture found a related existing
+  GTK selection flag left on rows after reorder; owner correcting before final gate, no failed
+  assertion accepted as a pass. P339 independent review PASS; P341 in review, P338/P340 isolated.
+
+- P335 committed093fd64 and documentation committed6e65c85; exact post-commit builds PASS.
+  Real Gungeon archive deletion restores one Download, updates counts, preserves Play/payload;
+  archive-only re-download succeeds, registers382.7MB, and does not reinstall. Reserve5GB of40GB
+  total testing allowance conservatively. P337 source review PASS and integrated for focused gate.
+
 - P333 committed94ef9fd and exact post-commit build PASS. P335 independent review and two
   focused synthetic SQLite/TTL regressions, formatting, all-target Clippy and build PASS;
   separate commit next. P337 exit/filter correction isolated; P338 polling proposal underway.

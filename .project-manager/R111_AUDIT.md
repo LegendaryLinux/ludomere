@@ -164,6 +164,25 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining findings
 
+### P337 — retain search and selection after game exit
+
+- Release the mutable model borrow before synchronous alphabetical filter invalidation; otherwise
+  callbacks fall back to admitting every row despite the actual query/count. Clear GTK's selected
+  flags before detaching retained sidebar rows so reorder can restore the selected row correctly.
+- The strict mapped regression initially exposed the retained-row selection defect after its
+  baseline was established; production correction now passes both sorts, real row/card filters,
+  selection, activity ordering, current detail, focus and scroll. No assertion was weakened.
+- Live Coffee Talk normal exit returned to green Play/white sidebar title with only Coffee Talk
+  shown for the active query. Mapped regression, formatting, all-target Clippy and build PASS;
+  independent final re-review PASS before commit.
+- Live Home no-match guidance verified. Test-driver xdotool type consumed subsequent words in
+  one attempt; corrected by separate invocation. No product defect inferred from that input error.
+
+- Real Gungeon archive-only deletion/re-download verified: one confirmation removes one archive,
+  restores single Download/counts while preserving installed Play; explicit library Download
+  transfers/registers382.7MB, restores archive menu/checkmark/counts, and does not run installation.
+  Conservative budget reservation now5GB including existing payload/prefixes and repeated transfer.
+
 - Explain zero-result Home searches rather than showing blank content.
 - Downloads must feature active work before past failures and show featured error details.
 - Depot cancellation needs confirmation, off-thread cleanup and terminal cleanup error feedback.
