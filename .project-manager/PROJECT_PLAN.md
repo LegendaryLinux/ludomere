@@ -193,7 +193,19 @@
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
-- P373 (in_progress, performance_audit; reviewer file_summary): approved narrow transient
+- P375 (in_progress diagnosis, performance_audit): reproducible single GTK ancestor critical
+  around Coffee Talk Repair confirmation-to-components transition onb2629ce and5a05fe8,
+  with no observed failure. Source-only lifecycle diagnosis and proposed inert reproduction;
+  no speculative fix, actual data/desktop/log access, Cargo or helper execution. Root owns
+  actual sanitized timing; wait for evidence before implementation or dismissal.
+- P374 (in_progress, ui_critic; independent reviewer performance_audit): source-confirmed
+  Downloads write fraction uses full payload estimate although repairs reuse bytes. Assess
+  constructor/updater parity, truthful actual-write/estimate wording and phase-scoped activity
+  without changing counters or control policy. Independently approved downloads.rs-only fix:
+  actual materializing/extracting activity, retain finishing, neutral inactive/other-phase disk
+  counter, no fake completion fraction. Preserve valid phase-local fractions and actions;
+  pure/mapped private gates required, no actual data/helper/queue access.
+- P373 (complete, performance_audit; reviewer file_summary): approved narrow transient
   Windows-check footer slot in isolated proton.rs/window.rs. Per-request weak label ownership,
   one visible line with overlap-safe cleanup; remove progress/Ready history writes, preserve
   actual errors/Finish setup and unrelated live/history labels. Inert actual-function/footer

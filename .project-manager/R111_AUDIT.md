@@ -29,14 +29,29 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- On5a05fe8 Coffee Talk Repair preview reaches the corrected component consent: full-width
+  header, matching left-aligned text/list, visible Cancel/alternate/Install actions. Root cancelled
+  at consent; no new repair or component installation. Screenshot components-live-fixed.png.
+  Actual log again emits one GTK ancestor invalid-widget critical at09:40:05 local near the
+  confirmation-to-components transition; no visible failure. P375 source diagnosis assigned.
+- P373 inert actual-footer/producer/Notifications GTK fixture PASS
+  (/tmp/ludomere-p373-zwk5myd8), compile/fmt/Clippy PASS; source independently approved.
+  Overlap, reentry, errors, stale sessions, destruction and compact geometry exercised without
+  actual helpers. Existing ready-action/missing-selection regression PASS
+  (/tmp/ludomere-p373-ready-xy2yu368) with reviewed private non-executable text helper.
+  No real helper execution. Temporary checks own independent weak footer labels; overlap and
+  reentry preserve one visible line, actual errors/results/Finish setup/history remain intact.
+
 - P370b independent review, pure counter matrix and actual mapped setup Details fixture PASS
   (/tmp/ludomere-p370b-_en33cny, /tmp/ludomere-p332-tmoxo3nd). Compile/fmt/Clippy PASS.
   Payload bytes written are distinct from full estimate; no inferred reuse or manufactured
   completion fraction. Component/unknown-origin counters use processed wording; known-zero
   Depot download is scoped. Backend counters, controls and progress policy unchanged.
+  Commit8602458 and exact post-commit build PASS;44 audited commits built individually.
 - On5a05fe8 Coffee Talk Properties displays the saved enabled cloud policy, last successful
   sync and full save location without navigation. Root invoked read-only inventory check;
-  no cloud export, force or deletion. Screenshot cloud-loader-live-properties.png retained.
+  no cloud export, force or deletion. Inventory completes in place with No remote save files/0B.
+  Screenshots cloud-loader-live-properties.png and cloud-loader-live-inventory.png retained.
 
 - P369 new actual Cloud local-loader fixture PASS (/tmp/ludomere-p369-1qnzpsyc): reader-blocking
   SQLite lock/GTK heartbeat, accurate saved/missing records, real read error/Retry, unchanged

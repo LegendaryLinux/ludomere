@@ -1298,6 +1298,10 @@ pub(super) fn create_widgets(app: &adw::Application, config: &Config) -> Widgets
     download_percent.set_visible(false);
     download_heading.append(&download_percent);
     download_content.append(&download_heading);
+    let windows_check = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    windows_check.set_widget_name("windows-requirements-progress");
+    windows_check.set_visible(false);
+    download_content.append(&windows_check);
     let download_status_progress = gtk::ProgressBar::new();
     download_status_progress.set_visible(false);
     download_status_progress.set_valign(gtk::Align::Center);
