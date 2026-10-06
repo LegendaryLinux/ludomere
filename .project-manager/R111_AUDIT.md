@@ -29,6 +29,24 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P372 original-session metadata Retry, pre-spawn activity and weak page/window result lifetime
+  independently reviewed and verified by actual-handler inert fixture (/tmp/ludomere-p372-qg0zylkz).
+  P369 local loader (/tmp/ludomere-p369-0a7d8pkw) and P267 cloud actions
+  (/tmp/ludomere-p267-3kq6nmtf) regressions PASS; compile/fmt/Clippy PASS. Terminal receiver
+  retirement precedes widget updates and Retry unlock, preventing reentrant old-result overwrite.
+  No actual discovery/cloud save access. Broader location override race remains separate.
+
+- On5a05fe8 Gungeon's2.1MB-catalog wallpaper uses an Extras-only destination chooser with the
+  full configured path and working Download action. Actual1,732,183B ZIP lands under
+  extras/enter_the_gungeon/extra; row becomes1/1 downloaded/checkmarked, total rises to639.7MB,
+  completion appears in footer/detail, Play remains available and two installers stay retained.
+  No installer launch. Budget reservation remains13GB/40GB, including this small artifact.
+  Extras Delete confirmation needed a repeated click in this live attempt (first left it open;
+  cause unknown, active/focus remained main window). Second click removes only the wallpaper,
+  returns row to single Download/0of1 and total638MB, records full deletion success. Confirmed
+  ZIP absent; game/two installers retained. P375 notified of possible menu/dialog input relation,
+  without claiming causality. No deliberate cloud deletion.
+
 - On5a05fe8 Coffee Talk Repair preview reaches the corrected component consent: full-width
   header, matching left-aligned text/list, visible Cancel/alternate/Install actions. Root cancelled
   at consent; no new repair or component installation. Screenshot components-live-fixed.png.
@@ -41,6 +59,7 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   (/tmp/ludomere-p373-ready-xy2yu368) with reviewed private non-executable text helper.
   No real helper execution. Temporary checks own independent weak footer labels; overlap and
   reentry preserve one visible line, actual errors/results/Finish setup/history remain intact.
+  Commit698bd22 and exact post-commit build PASS;45 separate audit commits built individually.
 
 - P370b independent review, pure counter matrix and actual mapped setup Details fixture PASS
   (/tmp/ludomere-p370b-_en33cny, /tmp/ludomere-p332-tmoxo3nd). Compile/fmt/Clippy PASS.

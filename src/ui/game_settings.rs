@@ -816,6 +816,18 @@ fn cloud_settings_page(
     page
 }
 
+#[cfg(test)]
+struct TestCloudDiscovery {
+    before_entry: mpsc::Receiver<()>,
+    entered: mpsc::Sender<((u64, u64), Vec<crate::domain::CloudSaveLocation>)>,
+    result: mpsc::Receiver<Result<crate::domain::CloudSaveDiscovery, String>>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_CLOUD_DISCOVERIES: RefCell<Option<VecDeque<TestCloudDiscovery>>> = const { RefCell::new(None) };
+}
+
 fn populate_cloud_settings(
     window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
@@ -828,6 +840,7 @@ fn populate_cloud_settings(
     let cloud_group = adw::PreferencesGroup::new();
     cloud_group.set_title("GOG Cloud Saves");
     let cloud_status = gtk::Label::new(None);
+    cloud_status.set_widget_name("cloud-save-status");
     cloud_status.set_xalign(0.0);
     cloud_status.set_wrap(true);
     let enabled = adw::SwitchRow::new();
@@ -1153,40 +1166,123 @@ fn populate_cloud_settings(
 
     if record.availability == crate::domain::CloudSaveAvailability::Unknown {
         let retry = gtk::Button::with_label("Retry metadata discovery");
+        retry.set_widget_name("cloud-discovery-retry");
         retry.set_valign(gtk::Align::Start);
         retry.set_margin_top(10);
         let game = installed_game.clone();
         let locations = locations_state.clone();
-        let status = cloud_status.clone();
-        let locations_row = locations_row.clone();
-        let open_save_folder = open_save_folder.clone();
-        let inventory_row = inventory_row.clone();
-        let check_inventory = check_inventory.clone();
-        let enabled = enabled.clone();
-        let sync_now = sync_now.clone();
-        let advanced = advanced.clone();
-        let backup = backup.clone();
-        let choose = choose.clone();
-        let management = management.clone();
-        let model = model.clone();
-        let epoch = model.borrow().account_epoch;
+        let status = cloud_status.downgrade();
+        let locations_row = locations_row.downgrade();
+        let open_save_folder = open_save_folder.downgrade();
+        let inventory_row = inventory_row.downgrade();
+        let check_inventory = check_inventory.downgrade();
+        let enabled = enabled.downgrade();
+        let sync_now = sync_now.downgrade();
+        let advanced = advanced.downgrade();
+        let backup = backup.downgrade();
+        let choose = choose.downgrade();
+        let management = management.downgrade();
+        let origin = cloud_session.clone();
+        let pending = Rc::new(std::cell::Cell::new(false));
+        let closed = Rc::new(std::cell::Cell::new(false));
+        window.connect_close_request({
+            let closed = closed.clone();
+            move |_| {
+                closed.set(true);
+                glib::Propagation::Proceed
+            }
+        });
+        let window = window.downgrade();
+        let page = cloud_page.downgrade();
         retry.connect_clicked(move |button| {
-            if model.borrow().account_epoch != epoch || model.borrow().logout_pending {
+            let (Some(window), Some(page), Some(status)) =
+                (window.upgrade(), page.upgrade(), status.upgrade())
+            else {
+                return;
+            };
+            if pending.get()
+                || closed.get()
+                || !window.is_visible()
+                || !button.get_visible()
+                || page.root().as_ref() != Some(window.upcast_ref())
+                || !button.is_ancestor(&page)
+            {
                 return;
             }
+            if !origin.is_current() {
+                button.set_sensitive(false);
+                status.set_label("Your account session changed or you are signed out. Sign in, then close and reopen Properties to check cloud-save support.");
+                return;
+            }
+            pending.set(true);
             button.set_sensitive(false);
             status.remove_css_class("error");
             status.set_label("Checking GOG cloud-save support…");
             let (sender, receiver) = mpsc::channel();
-            let game = game.clone();
-            let stored_locations = locations.borrow().clone();
-            std::thread::spawn(move || {
-                let result = crate::cloud_saves::discover_and_store(&game, &stored_locations)
-                    .map_err(|error| format!("{error:#}"));
-                sender.send(result).ok();
-            });
-            let button = button.clone();
-            let status = status.clone();
+            match crate::profile_reset::begin_activity("discovering cloud-save metadata") {
+                Err(error) => {
+                    let _ = sender.send(Err(format!("{error:#}")));
+                }
+                Ok(activity) => {
+                    let game = game.clone();
+                    let stored_locations = locations.borrow().clone();
+                    let session = (origin.online, origin.auth);
+                    #[cfg(test)]
+                    let fixture = TEST_CLOUD_DISCOVERIES.with(|requests| {
+                        requests.borrow_mut().as_mut().map(|requests| {
+                            requests.pop_front().expect("missing inert cloud discovery")
+                        })
+                    });
+                    std::thread::spawn(move || {
+                        #[cfg(test)]
+                        let mut disconnected = false;
+                        let result = (|| -> anyhow::Result<_> {
+                            let _activity = activity;
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                fixture.before_entry.recv_timeout(Duration::from_secs(10))?;
+                            }
+                            anyhow::ensure!(
+                                online::account_session() == session.0
+                                    && auth::session_is_current(session.1),
+                                "The account changed before checking cloud-save support."
+                            );
+                            #[cfg(test)]
+                            let discovery = if let Some(fixture) = fixture {
+                                let _ = fixture.entered.send((session, stored_locations));
+                                match fixture.result.recv_timeout(Duration::from_secs(10)) {
+                                    Ok(result) => result.map_err(anyhow::Error::msg)?,
+                                    Err(_) => {
+                                        disconnected = true;
+                                        anyhow::bail!("Synthetic cloud discovery disconnected");
+                                    }
+                                }
+                            } else {
+                                crate::cloud_saves::discover_and_store_for_session(
+                                    &game, &stored_locations, session.1,
+                                )?
+                            };
+                            #[cfg(not(test))]
+                            let discovery = crate::cloud_saves::discover_and_store_for_session(
+                                &game, &stored_locations, session.1,
+                            )?;
+                            anyhow::ensure!(
+                                online::account_session() == session.0
+                                    && auth::session_is_current(session.1),
+                                "The account changed while checking cloud-save support."
+                            );
+                            Ok(discovery)
+                        })();
+                        #[cfg(test)]
+                        if disconnected {
+                            return;
+                        }
+                        let _ = sender.send(result.map_err(|error| format!("{error:#}")));
+                    });
+                }
+            }
+            let button = button.downgrade();
+            let status = status.downgrade();
             let locations = locations.clone();
             let locations_row = locations_row.clone();
             let open_save_folder = open_save_folder.clone();
@@ -1198,16 +1294,52 @@ fn populate_cloud_settings(
             let backup = backup.clone();
             let choose = choose.clone();
             let management = management.clone();
-            let model = model.clone();
+            let window = window.downgrade();
+            let page = page.downgrade();
+            let origin = origin.clone();
+            let pending = pending.clone();
+            let closed = closed.clone();
+            let mut receiver = Some(receiver);
             glib::timeout_add_local(Duration::from_millis(100), move || {
-                if management.root().is_none()
-                    || model.borrow().account_epoch != epoch
-                    || model.borrow().logout_pending
+                let (
+                    Some(window), Some(page), Some(button), Some(status), Some(locations_row),
+                    Some(open_save_folder), Some(inventory_row), Some(check_inventory),
+                    Some(enabled), Some(sync_now), Some(advanced), Some(backup), Some(choose),
+                    Some(management),
+                ) = (
+                    window.upgrade(), page.upgrade(), button.upgrade(), status.upgrade(),
+                    locations_row.upgrade(), open_save_folder.upgrade(), inventory_row.upgrade(),
+                    check_inventory.upgrade(), enabled.upgrade(), sync_now.upgrade(),
+                    advanced.upgrade(), backup.upgrade(), choose.upgrade(), management.upgrade(),
+                ) else {
+                    pending.set(false);
+                    return glib::ControlFlow::Break;
+                };
+                if closed.get()
+                    || !window.is_visible()
+                    || page.root().as_ref() != Some(window.upcast_ref())
+                    || !button.is_ancestor(&page)
                 {
+                    pending.set(false);
                     return glib::ControlFlow::Break;
                 }
-                match receiver.try_recv() {
-                    Ok(Ok(discovery)) => {
+                if !origin.is_current() {
+                    drop(receiver.take());
+                    button.set_sensitive(false);
+                    status.set_label("Your account session changed or you are signed out. Sign in, then close and reopen Properties to check cloud-save support.");
+                    pending.set(false);
+                    return glib::ControlFlow::Break;
+                }
+                let result = match receiver.as_ref().unwrap().try_recv() {
+                    Ok(result) => result,
+                    Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        Err("Cloud-save discovery worker stopped unexpectedly".into())
+                    }
+                };
+                drop(receiver.take());
+                match result {
+                    Ok(discovery) => {
                         let supported = discovery.availability
                             == crate::domain::CloudSaveAvailability::Supported;
                         management.set_visible(supported);
@@ -1249,22 +1381,17 @@ fn populate_cloud_settings(
                         button.set_visible(
                             discovery.availability == crate::domain::CloudSaveAvailability::Unknown,
                         );
-                        button.set_sensitive(true);
-                        glib::ControlFlow::Break
                     }
-                    Ok(Err(error)) => {
+                    Err(error) => {
                         status.add_css_class("error");
-                        status.set_label(&error);
-                        button.set_sensitive(true);
-                        glib::ControlFlow::Break
-                    }
-                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        status.set_label("Cloud-save discovery worker stopped unexpectedly");
-                        button.set_sensitive(true);
-                        glib::ControlFlow::Break
+                        status.set_label(&notifications::failure_message(
+                            "Cloud-save discovery failed", &error,
+                        ));
                     }
                 }
+                pending.set(false);
+                button.set_sensitive(true);
+                glib::ControlFlow::Break
             });
         });
         let retry_row = adw::ActionRow::new();
@@ -2888,6 +3015,574 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "private p372 HOME/all XDG/TMP, GTK and D-Bus; inert metadata backend only"]
+    fn metadata_retry_tracks_original_session_activity_and_page_lifetime() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p372-"),
+                "{key}"
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(
+            auth::session_is_current(auth::session()),
+            "run this fixture alone before auth revocation"
+        );
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn heartbeat() {
+            let tick = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(150), {
+                let tick = tick.clone();
+                move || tick.set(true)
+            });
+            wait(|| tick.get());
+        }
+        #[track_caller]
+        fn registered() {
+            let error = crate::profile_reset::reserve().err().unwrap().to_string();
+            assert!(error.contains("discovering cloud-save metadata"), "{error}");
+        }
+        struct Attempt {
+            start: mpsc::Sender<()>,
+            entered: mpsc::Receiver<((u64, u64), Vec<crate::domain::CloudSaveLocation>)>,
+            finish: mpsc::Sender<Result<crate::domain::CloudSaveDiscovery, String>>,
+        }
+        fn queue() -> Attempt {
+            let (start, before_entry) = mpsc::channel();
+            let (entered, capture) = mpsc::channel();
+            let (finish, result) = mpsc::channel();
+            TEST_CLOUD_DISCOVERIES.with(|requests| {
+                requests
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .push_back(TestCloudDiscovery {
+                        before_entry,
+                        entered,
+                        result,
+                    })
+            });
+            Attempt {
+                start,
+                entered: capture,
+                finish,
+            }
+        }
+        fn nodes(root: &impl IsA<gtk::Widget>) -> Vec<gtk::Widget> {
+            let mut result = vec![root.as_ref().clone()];
+            let mut child = root.as_ref().first_child();
+            while let Some(widget) = child {
+                result.extend(nodes(&widget));
+                child = widget.next_sibling();
+            }
+            result
+        }
+        fn button(page: &adw::PreferencesPage, title: &str) -> gtk::Button {
+            nodes(page)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some(title))
+                .unwrap()
+        }
+        fn row(page: &adw::PreferencesPage, title: &str) -> adw::ActionRow {
+            nodes(page)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<adw::ActionRow>().ok())
+                .find(|row| row.title() == title)
+                .unwrap()
+        }
+        fn status(page: &adw::PreferencesPage) -> gtk::Label {
+            find_named_descendant(page.upcast_ref(), "cloud-save-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap()
+        }
+        fn host(
+            app: &adw::Application,
+            model: &Rc<RefCell<AppModel>>,
+            game: &crate::domain::InstalledGame,
+            locations: &[crate::domain::CloudSaveLocation],
+        ) -> (
+            adw::ApplicationWindow,
+            gtk::Stack,
+            adw::PreferencesPage,
+            gtk::Entry,
+        ) {
+            let window = adw::ApplicationWindow::builder()
+                .application(app)
+                .default_width(800)
+                .default_height(620)
+                .build();
+            let stack = gtk::Stack::new();
+            let entry = gtk::Entry::new();
+            entry.set_text("General stays selected while work finishes");
+            stack.add_named(&entry, Some("general"));
+            let page = adw::PreferencesPage::new();
+            stack.add_named(&page, Some("cloud"));
+            populate_cloud_settings(
+                &window,
+                model,
+                &page,
+                game,
+                crate::state::CloudSaveRecord {
+                    preference: crate::domain::CloudSavePreference::Undecided,
+                    availability: crate::domain::CloudSaveAvailability::Unknown,
+                    locations: locations.to_vec(),
+                    metadata_build_id: None,
+                    metadata_checked_at: None,
+                    metadata_error: None,
+                    last_successful_sync: None,
+                    status: crate::domain::CloudSaveStatus::NeverSynced,
+                    error: None,
+                    conflicts: vec![],
+                },
+                &CloudActionSession {
+                    auth: auth::session(),
+                    online: online::account_session(),
+                    epoch: model.borrow().account_epoch,
+                    model: Rc::downgrade(model),
+                },
+            );
+            stack.set_visible_child_name("cloud");
+            window.set_content(Some(&stack));
+            window.present();
+            wait(|| button(&page, "Retry metadata discovery").is_mapped());
+            (window, stack, page, entry)
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.CloudDiscoveryLifecycleTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        let directory =
+            std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("inert-game");
+        let mut game: crate::domain::InstalledGame = serde_json::from_value(serde_json::json!({
+            "product_id": 9372001, "library_id": "synthetic", "installation_directory": directory,
+            "primary_executable": null, "installer_files": [], "installer_complete": true,
+            "installer_operating_system": "windows", "launch_arguments": [], "state": "installed",
+            "playtime_seconds": 0, "created_at": 1, "updated_at": 1
+        }))
+        .unwrap();
+        game.compatibility = Some(crate::compatibility::GameCompatibilityPreferences {
+            backend: crate::compatibility::CompatibilityBackendKind::Umu,
+            prefix_slug: "inert".into(),
+            profile: crate::compatibility::UmuProfile::fallback(),
+            pending_profile: None,
+        });
+        let old_locations = vec![crate::domain::CloudSaveLocation {
+            name: "Old local choice".into(),
+            path: directory.join("old-saves"),
+            remote_namespace: "old".into(),
+            user_override: true,
+        }];
+        let mut discovery = crate::domain::CloudSaveDiscovery {
+            availability: crate::domain::CloudSaveAvailability::Supported,
+            locations: vec![crate::domain::CloudSaveLocation {
+                name: "New synthetic choice".into(),
+                path: directory.join("new-saves"),
+                remote_namespace: "new".into(),
+                user_override: false,
+            }],
+            checked_at: 123,
+            ..Default::default()
+        };
+        TEST_CLOUD_DISCOVERIES.with(|requests| *requests.borrow_mut() = Some(VecDeque::new()));
+
+        // The real receiver retains the exact availability-specific control mutations.
+        for availability in [
+            crate::domain::CloudSaveAvailability::Supported,
+            crate::domain::CloudSaveAvailability::Unsupported,
+            crate::domain::CloudSaveAvailability::Unavailable,
+            crate::domain::CloudSaveAvailability::Unknown,
+        ] {
+            discovery.availability = availability;
+            let (window, stack, page, entry) = host(&app, &model, &game, &old_locations);
+            let retry = button(&page, "Retry metadata discovery");
+            let attempt = queue();
+            let origin = (online::account_session(), auth::session());
+            retry.emit_clicked();
+            retry.emit_clicked();
+            assert!(!retry.is_sensitive());
+            assert!(
+                button(&page, "Choose…").is_sensitive(),
+                "the deferred override policy is unchanged"
+            );
+            registered();
+            heartbeat();
+            assert!(attempt.entered.try_recv().is_err());
+            assert_eq!(status(&page).text(), "Checking GOG cloud-save support…");
+            stack.set_visible_child_name("general");
+            wait(|| entry.is_mapped());
+            assert!(entry.grab_focus());
+            let focus = gtk::prelude::GtkWindowExt::focus(&window);
+            assert!(focus.is_some());
+            attempt.start.send(()).unwrap();
+            assert_eq!(
+                attempt
+                    .entered
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap(),
+                (origin, old_locations.clone())
+            );
+            attempt.finish.send(Ok(discovery.clone())).unwrap();
+            wait(|| retry.is_sensitive());
+            wait(|| crate::profile_reset::reserve().is_ok());
+            let supported = availability == crate::domain::CloudSaveAvailability::Supported;
+            let enabled = nodes(&page)
+                .into_iter()
+                .find_map(|widget| widget.downcast::<adw::SwitchRow>().ok())
+                .unwrap();
+            assert_eq!(enabled.is_sensitive(), supported);
+            let advanced = nodes(&page)
+                .into_iter()
+                .find_map(|widget| widget.downcast::<gtk::MenuButton>().ok())
+                .unwrap();
+            assert_eq!(advanced.is_sensitive(), supported);
+            let management = nodes(&page)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<adw::PreferencesGroup>().ok())
+                .find(|group| group.title() == "Export and manage remote saves")
+                .unwrap();
+            assert_eq!(management.get_visible(), supported);
+            assert_eq!(button(&page, "Sync now").is_sensitive(), supported);
+            assert_eq!(button(&page, "Check now").is_sensitive(), supported);
+            assert_eq!(
+                button(&page, "Open backup folder").is_sensitive(),
+                supported
+            );
+            assert_eq!(button(&page, "Open save folder").is_sensitive(), supported);
+            assert_eq!(row(&page, "Save locations").get_visible(), supported);
+            assert_eq!(
+                row(&page, "Save locations").subtitle().as_deref(),
+                Some(cloud_location_summary(&discovery.locations).as_str())
+            );
+            assert_eq!(
+                retry.get_visible(),
+                availability == crate::domain::CloudSaveAvailability::Unknown
+            );
+            assert_eq!(
+                button(&page, "Choose…").is_sensitive(),
+                supported || availability == crate::domain::CloudSaveAvailability::Unknown
+            );
+            assert_eq!(
+                status(&page).text(),
+                match availability {
+                    crate::domain::CloudSaveAvailability::Supported =>
+                        "GOG cloud saves are supported for this game.",
+                    crate::domain::CloudSaveAvailability::Unsupported =>
+                        "GOG reports cloud saves are disabled for this game.",
+                    crate::domain::CloudSaveAvailability::Unavailable =>
+                        "GOG cloud-save metadata is unavailable for this game.",
+                    crate::domain::CloudSaveAvailability::Unknown =>
+                        "Cloud-save discovery failed; retry is available.",
+                }
+            );
+            assert_eq!(stack.visible_child_name().as_deref(), Some("general"));
+            assert_eq!(gtk::prelude::GtkWindowExt::focus(&window), focus);
+            assert!(window.visible_dialog().is_none());
+            if !retry.get_visible() {
+                retry.emit_clicked();
+                assert!(crate::profile_reset::reserve().is_ok());
+            }
+            window.destroy();
+        }
+
+        for disconnected in [false, true] {
+            let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+            let retry = button(&page, "Retry metadata discovery");
+            let attempt = queue();
+            retry.emit_clicked();
+            attempt.start.send(()).unwrap();
+            attempt
+                .entered
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap();
+            let diagnostic = "Synthetic metadata failure\naccess_token=synthetic-secret https://example.invalid/?signed=secret\nComplete diagnostic tail";
+            if !disconnected {
+                attempt.finish.send(Err(diagnostic.into())).unwrap();
+            }
+            drop(attempt.finish);
+            wait(|| retry.is_sensitive());
+            wait(|| crate::profile_reset::reserve().is_ok());
+            assert!(retry.get_visible());
+            assert_eq!(
+                status(&page).text(),
+                notifications::failure_message(
+                    "Cloud-save discovery failed",
+                    if disconnected {
+                        "Cloud-save discovery worker stopped unexpectedly"
+                    } else {
+                        diagnostic
+                    }
+                )
+            );
+            assert!(!status(&page).text().contains("synthetic-secret"));
+            assert_eq!(
+                row(&page, "Save locations").subtitle().as_deref(),
+                Some(cloud_location_summary(&old_locations).as_str())
+            );
+            assert!(!button(&page, "Sync now").is_sensitive());
+            window.destroy();
+        }
+
+        // Activity refusal does not consume a backend fixture; restoration may synchronously retry.
+        let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+        let retry = button(&page, "Retry metadata discovery");
+        let frozen = Rc::new(RefCell::new(Some(crate::profile_reset::reserve().unwrap())));
+        let reentered = Rc::new(std::cell::Cell::new(false));
+        retry.connect_sensitive_notify({
+            let frozen = frozen.clone();
+            let reentered = reentered.clone();
+            move |button| {
+                if button.is_sensitive() && !reentered.replace(true) {
+                    drop(frozen.borrow_mut().take());
+                    button.emit_clicked();
+                    button.emit_clicked();
+                }
+            }
+        });
+        let attempt = queue();
+        retry.emit_clicked();
+        assert_eq!(
+            TEST_CLOUD_DISCOVERIES.with(|requests| requests.borrow().as_ref().unwrap().len()),
+            1
+        );
+        wait(|| reentered.get());
+        heartbeat();
+        registered();
+        assert!(!retry.is_sensitive());
+        assert_eq!(status(&page).text(), "Checking GOG cloud-save support…");
+        assert_eq!(
+            TEST_CLOUD_DISCOVERIES.with(|requests| requests.borrow().as_ref().unwrap().len()),
+            0
+        );
+        attempt.start.send(()).unwrap();
+        attempt
+            .entered
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(Ok(discovery.clone())).unwrap();
+        wait(|| retry.is_sensitive());
+        wait(|| crate::profile_reset::reserve().is_ok());
+        window.destroy();
+
+        // Online changes reject both queued work and a backend result already in flight.
+        discovery.availability = crate::domain::CloudSaveAvailability::Supported;
+        for entered_first in [false, true] {
+            let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+            let retry = button(&page, "Retry metadata discovery");
+            let attempt = queue();
+            let epoch = model.borrow().account_epoch;
+            retry.emit_clicked();
+            if entered_first {
+                attempt.start.send(()).unwrap();
+                attempt
+                    .entered
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+            }
+            online::invalidate_library_session();
+            assert_eq!(model.borrow().account_epoch, epoch);
+            wait(|| status(&page).text().contains("close and reopen Properties"));
+            registered();
+            if entered_first {
+                attempt.finish.send(Ok(discovery.clone())).unwrap();
+            } else {
+                attempt.start.send(()).unwrap();
+            }
+            wait(|| crate::profile_reset::reserve().is_ok());
+            assert!(attempt.entered.try_recv().is_err());
+            assert!(!retry.is_sensitive());
+            retry.emit_clicked();
+            assert!(crate::profile_reset::reserve().is_ok());
+            assert!(!button(&page, "Sync now").is_sensitive());
+            assert_eq!(
+                row(&page, "Save locations").subtitle().as_deref(),
+                Some(cloud_location_summary(&old_locations).as_str())
+            );
+            window.destroy();
+        }
+
+        // UI epoch/logout gates apply at admission and again before result mutation.
+        for logging_out in [false, true] {
+            for already_started in [false, true] {
+                let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+                let retry = button(&page, "Retry metadata discovery");
+                let attempt = queue();
+                if already_started {
+                    retry.emit_clicked();
+                    registered();
+                }
+                let globals = (online::account_session(), auth::session());
+                if logging_out {
+                    model.borrow_mut().logout_pending = true;
+                } else {
+                    model.borrow_mut().account_epoch += 1;
+                }
+                if !already_started {
+                    retry.emit_clicked();
+                }
+                wait(|| status(&page).text().contains("close and reopen Properties"));
+                assert_eq!((online::account_session(), auth::session()), globals);
+                assert!(!retry.is_sensitive());
+                if already_started {
+                    attempt.start.send(()).unwrap();
+                    attempt
+                        .entered
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                    attempt.finish.send(Ok(discovery.clone())).unwrap();
+                    wait(|| crate::profile_reset::reserve().is_ok());
+                } else {
+                    assert_eq!(
+                        TEST_CLOUD_DISCOVERIES.with(|requests| requests
+                            .borrow()
+                            .as_ref()
+                            .unwrap()
+                            .len()),
+                        1
+                    );
+                    TEST_CLOUD_DISCOVERIES
+                        .with(|requests| requests.borrow_mut().as_mut().unwrap().clear());
+                }
+                heartbeat();
+                assert!(!button(&page, "Sync now").is_sensitive());
+                assert_eq!(
+                    row(&page, "Save locations").subtitle().as_deref(),
+                    Some(cloud_location_summary(&old_locations).as_str())
+                );
+                window.destroy();
+                model.borrow_mut().logout_pending = false;
+            }
+        }
+
+        for closed in [false, true] {
+            let (window, stack, page, _) = host(&app, &model, &game, &old_locations);
+            let retry = button(&page, "Retry metadata discovery");
+            let attempt = queue();
+            retry.emit_clicked();
+            if closed {
+                window.set_hide_on_close(true);
+                window.close();
+                wait(|| !window.is_visible());
+            } else {
+                stack.remove(&page);
+            }
+            heartbeat();
+            registered();
+            attempt.start.send(()).unwrap();
+            attempt
+                .entered
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap();
+            attempt.finish.send(Ok(discovery.clone())).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            heartbeat();
+            assert!(!retry.is_sensitive());
+            assert_eq!(status(&page).text(), "Checking GOG cloud-save support…");
+            assert!(!button(&page, "Sync now").is_sensitive());
+            window.destroy();
+        }
+
+        // Removing Retry proves its new receiver/callback do not retain it while work is held.
+        let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+        let retry = button(&page, "Retry metadata discovery");
+        let attempt = queue();
+        retry.emit_clicked();
+        let retry_row = row(&page, "Cloud-save support");
+        let group = retry_row
+            .ancestor(adw::PreferencesGroup::static_type())
+            .and_downcast::<adw::PreferencesGroup>()
+            .unwrap();
+        group.remove(&retry_row);
+        let weak = retry.downgrade();
+        drop((retry_row, retry));
+        wait(|| weak.upgrade().is_none());
+        heartbeat();
+        registered();
+        attempt.start.send(()).unwrap();
+        attempt
+            .entered
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(Ok(discovery.clone())).unwrap();
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert!(!button(&page, "Sync now").is_sensitive());
+        window.destroy();
+
+        // Auth invalidation is deliberately last: no production auth reset/bypass is needed.
+        let (before_window, _, before_page, _) = host(&app, &model, &game, &old_locations);
+        let before = queue();
+        button(&before_page, "Retry metadata discovery").emit_clicked();
+        let (after_window, _, after_page, _) = host(&app, &model, &game, &old_locations);
+        let after = queue();
+        button(&after_page, "Retry metadata discovery").emit_clicked();
+        after.start.send(()).unwrap();
+        after.entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let epoch = model.borrow().account_epoch;
+        auth::invalidate_session();
+        assert_eq!(model.borrow().account_epoch, epoch);
+        wait(|| {
+            status(&before_page)
+                .text()
+                .contains("close and reopen Properties")
+                && status(&after_page)
+                    .text()
+                    .contains("close and reopen Properties")
+        });
+        before.start.send(()).unwrap();
+        after.finish.send(Ok(discovery)).unwrap();
+        wait(|| crate::profile_reset::reserve().is_ok());
+        assert!(before.entered.try_recv().is_err());
+        for page in [&before_page, &after_page] {
+            assert!(!button(page, "Retry metadata discovery").is_sensitive());
+            assert!(!button(page, "Sync now").is_sensitive());
+            assert_eq!(
+                row(page, "Save locations").subtitle().as_deref(),
+                Some(cloud_location_summary(&old_locations).as_str())
+            );
+        }
+        before_window.destroy();
+        after_window.destroy();
+        let (window, _, page, _) = host(&app, &model, &game, &old_locations);
+        button(&page, "Retry metadata discovery").emit_clicked();
+        assert!(!button(&page, "Retry metadata discovery").is_sensitive());
+        assert!(status(&page).text().contains("Sign in"));
+        assert!(crate::profile_reset::reserve().is_ok());
+        assert!(
+            TEST_CLOUD_DISCOVERIES.with(|requests| requests
+                .borrow_mut()
+                .take()
+                .unwrap()
+                .is_empty())
+        );
+        assert!(!crate::identity::database().exists());
+        window.destroy();
+    }
 
     #[test]
     #[ignore = "private p369 HOME/all XDG/TMP, GTK and D-Bus; synthetic SQLite only, no cloud calls"]

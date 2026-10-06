@@ -186,13 +186,17 @@
   history already skips duplicate recipe while retaining separate required vendor receipts.
   Root aggregate fresh-install log check confirms one vcrun2010 command. No speculative backend
   deduplication, dependency skipping, actual agent data/helper access, source edits or tests.
-- P372 (in_progress, file_summary; proposal performance_audit, implementation reviewer ui_critic):
+- P372 (complete, file_summary; proposal performance_audit, implementation reviewer ui_critic):
   approved metadata Retry lifecycle after P369, isolated game_settings.rs. Capture original page
   authenticated session, pre-spawn activity, explicit-session backend, weak current feedback and
   receiver retirement before restoring Retry. Inert actual-handler pre-entry/result/reentry/
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
+- P376 (in_progress assessment, ui_critic): root source confirms Branch Forget Password opens
+  SQLite/deletes on GTK without originating session/activity guard. Source-only bounded proposal
+  for asynchronous visible feedback and stale/reset admission, preserving branch selection and
+  Switch exclusion. No real credentials/data, keyring access, implementation or Cargo yet.
 - P375 (in_progress diagnosis, performance_audit): reproducible single GTK ancestor critical
   around Coffee Talk Repair confirmation-to-components transition onb2629ce and5a05fe8,
   with no observed failure. Source-only lifecycle diagnosis and proposed inert reproduction;
