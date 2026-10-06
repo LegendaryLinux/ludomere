@@ -15,11 +15,12 @@
   explicit Retry and loading-row ownership; no locks across I/O or cancellation/rollback claim.
   No actual logs/account/reset by agents; root private gates/build.
 
-- P396 (in_progress, file_summary; reviewer ui_critic): guard generic async directory opening by
+- P396 (complete, file_summary; reviewer ui_critic): guard generic async directory opening by
   original raw auth/account and visible parent, reusing launch_validated_directory. Own isolated
   widgets/file_open.rs plus focused inert launch fixture; preserve all config/path validation,
   signed-out local use and error handling. No profile-activity redesign or new chooser; no real
   file manager by agents. Root gates. Source-backed R111 unwanted delayed-focus finding.
+  Private exact helper gate p396-ttu00nkh, fmt/compile/Clippy PASS; no real file-manager activation.
 
 - P394 (complete, ui_critic; reviewer performance_audit): Add tag disabled for empty/whitespace,
   native Enter submits same eligible action. Own organization.rs and existing synthetic fixture

@@ -38,6 +38,13 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P395 commit7f3a6d8 exact post-build PASS (66 built audit commits). P396 exact private helper
+  gate PASS p396-ttu00nkh: current signed-out activation, held-worker heartbeat, error/disconnect,
+  account/auth retirement, hidden/closed retained parent and weak destruction. Only one captured
+  inert launch, no profile files created. Original validation path unchanged; fixture checks
+  outcomes/lifetimes, not real path validation/file-manager execution. Independent source GO and
+  fmt/compile/Clippy PASS; only known private GSettings warnings.
+
 - P394 commitf6a1264 exact post-build PASS (65 built audit commits). P395 independent final
   source GO: four recovery strings now name Home→reopen, matching actual detail identity reset;
   no backend/navigation/guard change. Two unwrapped operation-log labels shortened, original
