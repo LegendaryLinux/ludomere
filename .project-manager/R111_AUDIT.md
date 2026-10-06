@@ -5,6 +5,10 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- Ata3641c1 consolidated private build gate PASS: formatting, all-target Clippy, default Rust
+  tests, five Python helper tests and build. Log /tmp/ludomere-r111-full-build-vcdb940n/build.log.
+  All47 commits have exact post-commit build PASS; affected ignored GTK tests separately passed.
+
 - At5a05fe8 consolidated private gate PASS: formatting, all-target Clippy with warnings denied,
   571 library tests, six integration tests, five Python helper tests and build.77 ignored library
   entries excluded from default suite; affected GTK fixtures run separately. Log:
@@ -29,6 +33,32 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P377 independently reviewed two-literal setup-stage correction verified by existing mapped
+  setup report regression (/tmp/ludomere-p332-wglbg_xg), fmt/Clippy/compile PASS. Fresh installs
+  now say Saving game files; required-component preparation no longer implies every processed
+  byte is downloaded. No phase/worker/progress/callback changes or new test scaffolding.
+- Reinstalled BIT.TRIP renders its title screen ona3641c1; normal quit removes its window and
+  returns Play/search with2min retained playtime. Notifications records uninstall/setup results,
+  without transient Checking Windows requirements/Ready entries (live P373 confirmation).
+  No panic/RefCell/GTK critical found in this app run at this checkpoint. Earlier repair-only
+  warning remains open; no exhaustive game/controller or progress-frame coverage claim.
+
+- Ona3641c1 BIT.TRIP normal uninstall completes from first confirmation click; actual payload
+  and prefix both absent afterward. Detail updates to Download without reopening; playtime
+  remains1min. Root begins authorized reinstall from default Windows Depot source, no extra
+  game admitted and13GB budget reservation retained. Screenshots bittrip-uninstall-*.png.
+  Fresh reinstall completes successfully, Details shows26.4MB Depot download,57.5MB actual
+  writes and58.8MB full estimate distinctly; Play restored in place. Intermediate committing
+  stage captured, operation finished before background/Downloads capture, so no live full-phase
+  or active-header claim. Misleading Saving repaired files on fresh install assigned P377copyfix.
+- P375 independently reviewed cfg(test)-only diagnostic remains isolated, main unchanged.
+  First isolated compile fails because its fixture supplied nonexistent Game.owned; author
+  correction/review requested. No stale test binary or live debugger run.
+  Independently approved field/assertion correction compiles. First exact runtime
+  (/tmp/ludomere-p375-osbekox5) fails at actual confirmation Start mapped/focus assertion after
+  inspection release. No ancestry critical before that boundary (only known harness GSettings
+  warnings). Author diagnosis requested; no assertion weakening, product fix or main integration.
+
 - P374 actual Downloads constructor/updater counter parity and constrained action layout fixture
   PASS (/tmp/ludomere-p374-aulqb_j1), plus pure matrix (p374-2cemoaa_), existing processing/
   persisted-count tests (p374-t5ruwpfb,p374-_m65czif) and full diagnostic layout/refresh tests
@@ -38,6 +68,7 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   share labels/full tooltips. Backend counters/actions/rates/ETA unchanged; no live benchmark.
   Reviewer caught test-only wrong active-footer button assumption before runtime; corrected to
   exact phase-specific existing controls, retaining visibility and geometry assertions.
+  Commita3641c1 and exact post-commit build PASS;47 separate audit commits built individually.
 
 - P372 original-session metadata Retry, pre-spawn activity and weak page/window result lifetime
   independently reviewed and verified by actual-handler inert fixture (/tmp/ludomere-p372-qg0zylkz).

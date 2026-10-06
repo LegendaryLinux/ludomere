@@ -193,10 +193,17 @@
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
-- P376 (in_progress assessment, ui_critic): root source confirms Branch Forget Password opens
-  SQLite/deletes on GTK without originating session/activity guard. Source-only bounded proposal
-  for asynchronous visible feedback and stale/reset admission, preserving branch selection and
-  Switch exclusion. No real credentials/data, keyring access, implementation or Cargo yet.
+- P377 (complete, performance_audit; reviewer file_summary): two setup-stage wording corrections
+  in chooser.rs only. Fresh install visibly says Saving repaired files; replace with Saving
+  game files. Cached prerequisite processing must say Preparing required components rather
+  than imply all bytes download. No phase/progress logic change, new abstraction or new tests;
+  existing setup fixture/fmt/Clippy/build are proportional. Root coordinates sequential gate.
+- P376 (in_progress, ui_critic; reviewer file_summary): approved GTK-blocking Branch Forget
+  correction in isolated game_settings.rs. Track SQLite-only worker, preserve raw-generation
+  offline forgetting with explicit identity, local Switch exclusion/Started and current-selection
+  restore. Stale eligibility persists across selection; refresh must re-read after signal-emitting
+  setters and Switch success feedback precedes refresh. Real synthetic SQLite heartbeat/key
+  isolation plus reentry/lifetime fixtures. No actual credentials/keyring/data or global locks.
 - P375 (in_progress diagnostic fixture, performance_audit; reviewer file_summary): repeated single GTK ancestor critical
   around Coffee Talk Repair confirmation-to-components transition onb2629ce and5a05fe8,
   with no observed failure. Independently approved one-stage animation-enabled actual-menu

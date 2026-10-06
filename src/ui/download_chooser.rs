@@ -1043,11 +1043,11 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
                                 "queued" => "Waiting to start setup…",
                                 "preparing" => "Reading game download information…",
                                 "calculating" => "Calculating required downloads…",
-                                "dependencies" => "Downloading required components…",
+                                "dependencies" => "Preparing required components…",
                                 "downloading" | "materializing" => "Downloading game files…",
                                 "extracting" => "Extracting game files…",
                                 "verifying" | "verifying_existing" => "Checking installed files…",
-                                "committing" => "Saving repaired files…",
+                                "committing" => "Saving game files…",
                                 "finalizing" => "Finishing game installation…",
                                 _ => "Preparing game setup…",
                             });
