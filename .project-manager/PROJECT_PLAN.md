@@ -2,6 +2,11 @@
 
 ## R111 interactive audit
 
+- P386 (in_progress assessment, performance_audit): inspect concrete Properties/Cloud ownership
+  cycles behind retained detached-page diagnostics; source-only bounded proposal before changes.
+  No inferred RSS diagnosis, whole-window refactor or actual account data. P322 critic reviews
+  only newly authorized app screenshots for remaining presentation observations.
+
 - P385 (in_progress, file_summary; proposal/reviewer performance_audit): close the selected
   Files popover before forwarding its retained source action, preserving direct/unmounted proxies.
   Root observed first confirmation click dismissing the old popup; cause is not yet proven.
@@ -12,7 +17,7 @@
   plausibility checks off GTK without changing the predicate, transfer events or unmounted proxy
   contract. Own isolated files.rs only; tracked request-local validation and truthful finalizing/
   error feedback. Synthetic held-worker and actual proxy/terminal regression; no real agent data.
-- P384 (in_progress, ui_critic; proposal/reviewer performance_audit): move Cloud backup-folder
+- P384 (complete, ui_critic; proposal/reviewer performance_audit): move Cloud backup-folder
   creation/validation off GTK, surface errors and guard original page/session through existing
   explicit-action directory launcher. Own isolated game_settings.rs only; preserve offline use,
   independent pending state and current metadata eligibility. No cloud policy/file-manager changes.

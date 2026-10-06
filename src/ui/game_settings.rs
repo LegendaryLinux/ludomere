@@ -825,7 +825,17 @@ struct TestCloudDiscovery {
 }
 
 #[cfg(test)]
+struct TestCloudBackup {
+    gtk_thread: std::thread::ThreadId,
+    before_io: mpsc::Receiver<()>,
+    inspected: mpsc::Sender<()>,
+    finish: mpsc::Receiver<()>,
+    disconnect: bool,
+}
+
+#[cfg(test)]
 thread_local! {
+    static TEST_CLOUD_BACKUPS: RefCell<Option<VecDeque<TestCloudBackup>>> = const { RefCell::new(None) };
     static TEST_CLOUD_DISCOVERIES: RefCell<Option<VecDeque<TestCloudDiscovery>>> = const { RefCell::new(None) };
     static TEST_CLOUD_PICKERS: RefCell<Option<VecDeque<TestCloudPicker>>> = const { RefCell::new(None) };
     static TEST_CLOUD_LOCATION_SAVES: RefCell<Option<VecDeque<TestCloudLocationSave>>> = const { RefCell::new(None) };
@@ -1090,17 +1100,16 @@ fn populate_cloud_settings(
     backup.set_margin_top(10);
     backup.set_sensitive(supported);
     let backup_path = crate::cloud_saves::sync::backup_directory(product_id);
-    let backup_parent = window.clone();
-    backup.connect_clicked(move |_| {
-        std::fs::create_dir_all(&backup_path).ok();
-        super::widgets::file_open::open_directory(
-            &backup_path,
-            &backup_parent,
-            "cloud-save backup directory",
-        );
-    });
     backup_row.add_suffix(&backup);
     cloud_group.add(&backup_row);
+    let backup_status = gtk::Label::new(None);
+    backup_status.set_widget_name("cloud-backup-status");
+    backup_status.set_xalign(0.0);
+    backup_status.set_wrap(true);
+    backup_status.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    backup_status.set_selectable(true);
+    backup_status.set_visible(false);
+    cloud_group.add(&backup_status);
 
     let override_row = adw::ActionRow::new();
     override_row.set_title("Override save directory");
@@ -1115,6 +1124,7 @@ fn populate_cloud_settings(
     let retry = gtk::Button::with_label("Retry metadata discovery");
     retry.set_widget_name("cloud-discovery-retry");
     let pending = Rc::new(std::cell::Cell::new(false));
+    let backup_pending = Rc::new(std::cell::Cell::new(false));
     let availability = Rc::new(std::cell::Cell::new(record.availability));
     let closed = Rc::new(std::cell::Cell::new(false));
     window.connect_close_request({
@@ -1127,7 +1137,9 @@ fn populate_cloud_settings(
     let refresh_location_actions = Rc::new({
         let choose = choose.downgrade();
         let retry = retry.downgrade();
+        let backup = backup.downgrade();
         let pending = pending.clone();
+        let backup_pending = backup_pending.clone();
         let availability = availability.clone();
         let origin = cloud_session.clone();
         let closed = closed.clone();
@@ -1144,6 +1156,7 @@ fn populate_cloud_settings(
                 (
                     closed.get(),
                     pending.get(),
+                    backup_pending.get(),
                     availability.get(),
                     origin.is_current_local(),
                     origin.is_current(),
@@ -1180,7 +1193,171 @@ fn populate_cloud_settings(
                     continue 'refresh;
                 }
             }
+            if !window.is_visible() || page.root().as_ref() != Some(window.upcast_ref()) {
+                return;
+            }
+            if let Some(backup) = backup.upgrade() {
+                backup.set_sensitive(
+                    !closed.get()
+                        && !backup_pending.get()
+                        && origin.is_current_local()
+                        && availability.get() == crate::domain::CloudSaveAvailability::Supported,
+                );
+                if snapshot() != current {
+                    continue 'refresh;
+                }
+            }
             break;
+        }
+    });
+    backup.connect_clicked({
+        let window = window.downgrade();
+        let page = cloud_page.downgrade();
+        let status = backup_status.downgrade();
+        let origin = cloud_session.clone();
+        let pending = backup_pending.clone();
+        let closed = closed.clone();
+        let availability = availability.clone();
+        let refresh = refresh_location_actions.clone();
+        move |button| {
+            let (Some(parent), Some(page_widget), Some(status_widget)) =
+                (window.upgrade(), page.upgrade(), status.upgrade()) else { return; };
+            if pending.get() || closed.get() || !parent.is_visible()
+                || page_widget.root().as_ref() != Some(parent.upcast_ref())
+                || !button.is_ancestor(&page_widget)
+                || availability.get() != crate::domain::CloudSaveAvailability::Supported
+            { return; }
+            if !origin.is_current_local() {
+                status_widget.set_label("Your account session changed. Close and reopen Properties before opening backups.");
+                status_widget.set_visible(true);
+                refresh();
+                return;
+            }
+            pending.set(true);
+            refresh();
+            status_widget.remove_css_class("error");
+            status_widget.set_label("Preparing backup folder…");
+            status_widget.set_visible(true);
+            if closed.get() || !parent.is_visible()
+                || page_widget.root().as_ref() != Some(parent.upcast_ref())
+                || !button.is_ancestor(&page_widget)
+            {
+                pending.set(false);
+                return;
+            }
+            if !origin.is_current_local() {
+                status_widget.set_label("Your account session changed. Close and reopen Properties before opening backups.");
+                pending.set(false);
+                refresh();
+                return;
+            }
+            if availability.get() != crate::domain::CloudSaveAvailability::Supported {
+                status_widget.set_label("Cloud-save support changed; the backup folder was not opened.");
+                pending.set(false);
+                refresh();
+                return;
+            }
+            let (sender, receiver) = mpsc::channel();
+            match crate::profile_reset::begin_activity("opening cloud-save backup folder") {
+                Err(error) => { let _ = sender.send(Err(format!("{error:#}"))); }
+                Ok(activity) => {
+                    let path = backup_path.clone();
+                    let session = (origin.online, origin.auth);
+                    #[cfg(test)]
+                    let fixture = TEST_CLOUD_BACKUPS.with(|requests| requests.borrow_mut().as_mut().map(|requests| requests.pop_front().expect("missing inert cloud backup request")));
+                    std::thread::spawn(move || {
+                        let result = (|| -> anyhow::Result<_> {
+                            let _activity = activity;
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                assert_ne!(std::thread::current().id(), fixture.gtk_thread);
+                                fixture.before_io.recv_timeout(Duration::from_secs(10))?;
+                            }
+                            anyhow::ensure!(session == (online::account_session(), auth::session()), "The account changed before opening backups.");
+                            std::fs::create_dir_all(&path).map_err(|error| anyhow::anyhow!("Could not create the cloud-save backup folder: {error}"))?;
+                            let config = crate::storage::read_config()?;
+                            if let Some(kind) = crate::config::LibraryKind::ALL.into_iter().find(|kind| {
+                                config.libraries(*kind).iter().any(|library| path.starts_with(&library.path))
+                            }) {
+                                crate::storage::validate_path(&config, kind, &path)?;
+                            }
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                let _ = fixture.inspected.send(());
+                                fixture.finish.recv_timeout(Duration::from_secs(10))?;
+                            }
+                            anyhow::ensure!(session == (online::account_session(), auth::session()), "The account changed while opening backups.");
+                            Ok(path)
+                        })();
+                        #[cfg(test)]
+                        if fixture.as_ref().is_some_and(|fixture| fixture.disconnect) { return; }
+                        let _ = sender.send(result.map_err(|error| format!("{error:#}")));
+                    });
+                }
+            }
+            let window = window.clone();
+            let page = page.clone();
+            let status = status.clone();
+            let button = button.downgrade();
+            let origin = origin.clone();
+            let pending = pending.clone();
+            let closed = closed.clone();
+            let availability = availability.clone();
+            let refresh = refresh.clone();
+            let mut receiver = Some(receiver);
+            glib::timeout_add_local(Duration::from_millis(50), move || {
+                let (Some(parent), Some(page_widget), Some(status_widget), Some(button_widget)) =
+                    (window.upgrade(), page.upgrade(), status.upgrade(), button.upgrade()) else {
+                        pending.set(false);
+                        return glib::ControlFlow::Break;
+                    };
+                if closed.get() || !parent.is_visible()
+                    || page_widget.root().as_ref() != Some(parent.upcast_ref())
+                    || !button_widget.is_ancestor(&page_widget)
+                {
+                    pending.set(false);
+                    return glib::ControlFlow::Break;
+                }
+                if !origin.is_current_local() {
+                    drop(receiver.take());
+                    status_widget.set_label("Your account session changed. Close and reopen Properties before opening backups.");
+                    pending.set(false);
+                    refresh();
+                    return glib::ControlFlow::Break;
+                }
+                let result = match receiver.as_ref().unwrap().try_recv() {
+                    Ok(result) => result,
+                    Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => Err("Backup folder inspection stopped. Try opening it again.".into()),
+                };
+                drop(receiver.take());
+                match result {
+                    Ok(path) if availability.get() == crate::domain::CloudSaveAvailability::Supported => {
+                        status_widget.set_label("Backup folder is ready.");
+                        let origin = origin.clone();
+                        let window = window.clone();
+                        let page = page.clone();
+                        let button = button.clone();
+                        let closed = closed.clone();
+                        let availability = availability.clone();
+                        super::widgets::file_open::launch_validated_directory(&path, &parent, "cloud-save backup directory", move || {
+                            !closed.get() && origin.is_current_local()
+                                && availability.get() == crate::domain::CloudSaveAvailability::Supported
+                                && window.upgrade().zip(page.upgrade()).zip(button.upgrade()).is_some_and(|((window, page), button)| {
+                                    window.is_visible() && page.root().as_ref() == Some(window.upcast_ref()) && button.is_ancestor(&page)
+                                })
+                        });
+                    }
+                    Ok(_) => status_widget.set_label("Cloud-save support changed; the backup folder was not opened."),
+                    Err(error) => {
+                        status_widget.add_css_class("error");
+                        status_widget.set_label(&notifications::failure_message("Could not open backup folder", &error));
+                    }
+                }
+                pending.set(false);
+                refresh();
+                glib::ControlFlow::Break
+            });
         }
     });
     choose.connect_clicked({
@@ -1352,7 +1529,6 @@ fn populate_cloud_settings(
         let enabled = enabled.downgrade();
         let sync_now = sync_now.downgrade();
         let advanced = advanced.downgrade();
-        let backup = backup.downgrade();
         let choose = choose.downgrade();
         let management = management.downgrade();
         let origin = cloud_session.clone();
@@ -1456,7 +1632,6 @@ fn populate_cloud_settings(
             let enabled = enabled.clone();
             let sync_now = sync_now.clone();
             let advanced = advanced.clone();
-            let backup = backup.clone();
             let choose = choose.clone();
             let management = management.clone();
             let window = window.downgrade();
@@ -1471,13 +1646,13 @@ fn populate_cloud_settings(
                 let (
                     Some(window), Some(page), Some(button), Some(status), Some(locations_row),
                     Some(open_save_folder), Some(inventory_row), Some(check_inventory),
-                    Some(enabled), Some(sync_now), Some(advanced), Some(backup), Some(_choose),
+                    Some(enabled), Some(sync_now), Some(advanced), Some(_choose),
                     Some(management),
                 ) = (
                     window.upgrade(), page.upgrade(), button.upgrade(), status.upgrade(),
                     locations_row.upgrade(), open_save_folder.upgrade(), inventory_row.upgrade(),
                     check_inventory.upgrade(), enabled.upgrade(), sync_now.upgrade(),
-                    advanced.upgrade(), backup.upgrade(), choose.upgrade(), management.upgrade(),
+                    advanced.upgrade(), choose.upgrade(), management.upgrade(),
                 ) else {
                     pending.set(false);
                     return glib::ControlFlow::Break;
@@ -1524,7 +1699,6 @@ fn populate_cloud_settings(
                         enabled.set_sensitive(supported);
                         sync_now.set_sensitive(supported);
                         advanced.set_sensitive(supported);
-                        backup.set_sensitive(supported);
                         status.set_label(match discovery.availability {
                             crate::domain::CloudSaveAvailability::Supported => {
                                 "GOG cloud saves are supported for this game."
@@ -3431,6 +3605,456 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "private p384 HOME/all XDG/TMP, GTK and D-Bus; captured directory launches only"]
+    fn backup_folder_open_is_responsive_local_and_origin_guarded() {
+        use super::super::widgets::file_open::DIRECTORY_LAUNCHES;
+        use crate::domain::CloudSaveAvailability as Availability;
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p384-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn heartbeat() {
+            let tick = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(150), {
+                let tick = tick.clone();
+                move || tick.set(true)
+            });
+            wait(|| tick.get());
+        }
+        fn nodes(root: &impl IsA<gtk::Widget>) -> Vec<gtk::Widget> {
+            let mut result = vec![root.as_ref().clone()];
+            for child in
+                std::iter::successors(root.as_ref().first_child(), |child| child.next_sibling())
+            {
+                result.extend(nodes(&child));
+            }
+            result
+        }
+        fn button(page: &adw::PreferencesPage, title: &str) -> gtk::Button {
+            nodes(page)
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some(title))
+                .unwrap()
+        }
+        struct View {
+            window: adw::ApplicationWindow,
+            page: adw::PreferencesPage,
+            backup: gtk::Button,
+            status: gtk::Label,
+            path: std::path::PathBuf,
+        }
+        fn host(
+            app: &adw::Application,
+            model: &Rc<RefCell<AppModel>>,
+            id: i64,
+            availability: Availability,
+        ) -> View {
+            let window = adw::ApplicationWindow::builder()
+                .application(app)
+                .default_width(800)
+                .default_height(720)
+                .build();
+            let page = adw::PreferencesPage::new();
+            let game = serde_json::from_value(serde_json::json!({
+                "product_id": id, "library_id": "inert", "installation_directory": std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("absent-game"),
+                "installer_files": [], "installer_complete": true, "installer_operating_system": "windows",
+                "launch_arguments": [], "state": "installed", "playtime_seconds": 0, "created_at": 1, "updated_at": 1
+            })).unwrap();
+            populate_cloud_settings(
+                &window,
+                model,
+                &page,
+                &game,
+                crate::state::CloudSaveRecord {
+                    preference: crate::domain::CloudSavePreference::Undecided,
+                    availability,
+                    locations: Vec::new(),
+                    metadata_build_id: None,
+                    metadata_checked_at: None,
+                    metadata_error: None,
+                    last_successful_sync: None,
+                    status: crate::domain::CloudSaveStatus::NeverSynced,
+                    error: None,
+                    conflicts: Vec::new(),
+                },
+                &CloudActionSession {
+                    auth: auth::session(),
+                    online: online::account_session(),
+                    epoch: model.borrow().account_epoch,
+                    model: Rc::downgrade(model),
+                },
+            );
+            window.set_content(Some(&page));
+            window.present();
+            let backup = button(&page, "Open backup folder");
+            let status = find_named_descendant(page.upcast_ref(), "cloud-backup-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            wait(|| backup.is_mapped());
+            View {
+                window,
+                page,
+                backup,
+                status,
+                path: crate::cloud_saves::sync::backup_directory(id),
+            }
+        }
+        struct Attempt {
+            start: mpsc::Sender<()>,
+            inspected: mpsc::Receiver<()>,
+            finish: mpsc::Sender<()>,
+        }
+        fn queue(disconnect: bool) -> Attempt {
+            let (start, before_io) = mpsc::channel();
+            let (inspected, capture) = mpsc::channel();
+            let (finish, release) = mpsc::channel();
+            TEST_CLOUD_BACKUPS.with(|requests| {
+                requests
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .push_back(TestCloudBackup {
+                        gtk_thread: std::thread::current().id(),
+                        before_io,
+                        inspected,
+                        finish: release,
+                        disconnect,
+                    })
+            });
+            Attempt {
+                start,
+                inspected: capture,
+                finish,
+            }
+        }
+        fn registered() {
+            let error = crate::profile_reset::reserve().err().unwrap().to_string();
+            assert!(
+                error.contains("opening cloud-save backup folder"),
+                "{error}"
+            );
+        }
+        fn launches() -> usize {
+            DIRECTORY_LAUNCHES.with(|paths| paths.borrow().as_ref().unwrap().len())
+        }
+        fn discover(view: &View, availability: Availability) {
+            let (start, before_entry) = mpsc::channel();
+            let (entered, capture) = mpsc::channel();
+            let (finish, result) = mpsc::channel();
+            TEST_CLOUD_DISCOVERIES.with(|requests| {
+                requests
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .push_back(TestCloudDiscovery {
+                        before_entry,
+                        entered,
+                        result,
+                    })
+            });
+            let retry = button(&view.page, "Retry metadata discovery");
+            // Retain and expose the real receiver for a second availability change;
+            // normal UI hides Retry after Supported. No backend discovery is run.
+            retry.set_visible(true);
+            retry.emit_clicked();
+            start.send(()).unwrap();
+            capture.recv_timeout(Duration::from_secs(5)).unwrap();
+            finish
+                .send(Ok(crate::domain::CloudSaveDiscovery {
+                    availability,
+                    ..Default::default()
+                }))
+                .unwrap();
+            let status = find_named_descendant(view.page.upcast_ref(), "cloud-save-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            wait(|| !status.text().starts_with("Checking GOG"));
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.CloudBackupOpenTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        Config::default().save().unwrap();
+        let model = Rc::new(RefCell::new(AppModel::default()));
+        TEST_CLOUD_BACKUPS.with(|requests| *requests.borrow_mut() = Some(VecDeque::new()));
+        TEST_CLOUD_DISCOVERIES.with(|requests| *requests.borrow_mut() = Some(VecDeque::new()));
+        DIRECTORY_LAUNCHES.with(|paths| *paths.borrow_mut() = Some(Vec::new()));
+
+        let view = host(&app, &model, 9384001, Availability::Supported);
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        view.backup.emit_clicked();
+        registered();
+        heartbeat();
+        assert!(!view.path.exists());
+        assert_eq!(view.status.text(), "Preparing backup folder…");
+        assert!(!view.backup.is_sensitive());
+        assert!(button(&view.page, "Choose…").is_sensitive());
+        assert!(button(&view.page, "Sync now").is_sensitive());
+        assert_eq!(launches(), 0);
+        attempt.start.send(()).unwrap();
+        attempt
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        assert!(view.path.is_dir());
+        registered();
+        heartbeat();
+        assert_eq!(launches(), 0);
+        attempt.finish.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert_eq!(view.status.text(), "Backup folder is ready.");
+        assert_eq!(
+            DIRECTORY_LAUNCHES.with(|paths| paths.borrow().as_ref().unwrap().clone()),
+            vec![view.path.clone()]
+        );
+        assert!(crate::profile_reset::reserve().is_ok());
+
+        // Restoration can synchronously begin a fresh actual click.
+        let first = queue(false);
+        let second = queue(false);
+        view.backup.emit_clicked();
+        let fired = Rc::new(std::cell::Cell::new(false));
+        let handler = view.backup.connect_sensitive_notify({
+            let fired = fired.clone();
+            move |button| {
+                if button.is_sensitive() && !fired.replace(true) {
+                    button.emit_clicked();
+                }
+            }
+        });
+        first.start.send(()).unwrap();
+        first
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        first.finish.send(()).unwrap();
+        wait(|| fired.get());
+        view.backup.disconnect(handler);
+        heartbeat();
+        assert!(!view.backup.is_sensitive());
+        assert_eq!(view.status.text(), "Preparing backup folder…");
+        registered();
+        second.start.send(()).unwrap();
+        second
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        second.finish.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert_eq!(launches(), 3);
+        view.window.close();
+
+        let view = host(&app, &model, 9384002, Availability::Supported);
+        std::fs::write(&view.path, b"not a directory").unwrap();
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        attempt.start.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert!(
+            view.status
+                .text()
+                .contains("Could not create the cloud-save backup folder")
+        );
+        assert_eq!(launches(), 3);
+        std::fs::remove_file(&view.path).unwrap();
+        std::fs::write(Config::path(), "invalid = [").unwrap();
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        attempt.start.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert!(view.status.text().contains("Reading storage configuration"));
+        assert_eq!(launches(), 3);
+        Config::default().save().unwrap();
+        std::fs::remove_dir(&view.path).unwrap();
+        let reservation = crate::profile_reset::reserve().unwrap();
+        view.backup.emit_clicked();
+        wait(|| view.backup.is_sensitive());
+        assert!(view.status.text().contains("Profile reset"));
+        assert!(!view.path.exists());
+        drop(reservation);
+        let attempt = queue(true);
+        view.backup.emit_clicked();
+        attempt.start.send(()).unwrap();
+        attempt
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert!(view.status.text().contains("inspection stopped"));
+        assert_eq!(launches(), 3);
+        view.window.close();
+
+        // A terminal text observer can revoke the page before the guarded launcher runs.
+        let view = host(&app, &model, 9384004, Availability::Supported);
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        let handler = view.status.connect_label_notify({
+            let model = model.clone();
+            move |label| {
+                if label.text() == "Backup folder is ready." {
+                    model.borrow_mut().account_epoch += 1;
+                }
+            }
+        });
+        attempt.start.send(()).unwrap();
+        attempt
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(()).unwrap();
+        wait(|| view.status.text() == "Backup folder is ready.");
+        view.status.disconnect(handler);
+        assert!(!view.backup.is_sensitive());
+        assert_eq!(launches(), 3);
+        view.window.close();
+
+        let view = host(&app, &model, 9384003, Availability::Unknown);
+        view.backup.emit_clicked();
+        assert!(!view.path.exists());
+        discover(&view, Availability::Supported);
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        discover(&view, Availability::Supported);
+        assert!(!view.backup.is_sensitive());
+        discover(&view, Availability::Unsupported);
+        attempt.start.send(()).unwrap();
+        attempt
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(()).unwrap();
+        wait(|| view.status.text().contains("support changed"));
+        assert!(!view.backup.is_sensitive());
+        assert_eq!(launches(), 3);
+        view.window.close();
+
+        for (index, case) in [
+            "epoch", "logout", "close", "detach", "destroy", "online", "auth",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            model.borrow_mut().logout_pending = false;
+            let view = host(
+                &app,
+                &model,
+                9384010 + index as i64,
+                Availability::Supported,
+            );
+            let attempt = queue(false);
+            view.backup.emit_clicked();
+            if case == "online" {
+                attempt.start.send(()).unwrap();
+                attempt
+                    .inspected
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+            }
+            match case {
+                "epoch" => model.borrow_mut().account_epoch += 1,
+                "logout" => model.borrow_mut().logout_pending = true,
+                "close" => {
+                    view.window.close();
+                }
+                "detach" => view.window.set_content(gtk::Widget::NONE),
+                "destroy" => {
+                    let row = view
+                        .backup
+                        .ancestor(adw::ActionRow::static_type())
+                        .and_downcast::<adw::ActionRow>()
+                        .unwrap();
+                    row.remove(&view.backup);
+                }
+                "online" => online::invalidate_library_session(),
+                "auth" => auth::invalidate_session(),
+                _ => unreachable!(),
+            }
+            let weak = view.backup.downgrade();
+            drop(view.backup);
+            heartbeat();
+            if case == "destroy" {
+                assert!(weak.upgrade().is_none());
+            }
+            registered();
+            if case != "online" {
+                attempt.start.send(()).unwrap();
+            }
+            if case != "auth" {
+                if case != "online" {
+                    attempt
+                        .inspected
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                }
+                attempt.finish.send(()).unwrap();
+            }
+            wait(|| crate::profile_reset::reserve().is_ok());
+            heartbeat();
+            assert_eq!(launches(), 3, "{case}");
+            if case == "auth" {
+                assert!(!view.path.exists());
+            }
+            view.window.destroy();
+        }
+
+        // A newly opened current local page remains usable while signed out/offline.
+        assert!(!auth::session_is_current(auth::session()));
+        model.borrow_mut().logout_pending = false;
+        let view = host(&app, &model, 9384020, Availability::Supported);
+        let attempt = queue(false);
+        view.backup.emit_clicked();
+        attempt.start.send(()).unwrap();
+        attempt
+            .inspected
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        attempt.finish.send(()).unwrap();
+        wait(|| view.backup.is_sensitive());
+        assert_eq!(launches(), 4);
+        view.window.destroy();
+        assert!(
+            TEST_CLOUD_BACKUPS.with(|requests| requests.borrow_mut().take().unwrap().is_empty())
+        );
+        assert!(
+            TEST_CLOUD_DISCOVERIES.with(|requests| requests
+                .borrow_mut()
+                .take()
+                .unwrap()
+                .is_empty())
+        );
+        DIRECTORY_LAUNCHES.with(|paths| *paths.borrow_mut() = None);
+    }
 
     #[test]
     #[ignore = "private p379 HOME/all XDG/TMP, GTK and D-Bus; synthetic SQLite and inert pickers only"]

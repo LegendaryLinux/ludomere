@@ -33,6 +33,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P384 new actual-control fixture PASS (p384-qe7bjzdg), retained P369/P372/P379 PASS
+  (p369-p_o635lf,p372-3p1ewhvt,p379-7_xamkxt), final fmt/Clippy/compile PASS. Real mkdir
+  failures and activity/origin/launcher guards exercised under private roots; no real file
+  manager or cloud operation invoked. Whole-page retention diagnostic remains true, not fixed.
+  P381 commit4de6019 exact post-build PASS;56 separate built audit commits before P384.
+
 - P381 final preview: real wallpaper delete/redownload completes with status on its own row;
   Play/alternate/gear/favorite and selected Files tab fit at1150x700 and1330x850. Hidden status
   has no empty second row. Evidence detail-preview3-status-fixed.png and -status-wide.png.
