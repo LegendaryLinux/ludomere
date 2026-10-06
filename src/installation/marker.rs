@@ -37,6 +37,42 @@ pub struct InstallationMarker {
 }
 
 impl InstallationMarker {
+    pub(crate) fn normalize_loaded(mut self, installation_directory: &Path) -> Result<Self> {
+        if self.schema_version > MARKER_SCHEMA_VERSION {
+            bail!(
+                "installation marker uses unsupported schema version {}",
+                self.schema_version
+            );
+        }
+        // Older native completion copied retained Windows preferences into this
+        // exact offline marker shape. Recover its view without rewriting user files.
+        if self.schema_version == 2
+            && self
+                .base
+                .operating_system
+                .as_deref()
+                .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
+            && self.source == InstallationSource::OfflineInstaller
+            && self.galaxy_depot.is_none()
+            && self.launch.is_none()
+            && self.dependencies.is_empty()
+            && installation_directory
+                .file_name()
+                .and_then(|name| name.to_str())
+                == Some(self.slug.as_str())
+            && self.compatibility.as_ref().is_some_and(|runtime| {
+                runtime.backend == crate::compatibility::CompatibilityBackendKind::Umu
+                    && runtime.managed_by_ludomere
+                    && runtime.prefix_slug == self.slug
+            })
+        {
+            self.compatibility = None;
+            self.schema_version = 1;
+        }
+        self.validate()?;
+        Ok(self)
+    }
+
     pub fn with_galaxy_depot(mut self, provenance: GalaxyDepotProvenance) -> Result<Self> {
         self.source = InstallationSource::GalaxyDepot;
         self.galaxy_depot = Some(provenance);
@@ -144,43 +180,11 @@ pub fn load(installation_directory: &Path) -> Result<Option<InstallationMarker>>
     if !path.is_file() {
         return Ok(None);
     }
-    let mut marker: InstallationMarker = serde_json::from_slice(
+    let marker: InstallationMarker = serde_json::from_slice(
         &fs::read(&path).with_context(|| format!("could not read {}", path.display()))?,
     )
     .with_context(|| format!("could not parse {}", path.display()))?;
-    if marker.schema_version > MARKER_SCHEMA_VERSION {
-        bail!(
-            "installation marker uses unsupported schema version {}",
-            marker.schema_version
-        );
-    }
-    // Older native completion copied retained Windows preferences into this
-    // exact offline marker shape. Recover its view without rewriting user files.
-    if marker.schema_version == 2
-        && marker
-            .base
-            .operating_system
-            .as_deref()
-            .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
-        && marker.source == InstallationSource::OfflineInstaller
-        && marker.galaxy_depot.is_none()
-        && marker.launch.is_none()
-        && marker.dependencies.is_empty()
-        && installation_directory
-            .file_name()
-            .and_then(|name| name.to_str())
-            == Some(marker.slug.as_str())
-        && marker.compatibility.as_ref().is_some_and(|runtime| {
-            runtime.backend == crate::compatibility::CompatibilityBackendKind::Umu
-                && runtime.managed_by_ludomere
-                && runtime.prefix_slug == marker.slug
-        })
-    {
-        marker.compatibility = None;
-        marker.schema_version = 1;
-    }
-    marker.validate()?;
-    Ok(Some(marker))
+    marker.normalize_loaded(installation_directory).map(Some)
 }
 
 pub fn write(marker: &InstallationMarker, installation_directory: &Path) -> Result<()> {

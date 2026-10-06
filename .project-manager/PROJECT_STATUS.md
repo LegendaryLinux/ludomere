@@ -4,6 +4,15 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P352 admission follow-up independent review, five private regressions and fmt/Clippy/build PASS.
+  Protected Storage reads now share pure marker normalization without weakening read/write checks.
+  Separate follow-up commit next, then real native retry. P354/P357 remain isolated implementations.
+
+- P352 committed34c4c59 exact postbuild PASS. Live native retry exposed another marker reader:
+  Storage launch admission validates raw JSON without the canonical recovery path, still rejecting
+  the known marker. No game launched or prefix repair accepted. P352 follow-up assigned for shared
+  normalization with existing protected reads retained; do not claim end-to-end recovery complete.
+
 - P352 four focused private native/Windows preparation, marker, completion and reconciliation
   regressions PASS; independent implementation review, fmt/Clippy/build PASS. Commit next, then
   live native Gungeon retry. P354 isolated implementation; P355/P356 source follow-up reviews.

@@ -80,11 +80,13 @@
 - P351 (complete, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
-- P352 (complete, performance_audit; reviewer file_summary): approved explicit-Linux suppression
+- P352 (in_progress follow-up, performance_audit; reviewer file_summary): committed explicit-Linux suppression
   across auto-install/native completion/reconciliation and native-save Windows-preference retention.
   Normalize only identified schema2/Linux/offline matching-managed-UMU/no-provenance shape in memory;
   future/unknown shapes stay strict, Windows missing-prefix stays installed, unknown OS policy stays.
   Own auto_install.rs, installation.rs, executor.rs, marker.rs in isolation; root alone reads real data.
+  Live follow-up additionally owns storage.rs: share pure read normalization after protected reads,
+  preserving bounded/no-follow admission and strict writes; actual admission regression required.
 - P353 (complete, ui_critic; reviewer file_summary): clarify that Storage capacity bar covers the
   containing drive while managed category totals cover the selected library. Wording/layout only
   in isolated storage.rs; preserve arithmetic/workers and P350 feedback; verify narrow layout.
@@ -97,6 +99,12 @@
   audit following P352; concrete defects and bounded proposals only, no implementation/data access.
 - P356 (in_progress, file_summary): source-only remaining Settings/account/file-control no-op and
   busy feedback review; exclude P354 initial Files worker. Report proposals before changes.
+- P357 (in_progress, file_summary; reviewer performance_audit): fix confirmed selected-library
+  inspection activity gap from P356. Own isolated ui/settings/storage.rs; admit profile activity
+  before worker and recheck original sessions before DB reads/reconciliation. Preserve P350 and
+  current receiver semantics; delayed-worker/reset-drain fixture, no real data or reset protocol changes.
+  Source follow-up disproved the pure-filesystem premise for library-choice inspection: it too
+  opens StateStore. Include both worker admissions under the same bounded fix and tests.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

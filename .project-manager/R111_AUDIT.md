@@ -78,6 +78,13 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   reconciliation with activity/preferences/raw-file preservation. Formatting/Clippy/build PASS.
   Live native retry remains pending; original failed marker is retained for that check.
 
+- The first live retry found Storage's separate protected marker reader still called strict
+  validation directly, blocking launch. Follow-up shares the exact pure normalization after each
+  reader's existing checks; storage no-follow, bounded regular-file reads and strict writes remain.
+  Actual launch-admission/readiness fixture plus the four prior regressions PASS, including rejected
+  symlink/oversized/malformed/future metadata and unchanged raw bytes. Independent review and
+  fmt/Clippy/build PASS. This corrects missing admission coverage; real launch still to be retried.
+
 ### P325 — retain search while changing library filters
 
 - Preserve the query for boolean, language and metadata filters; keep search visible/enabled
