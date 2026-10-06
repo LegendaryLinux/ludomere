@@ -77,7 +77,7 @@
   totals; label busy/current results without navigation or changed scan semantics. Own storage.rs
   isolated with deterministic GTK regression. Drive-scope wording, Move enablement and Collections
   keyboard parity are separate pending proposals, not silently bundled into this correction.
-- P351 (review, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
+- P351 (complete, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
 - P352 (in_progress, performance_audit): diagnose live Windows→native Linux offline reinstall

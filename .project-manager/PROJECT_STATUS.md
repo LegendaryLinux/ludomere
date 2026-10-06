@@ -4,6 +4,11 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P350 committed38a4f4e exact postbuildPASS. P351 independent review, private native keyboard/
+  accessibility/membership regression and fmt/Clippy/build PASS; separate commit next. P352 traced
+  native marker pollution to auto-install preference copying and reconciliation; strict proposal
+  underway, including durable Windows-preference preservation during native executable discovery.
+
 - P349 committed8a5f7e8 exact postbuildPASS. P350 integrated, fmt/Clippy/build PASS; mapped gate
   running. Live native Gungeon download/auto-install finishes but writes schema2 UMU marker over a
   native start.sh/EtG.x86_64 payload (old EtG.exe absent); Play wrongly offers Windows repair.

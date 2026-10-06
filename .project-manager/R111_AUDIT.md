@@ -284,6 +284,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining gates and live evidence
 
+### P351 — keyboard access within Collections
+
+- Native game-grid activation and full-title accessibility now match Home; preserve collection
+  index Buttons and secondary context actions. Use exact collection membership, not Home filters;
+  refuse hidden/removed/busy-model/stale-grid/account/logout activation and retain focused children.
+- Independent review, strict private mapped native-focus/cursor/activation/accessibility/lifecycle
+  regression, formatting/Clippy/build PASS. Physical-key live corroboration remains pending.
+
 ### P350 — visible Storage recheck state
 
 - Disable/relabel Recheck while its selected inspection is pending; clear old legend totals with
