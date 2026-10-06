@@ -789,14 +789,6 @@ fn format_remaining(seconds: u64) -> String {
     }
 }
 
-fn depot_install_fraction(state: &str, written: u64, total: u64) -> f64 {
-    match state {
-        "complete" => 1.0,
-        _ if total > 0 => (written as f64 / total as f64).clamp(0.0, 1.0),
-        _ => 0.0,
-    }
-}
-
 fn depot_phase_progress(
     operation: &crate::installation::DepotOperationSnapshot,
 ) -> (&'static str, u64, Option<u64>) {
@@ -806,10 +798,18 @@ fn depot_phase_progress(
         "calculating" => return ("Calculating download size", 0, None),
         "extracting" => "Extracting game files",
         "verifying" | "verifying_existing" => "Checking game files",
-        "dependencies" => "Downloading components",
+        "dependencies" => "Component data processed",
         _ => {
             return (
-                if operation
+                if operation.download_total_bytes == Some(0) && operation.bytes_downloaded == 0 {
+                    "No Depot file download required"
+                } else if operation.download_total_bytes.is_none() {
+                    "Data processed"
+                } else if operation.download_total_bytes == Some(0)
+                    || !depot_active(&operation.state)
+                {
+                    "Depot files downloaded"
+                } else if operation
                     .download_total_bytes
                     .is_some_and(|total| operation.bytes_downloaded >= total)
                 {
@@ -827,6 +827,134 @@ fn depot_phase_progress(
         operation.bytes_completed,
         (operation.total_bytes > 0).then_some(operation.total_bytes),
     )
+}
+
+#[derive(Debug, PartialEq)]
+enum DepotMeter {
+    Hidden,
+    Pulse,
+    Fraction(f64),
+}
+
+#[derive(Debug, PartialEq)]
+struct DepotCounter {
+    label: &'static str,
+    detail: String,
+    meter: DepotMeter,
+}
+
+fn depot_counter_presentation(
+    operation: &crate::installation::DepotOperationSnapshot,
+) -> (DepotCounter, DepotCounter) {
+    let (label, completed, total) = depot_phase_progress(operation);
+    let finishing = matches!(
+        operation.state.as_str(),
+        "setup" | "committing" | "finalizing"
+    );
+    let processing = matches!(
+        operation.state.as_str(),
+        "extracting" | "verifying" | "verifying_existing" | "dependencies"
+    );
+    let download = DepotCounter {
+        label,
+        detail: if total == Some(0) && completed == 0 {
+            String::new()
+        } else if let Some(total) = total.filter(|total| *total > 0) {
+            format!("{} / {}", human_size(completed), human_size(total))
+        } else if completed > 0 {
+            human_size(completed)
+        } else {
+            "Not reported yet".into()
+        },
+        meter: if !depot_active(&operation.state) || finishing || operation.state == "cancelling" {
+            DepotMeter::Hidden
+        } else if let Some(total) = total.filter(|total| *total > 0) {
+            DepotMeter::Fraction(depot_download_fraction(completed, total))
+        } else if processing || total.is_none() {
+            DepotMeter::Pulse
+        } else {
+            DepotMeter::Hidden
+        },
+    };
+    let writing = matches!(operation.state.as_str(), "materializing" | "extracting");
+    let disk = DepotCounter {
+        label: if finishing {
+            "Finishing installation"
+        } else if writing {
+            "Writing game files"
+        } else {
+            "Payload writes"
+        },
+        detail: if finishing {
+            operation.setup.as_ref().map_or_else(
+                || "Working…".into(),
+                |setup| {
+                    if setup.total > 0 {
+                        format!(
+                            "{} · {} / {}",
+                            setup.component, setup.completed, setup.total
+                        )
+                    } else {
+                        setup.component.clone()
+                    }
+                },
+            )
+        } else {
+            let mut text = format!(
+                "Payload data written this run: {}",
+                human_size(operation.bytes_written)
+            );
+            if operation.total_write_bytes > 0 {
+                text.push_str(&format!(
+                    " · Full write estimate: {}",
+                    human_size(operation.total_write_bytes)
+                ));
+            }
+            text
+        },
+        meter: if writing || finishing {
+            DepotMeter::Pulse
+        } else {
+            DepotMeter::Hidden
+        },
+    };
+    (download, disk)
+}
+
+fn update_depot_header_counters(
+    named: &HashMap<glib::GString, gtk::Widget>,
+    operation: &crate::installation::DepotOperationSnapshot,
+) {
+    let (download, disk) = depot_counter_presentation(operation);
+    for (prefix, counter) in [("active-download", download), ("active-disk", disk)] {
+        if let Some(label) = named
+            .get(format!("{prefix}-label").as_str())
+            .cloned()
+            .and_downcast::<gtk::Label>()
+        {
+            label.set_label(counter.label);
+        }
+        if let Some(detail) = named
+            .get(format!("{prefix}-detail").as_str())
+            .cloned()
+            .and_downcast::<gtk::Label>()
+        {
+            detail.set_label(&counter.detail);
+            detail.set_tooltip_text(Some(&counter.detail));
+        }
+        if let Some(progress) = named
+            .get(format!("{prefix}-progress").as_str())
+            .cloned()
+            .and_downcast::<gtk::ProgressBar>()
+        {
+            progress.set_visible(counter.meter != DepotMeter::Hidden);
+            match counter.meter {
+                DepotMeter::Hidden => progress.set_fraction(0.0),
+                DepotMeter::Pulse => progress.pulse(),
+                DepotMeter::Fraction(fraction) => progress.set_fraction(fraction),
+            }
+        }
+    }
 }
 
 fn depot_download_fraction(completed: u64, total: u64) -> f64 {
@@ -1159,46 +1287,9 @@ fn active_depot_header(
         return header;
     }
     details.append(&transfer_stats(model, depot_active(&operation.state)));
-    let (phase_label, completed, total) = depot_phase_progress(operation);
-    let download_fraction = total.map_or(0.0, |total| depot_download_fraction(completed, total));
-    let download_label = if matches!(operation.state.as_str(), "extracting" | "dependencies") {
-        phase_label
-    } else if operation.state == "preparing" {
-        "Preparing download"
-    } else if operation.state == "verifying_existing" {
-        "Checking existing files"
-    } else if operation.state == "verifying" {
-        "Checking downloaded files"
-    } else if operation.state == "calculating" {
-        "Calculating download size"
-    } else if operation
-        .download_total_bytes
-        .is_some_and(|total| operation.bytes_downloaded >= total)
-    {
-        "Download complete"
-    } else {
-        phase_label
-    };
-    details.append(&labeled_progress(
-        download_label,
-        download_fraction,
-        &total.map_or_else(
-            || "Calculating…".into(),
-            |total| format!("{} / {}", human_size(completed), human_size(total)),
-        ),
-        false,
-    ));
-    let install_fraction = depot_install_fraction(
-        &operation.state,
-        operation.bytes_written,
-        operation.total_write_bytes,
-    );
-    details.append(&labeled_progress(
-        "Installing files",
-        install_fraction,
-        &format!("{:.0}%", install_fraction * 100.0),
-        true,
-    ));
+    details.append(&labeled_progress("", 0.0, "", false));
+    details.append(&labeled_progress("", 0.0, "", true));
+    update_depot_header_counters(&download_progress_widgets(header.upcast_ref()), operation);
     if let Some(message) = operation.error.as_deref() {
         let message = gtk::Label::new(Some(message));
         message.set_widget_name("active-depot-message");
@@ -1324,7 +1415,7 @@ fn depot_stage_label(state: &str) -> &'static str {
         "committing" => "INSTALLING FILES",
         "finalizing" => "FINALIZING",
         "cancelling" => "CANCELLING",
-        "dependencies" => "DOWNLOADING REQUIRED COMPONENTS",
+        "dependencies" => "PROCESSING REQUIRED COMPONENTS",
         "setup" => "SETTING UP REQUIRED COMPONENTS",
         "interrupted" => "PAUSED",
         "failed" => "FAILED",
@@ -1555,7 +1646,7 @@ fn update_depot_page_progress(w: &Widgets, model: &AppModel) {
         );
     }
     for operation in &model.depot_operations {
-        let (phase, completed, total) = depot_phase_progress(operation);
+        let (_, completed, total) = depot_phase_progress(operation);
         if let Some(detail) = named
             .get(format!("depot-detail-{}", operation.operation_id).as_str())
             .cloned()
@@ -1590,94 +1681,8 @@ fn update_depot_page_progress(w: &Widgets, model: &AppModel) {
                 progress.pulse();
             }
         }
-        if depot_active(&operation.state)
-            && named.contains_key(format!("active-depot-{}", operation.operation_id).as_str())
-        {
-            if let Some(label) = named
-                .get("active-download-label")
-                .cloned()
-                .and_downcast::<gtk::Label>()
-            {
-                label.set_label(phase);
-            }
-            if let Some(progress) = named
-                .get("active-download-progress")
-                .cloned()
-                .and_downcast::<gtk::ProgressBar>()
-            {
-                if let Some(total) = total.filter(|total| *total > 0) {
-                    progress.set_fraction(depot_download_fraction(completed, total));
-                } else {
-                    progress.pulse();
-                }
-            }
-            if let Some(detail) = named
-                .get("active-download-detail")
-                .cloned()
-                .and_downcast::<gtk::Label>()
-            {
-                detail.set_label(&total.map_or_else(
-                    || "Working…".into(),
-                    |total| format!("{} / {}", human_size(completed), human_size(total)),
-                ));
-            }
-            let install_fraction = depot_install_fraction(
-                &operation.state,
-                operation.bytes_written,
-                operation.total_write_bytes,
-            );
-            let finishing = matches!(
-                operation.state.as_str(),
-                "setup" | "committing" | "finalizing"
-            );
-            if let Some(label) = named
-                .get("active-disk-label")
-                .cloned()
-                .and_downcast::<gtk::Label>()
-            {
-                label.set_label(if finishing {
-                    "Finishing installation"
-                } else {
-                    "Writing game files"
-                });
-            }
-            if let Some(progress) = named
-                .get("active-disk-progress")
-                .cloned()
-                .and_downcast::<gtk::ProgressBar>()
-            {
-                if finishing || operation.total_write_bytes == 0 {
-                    progress.pulse();
-                } else {
-                    progress.set_fraction(install_fraction);
-                }
-            }
-            if let Some(detail) = named
-                .get("active-disk-detail")
-                .cloned()
-                .and_downcast::<gtk::Label>()
-            {
-                let text = if let Some(setup) = &operation.setup {
-                    if setup.total > 0 {
-                        format!(
-                            "{} · {} / {}",
-                            setup.component, setup.completed, setup.total
-                        )
-                    } else {
-                        setup.component.clone()
-                    }
-                } else if finishing {
-                    "Working…".to_owned()
-                } else {
-                    format!(
-                        "{} / {}",
-                        human_size(operation.bytes_written),
-                        human_size(operation.total_write_bytes)
-                    )
-                };
-                detail.set_label(&text);
-                detail.set_tooltip_text(Some(&text));
-            }
+        if named.contains_key(format!("active-depot-{}", operation.operation_id).as_str()) {
+            update_depot_header_counters(&named, operation);
         }
     }
 }
@@ -2733,13 +2738,312 @@ mod active_transfer_tests {
         assert_eq!(jobs[0].state, DownloadState::Downloading);
     }
 
+    fn counter_operation() -> crate::installation::DepotOperationSnapshot {
+        crate::installation::DepotOperationSnapshot {
+            operation_id: "counter-fixture".into(),
+            product_id: 42,
+            state: "materializing".into(),
+            bytes_completed: 40,
+            total_bytes: 100,
+            bytes_downloaded: 10,
+            download_total_bytes: Some(100),
+            bytes_written: 0,
+            total_write_bytes: 200,
+            error: Some("Synthetic diagnostic remains available.".into()),
+            setup: None,
+        }
+    }
+
     #[test]
-    fn depot_disk_progress_uses_measured_bytes() {
-        assert_eq!(depot_install_fraction("materializing", 50, 100), 0.5);
-        assert_eq!(depot_install_fraction("extracting", 200, 100), 1.0);
-        assert_eq!(depot_install_fraction("committing", 100, 100), 1.0);
-        assert_eq!(depot_install_fraction("finalizing", 100, 100), 1.0);
-        assert_eq!(depot_install_fraction("complete", 100, 100), 1.0);
+    fn depot_counter_presentation_preserves_actuals_and_phase_meaning() {
+        let mut operation = counter_operation();
+        for (written, estimate) in [(0, 200), (50, 200), (300, 200), (50, 0)] {
+            operation.bytes_written = written;
+            operation.total_write_bytes = estimate;
+            let (download, disk) = depot_counter_presentation(&operation);
+            assert_eq!(download.detail, "10 B / 100 B");
+            assert_eq!(download.meter, DepotMeter::Fraction(0.1));
+            assert_eq!(disk.label, "Writing game files");
+            assert_eq!(disk.meter, DepotMeter::Pulse);
+            assert_eq!(
+                disk.detail,
+                format!(
+                    "Payload data written this run: {written} B{}",
+                    if estimate == 0 {
+                        String::new()
+                    } else {
+                        format!(" · Full write estimate: {estimate} B")
+                    }
+                )
+            );
+        }
+        operation.download_total_bytes = Some(0);
+        operation.bytes_downloaded = 0;
+        let (download, _) = depot_counter_presentation(&operation);
+        assert_eq!(download.label, "No Depot file download required");
+        assert_eq!(download.detail, "");
+        assert_eq!(download.meter, DepotMeter::Hidden);
+        operation.bytes_downloaded = 10;
+        let (download, _) = depot_counter_presentation(&operation);
+        assert_eq!(download.label, "Depot files downloaded");
+        assert_eq!(download.detail, "10 B");
+        operation.download_total_bytes = None;
+        assert_eq!(
+            depot_counter_presentation(&operation).0.label,
+            "Data processed"
+        );
+        operation.bytes_downloaded = 0;
+        assert_eq!(
+            depot_counter_presentation(&operation).0.detail,
+            "Not reported yet"
+        );
+        for phase in [
+            "dependencies",
+            "verifying",
+            "verifying_existing",
+            "extracting",
+        ] {
+            operation.state = phase.into();
+            operation.bytes_downloaded = 40; // Also includes cached component acquisition.
+            let (download, disk) = depot_counter_presentation(&operation);
+            assert_eq!(download.detail, "40 B / 100 B");
+            assert_eq!(download.meter, DepotMeter::Fraction(0.4));
+            assert_eq!(
+                disk.meter,
+                if phase == "extracting" {
+                    DepotMeter::Pulse
+                } else {
+                    DepotMeter::Hidden
+                }
+            );
+            if phase == "dependencies" {
+                assert_eq!(download.label, "Component data processed");
+                assert_eq!(depot_stage_label(phase), "PROCESSING REQUIRED COMPONENTS");
+            }
+        }
+        operation.setup = Some(crate::installation::DepotSetupProgress {
+            component: "Fixture component".into(),
+            completed: 1,
+            total: 3,
+        });
+        for phase in ["setup", "committing", "finalizing"] {
+            operation.state = phase.into();
+            let (download, disk) = depot_counter_presentation(&operation);
+            assert_eq!(download.meter, DepotMeter::Hidden);
+            assert_eq!(disk.label, "Finishing installation");
+            assert_eq!(disk.detail, "Fixture component · 1 / 3");
+            assert_eq!(disk.meter, DepotMeter::Pulse);
+        }
+        operation.setup = None;
+        for phase in [
+            "queued",
+            "preparing",
+            "calculating",
+            "downloading",
+            "interrupted",
+            "failed",
+            "paused",
+            "cancelled",
+            "abandoned",
+            "complete",
+            "cancelling",
+        ] {
+            operation.state = phase.into();
+            let (download, disk) = depot_counter_presentation(&operation);
+            assert_eq!(disk.label, "Payload writes");
+            assert_eq!(disk.meter, DepotMeter::Hidden);
+            if !depot_active(phase) || phase == "cancelling" {
+                assert_eq!(download.meter, DepotMeter::Hidden);
+            }
+            if matches!(phase, "failed" | "interrupted") {
+                assert_eq!(download.label, "Data processed");
+                assert_eq!(download.detail, "40 B");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "private HOME/all XDG/TMP, GTK and D-Bus; inert snapshots only"]
+    fn depot_featured_counter_presentation_matches_in_place_updates() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p374-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let until = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < until {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn assert_counters(
+            header: &gtk::Widget,
+            operation: &crate::installation::DepotOperationSnapshot,
+        ) {
+            let (download, disk) = depot_counter_presentation(operation);
+            for (prefix, expected) in [("active-download", download), ("active-disk", disk)] {
+                let label = find_named_descendant(header, &format!("{prefix}-label"))
+                    .and_downcast::<gtk::Label>()
+                    .unwrap();
+                let detail = find_named_descendant(header, &format!("{prefix}-detail"))
+                    .and_downcast::<gtk::Label>()
+                    .unwrap();
+                let progress = find_named_descendant(header, &format!("{prefix}-progress"))
+                    .and_downcast::<gtk::ProgressBar>()
+                    .unwrap();
+                assert_eq!(label.text(), expected.label);
+                assert_eq!(detail.text(), expected.detail);
+                assert_eq!(
+                    detail.tooltip_text().as_deref(),
+                    Some(expected.detail.as_str())
+                );
+                assert_eq!(progress.get_visible(), expected.meter != DepotMeter::Hidden);
+                match expected.meter {
+                    DepotMeter::Fraction(fraction) => assert_eq!(progress.fraction(), fraction),
+                    DepotMeter::Hidden => assert_eq!(progress.fraction(), 0.0),
+                    DepotMeter::Pulse => {}
+                }
+            }
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.DepotCountersTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(
+            &app,
+            &Config {
+                window_width: 1100,
+                window_height: 600,
+                ..Config::default()
+            },
+        );
+        widgets.content.set_visible_child_name("downloads");
+        widgets.window.present();
+        let outer = widgets
+            .downloads
+            .ancestor(gtk::ScrolledWindow::static_type())
+            .and_downcast::<gtk::ScrolledWindow>()
+            .unwrap();
+        let mut model = AppModel {
+            depot_operations: vec![counter_operation()],
+            ..AppModel::default()
+        };
+        for phase in [
+            "materializing",
+            "dependencies",
+            "verifying_existing",
+            "extracting",
+            "setup",
+            "interrupted",
+            "failed",
+        ] {
+            model.depot_operations[0].state = phase.into();
+            model.depot_operations[0].total_write_bytes = u64::MAX;
+            model.depot_operations[0].setup =
+                (phase == "setup").then(|| crate::installation::DepotSetupProgress {
+                    component: "Fixture component".into(),
+                    completed: 1,
+                    total: 3,
+                });
+            rebuild_downloads_page(&widgets, &model);
+            let header = find_named_descendant(
+                widgets.downloads.upcast_ref(),
+                "active-depot-counter-fixture",
+            )
+            .unwrap();
+            let footer = header.last_child().unwrap().last_child().unwrap();
+            let buttons = std::iter::successors(footer.first_child(), |child| child.next_sibling())
+                .filter_map(|child| child.downcast::<gtk::Button>().ok())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                buttons
+                    .iter()
+                    .map(|button| button.tooltip_text().unwrap().to_string())
+                    .collect::<Vec<_>>(),
+                if depot_active(phase) {
+                    vec!["Pause"]
+                } else {
+                    vec!["Resume", "Cancel permanently"]
+                }
+            );
+            wait(|| {
+                buttons
+                    .iter()
+                    .all(|button| button.is_mapped() && button.width() > 0)
+                    && outer.height() > 0
+            });
+            assert_counters(&header, &model.depot_operations[0]);
+            update_depot_page_progress(&widgets, &model);
+            assert_counters(&header, &model.depot_operations[0]);
+            for button in &buttons {
+                let bounds = button.compute_bounds(&outer).unwrap();
+                assert!(bounds.x() >= 0.0 && bounds.y() >= 0.0);
+                assert!(bounds.x() + bounds.width() <= outer.width() as f32);
+                assert!(bounds.y() + bounds.height() <= outer.height() as f32);
+            }
+            // Actual updater must retire activity on this same header, before any rebuild.
+            for next in ["materializing", "setup", "interrupted", "failed"] {
+                model.depot_operations[0].state = next.into();
+                update_depot_page_progress(&widgets, &model);
+                assert_counters(&header, &model.depot_operations[0]);
+                assert_eq!(
+                    find_named_descendant(
+                        widgets.downloads.upcast_ref(),
+                        "active-depot-counter-fixture"
+                    )
+                    .as_ref(),
+                    Some(&header)
+                );
+            }
+            let diagnostic = find_named_descendant(&header, "active-depot-message")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            assert_eq!(diagnostic.text(), "Synthetic diagnostic remains available.");
+            assert!(diagnostic.is_selectable());
+            assert!(buttons.iter().all(|button| button.is_mapped()));
+        }
+        model.depot_operations[0].state = "complete".into();
+        rebuild_downloads_page(&widgets, &model);
+        assert!(
+            find_named_descendant(
+                widgets.downloads.upcast_ref(),
+                "active-depot-counter-fixture"
+            )
+            .is_none()
+        );
+        assert!(
+            find_named_descendant(
+                widgets.downloads.upcast_ref(),
+                "depot-detail-counter-fixture"
+            )
+            .is_some()
+        );
+        assert_eq!(
+            widgets.content.visible_child_name().as_deref(),
+            Some("downloads")
+        );
+        assert!(widgets.window.visible_dialog().is_none());
+        widgets.window.destroy();
     }
 
     #[test]

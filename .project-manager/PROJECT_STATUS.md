@@ -4,6 +4,11 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P374 independent review, six focused private counter/phase/constructor-update/diagnostic
+  regressions, compile/fmt/Clippy PASS. Downloads now shares truthful write/estimate and
+  phase activity presentation across initial and refreshed headers. Real transfer behavior
+  unchanged. P375 diagnostic and P376 branch-forget assessment remain isolated/unimplemented.
+
 - P372 independent review and three focused private fixtures PASS: metadata Retry lifetime,
   unchanged locked-DB cached loader, and cloud action sessions (p372-qg0zylkz,
   p369-0a7d8pkw,p267-3kq6nmtf). Compile/fmt/Clippy PASS. No actual cloud discovery or save
@@ -21,11 +26,11 @@ Last meaningful update: 2026-10-06.
   review PASS; awaits integration. P372 isolated implementation underway after reviewer handoff.
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD698bd22. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEADec4a91f. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve13GB of40GB
   test allowance for Gungeon/Coffee Talk plus under2GB BIT.TRIP Runner (official100MB requirement).
   No push, PR, package, version or schema change.
-- Delivered45 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered46 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage

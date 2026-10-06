@@ -29,12 +29,23 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P374 actual Downloads constructor/updater counter parity and constrained action layout fixture
+  PASS (/tmp/ludomere-p374-aulqb_j1), plus pure matrix (p374-2cemoaa_), existing processing/
+  persisted-count tests (p374-t5ruwpfb,p374-_m65czif) and full diagnostic layout/refresh tests
+  (p333-pkdlxdr6,p326-hx1yk1ql). Independent review/compile/fmt/Clippy PASS. Separate actual
+  writes/full estimate replace misleading write percent; writing activity only in relevant
+  phases, valid local phase fractions retained, inactive meters stop, constructor and updates
+  share labels/full tooltips. Backend counters/actions/rates/ETA unchanged; no live benchmark.
+  Reviewer caught test-only wrong active-footer button assumption before runtime; corrected to
+  exact phase-specific existing controls, retaining visibility and geometry assertions.
+
 - P372 original-session metadata Retry, pre-spawn activity and weak page/window result lifetime
   independently reviewed and verified by actual-handler inert fixture (/tmp/ludomere-p372-qg0zylkz).
   P369 local loader (/tmp/ludomere-p369-0a7d8pkw) and P267 cloud actions
   (/tmp/ludomere-p267-3kq6nmtf) regressions PASS; compile/fmt/Clippy PASS. Terminal receiver
   retirement precedes widget updates and Retry unlock, preventing reentrant old-result overwrite.
   No actual discovery/cloud save access. Broader location override race remains separate.
+  Commitec4a91f and exact post-commit build PASS;46 separate audit commits built individually.
 
 - On5a05fe8 Gungeon's2.1MB-catalog wallpaper uses an Extras-only destination chooser with the
   full configured path and working Download action. Actual1,732,183B ZIP lands under

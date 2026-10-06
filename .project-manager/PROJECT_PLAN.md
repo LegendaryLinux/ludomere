@@ -197,12 +197,13 @@
   SQLite/deletes on GTK without originating session/activity guard. Source-only bounded proposal
   for asynchronous visible feedback and stale/reset admission, preserving branch selection and
   Switch exclusion. No real credentials/data, keyring access, implementation or Cargo yet.
-- P375 (in_progress diagnosis, performance_audit): reproducible single GTK ancestor critical
+- P375 (in_progress diagnostic fixture, performance_audit; reviewer file_summary): repeated single GTK ancestor critical
   around Coffee Talk Repair confirmation-to-components transition onb2629ce and5a05fe8,
-  with no observed failure. Source-only lifecycle diagnosis and proposed inert reproduction;
-  no speculative fix, actual data/desktop/log access, Cargo or helper execution. Root owns
-  actual sanitized timing; wait for evidence before implementation or dismissal.
-- P374 (in_progress, ui_critic; independent reviewer performance_audit): source-confirmed
+  with no observed failure. Independently approved one-stage animation-enabled actual-menu
+  diagnostic in isolated chooser.rs, fail-closed inspection and preparation, weak focus
+  observation; no product fix, actual data/desktop/log access, Cargo or helper execution.
+  Root owns runtime and actual timing; wait for evidence before correction or dismissal.
+- P374 (complete, ui_critic; independent reviewer performance_audit): source-confirmed
   Downloads write fraction uses full payload estimate although repairs reuse bytes. Assess
   constructor/updater parity, truthful actual-write/estimate wording and phase-scoped activity
   without changing counters or control policy. Independently approved downloads.rs-only fix:
