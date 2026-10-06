@@ -33,6 +33,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P381 final preview: real wallpaper delete/redownload completes with status on its own row;
+  Play/alternate/gear/favorite and selected Files tab fit at1150x700 and1330x850. Hidden status
+  has no empty second row. Evidence detail-preview3-status-fixed.png and -status-wide.png.
+  Existing status/action fixture PASS (p341-ssfa9q3a) and Files renderer PASS (p354-aoorftjj),
+  final fmt/Clippy/compile/build PASS. Earlier actual native keyboard and filter gates retained.
+  App-local GDK_DPI_SCALE attempt did not establish visibly enlarged text, so no full-app enlarged
+  font claim: only separate native-tab1.35font diagnostic covers that variation. Actual active/
+  failed status was not newly manufactured; retained synthetic state tests cover its controls.
+  These finite limits remain recorded; no exhaustive responsive/accessibility readiness claim.
+
+- Live P382b on3146197: Gungeon manual Check for Updates returns No update is available with
+  no unusable Update button or spinner; alternate-action popup closes correctly. Screenshot
+  manual-update-live-fixed.png. Closed normally; no work queued. P383 commit8554fc0 exact
+  post-commit build PASS, bringing55 separate built audit commits.
+
 - P383 focused gates PASS: exact unchanged-predicate cases (p296-k1i_y819), actual held-worker
   completion/deletion/reentry/session fixture (p296-jf1ufpq1), retained unmounted proxy chooser
   (p296-hoqgb97x). Final fmt/Clippy/compile PASS. Existing nonfatal private GSettings warnings

@@ -147,7 +147,8 @@ pub(super) fn render_detail_page(
     title_row.append(&title_box);
     let action_bar = gtk::Box::new(gtk::Orientation::Horizontal, 14);
     action_bar.set_halign(gtk::Align::Fill);
-    action_bar.add_css_class("detail-action-bar");
+    let action_area = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    action_area.add_css_class("detail-action-bar");
     let local = model
         .borrow()
         .local_actions
@@ -888,7 +889,7 @@ pub(super) fn render_detail_page(
             refresh_filters(&widgets, &model.borrow());
         })
     };
-    action_bar.append(&installation_status_panel(
+    let installation_status = installation_status_panel(
         game.product_id,
         w,
         (&download_button, &primary_actions, &cloud_launch_status),
@@ -896,7 +897,7 @@ pub(super) fn render_detail_page(
         installation_was_running,
         model,
         refresh_after_install.clone(),
-    ));
+    );
     if game.parent_id.is_none() {
         action_bar.append(&activity_stat("LAST PLAYED", &last_played_value));
         action_bar.append(&activity_stat("PLAY TIME", &playtime_value));
@@ -956,12 +957,15 @@ pub(super) fn render_detail_page(
     hero.add_overlay(&title_row);
     hero.add_css_class("detail-hero-container");
     w.details.append(&hero);
-    w.details.append(&action_bar);
+    action_area.append(&action_bar);
+    action_area.append(&installation_status);
+    w.details.append(&action_area);
 
     let tabs = gtk::Stack::new();
     tabs.set_widget_name("game-tabs");
     tabs.set_transition_type(gtk::StackTransitionType::Crossfade);
     tabs.set_vhomogeneous(false);
+    tabs.set_hhomogeneous(false);
     tabs.set_vexpand(true);
     let switcher = gtk::StackSwitcher::builder()
         .stack(&tabs)
@@ -972,10 +976,18 @@ pub(super) fn render_detail_page(
     navigation.add_css_class("game-navigation");
     navigation.set_margin_start(36);
     navigation.set_margin_end(36);
-    navigation.append(&switcher);
-    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-    navigation.append(&spacer);
+    let tab_viewport = gtk::Viewport::builder()
+        .scroll_to_focus(true)
+        .child(&switcher)
+        .build();
+    let tab_scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Automatic)
+        .vscrollbar_policy(gtk::PolicyType::Never)
+        .propagate_natural_width(false)
+        .hexpand(true)
+        .child(&tab_viewport)
+        .build();
+    navigation.append(&tab_scroll);
     let external_links = [
         ("Store Page", game.links.store.as_deref()),
         ("Community Forum", game.links.forum.as_deref()),
@@ -1899,6 +1911,7 @@ fn installation_status_panel(
     panel.add_css_class("hero-install-status");
     panel.set_visible(false);
     let text = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    text.set_hexpand(true);
     let heading = gtk::Label::new(None);
     heading.set_xalign(0.0);
     heading.set_single_line_mode(true);

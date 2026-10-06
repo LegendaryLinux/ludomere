@@ -2,6 +2,12 @@
 
 ## R111 interactive audit
 
+- P385 (in_progress, file_summary; proposal/reviewer performance_audit): close the selected
+  Files popover before forwarding its retained source action, preserving direct/unmounted proxies.
+  Root observed first confirmation click dismissing the old popup; cause is not yet proven.
+  Own isolated files.rs builder and existing private handoff fixtures only; weak popover capture,
+  no focus/delay workaround or callback policy changes. Root actual pointer verification required.
+
 - P383 (complete, file_summary; proposal/reviewer performance_audit): move Files completion
   plausibility checks off GTK without changing the predicate, transfer events or unmounted proxy
   contract. Own isolated files.rs only; tracked request-local validation and truthful finalizing/
@@ -217,7 +223,7 @@
   schema or destination changes. Reviewed smallest optionA: label Default offline installer
   folder, typed configuration presence for Not configured (base/DLC), direct singular wording.
   Own isolated details.rs/library.rs existing expectations only; no new installed-folder feature.
-- P381 (in_progress implementation, performance_audit; proposal file_summary/reviewer ui_critic): actual app at minimum-width window clips gear/
+- P381 (complete for verified layout, performance_audit; proposal file_summary/reviewer ui_critic): actual app at minimum-width window clips gear/
   favorite controls and right-side detail tabs while wide hero/status strip remains. Approved
   app-only screenshot gungeon-narrow-window.png and source review; propose bounded responsive
   presentation preserving primary actions/tabs/keyboard/scroll behavior. Independently approved

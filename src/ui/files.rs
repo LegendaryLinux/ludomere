@@ -2529,14 +2529,16 @@ fn remote_file_collection(
     let filter_rows: InstallerFilterRows = Rc::new(RefCell::new(Vec::new()));
     let collection = gtk::Box::new(gtk::Orientation::Vertical, 0);
     collection.add_css_class("file-collection");
-    let header = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let header = gtk::Box::new(gtk::Orientation::Vertical, 10);
     header.add_css_class("file-collection-header");
-    header.append(&gtk::Image::from_icon_name(icon_name));
+    let heading_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    header.append(&heading_row);
+    heading_row.append(&gtk::Image::from_icon_name(icon_name));
     let heading = gtk::Label::new(Some(title));
     heading.set_xalign(0.0);
     heading.set_hexpand(true);
     heading.add_css_class("section-title");
-    header.append(&heading);
+    heading_row.append(&heading);
     let filter_controls = context.installer_filters.map(|defaults| {
         let mut languages = files
             .iter()
@@ -2561,27 +2563,44 @@ fn remote_file_collection(
                 })
                 .unwrap_or(0) as u32,
         );
-        header.append(&language);
-        let platforms = gtk::Box::new(gtk::Orientation::Horizontal, 7);
-        platforms.add_css_class("installer-platform-filters");
         let windows = gtk::CheckButton::with_label("Windows");
         let linux = gtk::CheckButton::with_label("Linux");
         let macos = gtk::CheckButton::with_label("macOS");
         windows.set_active(defaults.windows);
         linux.set_active(defaults.linux);
         macos.set_active(defaults.macos);
-        platforms.append(&windows);
-        platforms.append(&linux);
-        platforms.append(&macos);
-        header.append(&platforms);
+        let filters = gtk::FlowBox::builder()
+            .homogeneous(false)
+            .selection_mode(gtk::SelectionMode::None)
+            .min_children_per_line(1)
+            .max_children_per_line(4)
+            .column_spacing(10)
+            .row_spacing(6)
+            .build();
+        filters.add_css_class("installer-platform-filters");
+        for control in [
+            language.clone().upcast::<gtk::Widget>(),
+            windows.clone().upcast(),
+            linux.clone().upcast(),
+            macos.clone().upcast(),
+        ] {
+            filters.insert(
+                &gtk::FlowBoxChild::builder()
+                    .focusable(false)
+                    .child(&control)
+                    .build(),
+                -1,
+            );
+        }
+        header.append(&filters);
         (language, language_list, windows, linux, macos)
     });
     let downloaded = grouped.iter().filter(|group| group.downloaded).count();
     let count_text = format!("{downloaded}/{} Downloaded", grouped.len());
     let count = gtk::Label::new(Some(&count_text));
     count.add_css_class("dim-label");
-    header.append(&count);
-    header.append(&prepared_folder_button(
+    heading_row.append(&count);
+    heading_row.append(&prepared_folder_button(
         &format!("Open {title} folder"),
         context.folder,
         context.window,
