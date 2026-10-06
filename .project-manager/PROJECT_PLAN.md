@@ -193,12 +193,16 @@
   activity/lifetime fixture; preserve cached offline loader and all availability controls. No
   actual cloud/data/helper access, new backend policy or override-race changes. Author starts
   after finishing P370b independent review; root owns runtime gates.
+- P378 (in_progress assessment, ui_critic): human-style critique of root-approved app-only
+  downloads-real-history.png plus Downloads source. Assess idle/history readability, spacing,
+  action affordances and keyboard/accessibility; concrete bounded proposals only, no redesign
+  or implementation. No other actual data/screenshots/desktop/log access or runtime.
 - P377 (complete, performance_audit; reviewer file_summary): two setup-stage wording corrections
   in chooser.rs only. Fresh install visibly says Saving repaired files; replace with Saving
   game files. Cached prerequisite processing must say Preparing required components rather
   than imply all bytes download. No phase/progress logic change, new abstraction or new tests;
   existing setup fixture/fmt/Clippy/build are proportional. Root coordinates sequential gate.
-- P376 (in_progress, ui_critic; reviewer file_summary): approved GTK-blocking Branch Forget
+- P376 (complete, ui_critic; reviewer file_summary): approved GTK-blocking Branch Forget
   correction in isolated game_settings.rs. Track SQLite-only worker, preserve raw-generation
   offline forgetting with explicit identity, local Switch exclusion/Started and current-selection
   restore. Stale eligibility persists across selection; refresh must re-read after signal-emitting

@@ -33,10 +33,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P376 reviewed worker/eligibility correction passes actual synthetic SQLite reserved-lock,
+  heartbeat, exact-key preservation, raw-session, activity and reentrant controls fixture
+  (/tmp/ludomere-p376-cdf3kkr1), retained P363 branch controls (/tmp/ludomere-p363-1pvjukij),
+  compilation/fmt/Clippy. New Forget IO is off GTK; no keyring/decrypt/network or global account
+  mutex added. Current-selection restoration and Started handoff preserve busy feedback.
+  Already-issued DELETE cannot be undone by revocation; no cross-window serialization claim.
+
 - P377 independently reviewed two-literal setup-stage correction verified by existing mapped
   setup report regression (/tmp/ludomere-p332-wglbg_xg), fmt/Clippy/compile PASS. Fresh installs
   now say Saving game files; required-component preparation no longer implies every processed
   byte is downloaded. No phase/worker/progress/callback changes or new test scaffolding.
+  Commitd5d3c51 and exact post-commit build PASS;48 separate audit commits built individually.
 - Reinstalled BIT.TRIP renders its title screen ona3641c1; normal quit removes its window and
   returns Play/search with2min retained playtime. Notifications records uninstall/setup results,
   without transient Checking Windows requirements/Ready entries (live P373 confirmation).
@@ -58,6 +66,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   (/tmp/ludomere-p375-osbekox5) fails at actual confirmation Start mapped/focus assertion after
   inspection release. No ancestry critical before that boundary (only known harness GSettings
   warnings). Author diagnosis requested; no assertion weakening, product fix or main integration.
+  Corrective instrumentation retains strict actual Start mapping/focus, waits specifically for
+  the response control and records safe frame/ancestor metadata. Independent review/compile PASS.
+  Complete exact diagnostic PASS (/tmp/ludomere-p375-sak6uovy), no target ancestry warning;
+  full actual callback chain reached with fail-closed synthetic results. Broadway frame count
+  advances1to3 and sheet opacity0 at observation; this is not proof of live X11 animation
+  coverage. Xvfb absent, no package installed. Diagnostic remains isolated, no speculative fix.
 
 - P374 actual Downloads constructor/updater counter parity and constrained action layout fixture
   PASS (/tmp/ludomere-p374-aulqb_j1), plus pure matrix (p374-2cemoaa_), existing processing/

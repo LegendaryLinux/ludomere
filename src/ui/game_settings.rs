@@ -427,6 +427,7 @@ pub(super) fn show_game_settings(
         actions.add_suffix(&switch);
         branch_group.add(&actions);
         wire_branch_actions(
+            &window,
             model,
             game,
             installed_game,
@@ -1411,6 +1412,29 @@ enum BranchActionState {
     Started,
 }
 
+#[cfg(test)]
+struct TestBranchForget {
+    before_open: mpsc::Receiver<()>,
+    entered: mpsc::Sender<()>,
+    finish: mpsc::Receiver<()>,
+    error: Option<String>,
+    disconnect: bool,
+}
+
+#[cfg(test)]
+struct TestBranchControls {
+    state: Rc<std::cell::Cell<BranchActionState>>,
+    refresh: Rc<dyn Fn()>,
+    started: Rc<dyn Fn()>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_BRANCH_FORGET: RefCell<Option<VecDeque<TestBranchForget>>> = const { RefCell::new(None) };
+    static TEST_BRANCH_CONTROLS: RefCell<Option<TestBranchControls>> = const { RefCell::new(None) };
+}
+
+#[allow(clippy::too_many_arguments)]
 fn connect_branch_selection(
     branches: &[Option<String>],
     installed_branch: Option<&Option<String>>,
@@ -1418,6 +1442,8 @@ fn connect_branch_selection(
     switch: &gtk::Button,
     forget: &gtk::Button,
     state: &Rc<std::cell::Cell<BranchActionState>>,
+    forget_pending: &Rc<std::cell::Cell<bool>>,
+    refusal: Rc<dyn Fn() -> Option<&'static str>>,
 ) -> Rc<dyn Fn()> {
     let refresh: Rc<dyn Fn()> = {
         let branches = branches.to_vec();
@@ -1426,14 +1452,28 @@ fn connect_branch_selection(
         let switch = switch.downgrade();
         let forget = forget.downgrade();
         let state = state.clone();
+        let forget_pending = forget_pending.clone();
         Rc::new(move || {
             let (Some(selector), Some(switch), Some(forget)) =
                 (selector.upgrade(), switch.upgrade(), forget.upgrade())
             else {
                 return;
             };
-            let branch = branches.get(selector.selected() as usize);
-            let switch_reason = match state.get() {
+            let snapshot = || {
+                (
+                    selector.selected(),
+                    state.get(),
+                    forget_pending.get(),
+                    refusal(),
+                )
+            };
+            'refresh: loop {
+                let current = snapshot();
+                let branch = branches.get(current.0 as usize);
+                let busy = current.3.or(current
+                    .2
+                    .then_some("Wait for the saved password to be forgotten."));
+                let switch_reason = busy.or(match current.1 {
                 BranchActionState::Preparing => Some("Wait for branch preparation to finish."),
                 BranchActionState::Started => Some(
                     "Branch switch already started. Close and reopen Properties after it finishes.",
@@ -1445,20 +1485,28 @@ fn connect_branch_selection(
                     }
                     Some(_) => None,
                 },
-            };
-            let forget_reason = if state.get() == BranchActionState::Preparing {
-                Some("Wait for branch preparation to finish before forgetting a password.")
-            } else {
-                match branch {
-                    None => Some("Choose a named branch before forgetting its password."),
-                    Some(None) => Some("Master does not use a saved branch password."),
-                    Some(Some(_)) => None,
+            });
+                let forget_reason = busy.or(if current.1 == BranchActionState::Preparing {
+                    Some("Wait for branch preparation to finish before forgetting a password.")
+                } else {
+                    match branch {
+                        None => Some("Choose a named branch before forgetting its password."),
+                        Some(None) => Some("Master does not use a saved branch password."),
+                        Some(Some(_)) => None,
+                    }
+                });
+                for (button, reason) in [(&switch, switch_reason), (&forget, forget_reason)] {
+                    button.set_tooltip_text(reason);
+                    if snapshot() != current {
+                        continue 'refresh;
+                    }
+                    button.set_sensitive(reason.is_none());
+                    if snapshot() != current {
+                        continue 'refresh;
+                    }
                 }
-            };
-            switch.set_sensitive(switch_reason.is_none());
-            switch.set_tooltip_text(switch_reason);
-            forget.set_sensitive(forget_reason.is_none());
-            forget.set_tooltip_text(forget_reason);
+                break;
+            }
         })
     };
     selector.connect_selected_notify({
@@ -1471,6 +1519,7 @@ fn connect_branch_selection(
 
 #[allow(clippy::too_many_arguments)]
 fn wire_branch_actions(
+    window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
     game: &DetailPageModel,
     installed: &crate::domain::InstalledGame,
@@ -1486,10 +1535,44 @@ fn wire_branch_actions(
         .borrow()
         .account_profile
         .as_ref()
-        .map(|profile| profile.user_id.clone())
-        .unwrap_or_default();
+        .map(|profile| profile.user_id.clone());
     let product_id = game.product_id;
+    let session = (online::account_session(), auth::session());
+    let epoch = model.borrow().account_epoch;
+    let closed = Rc::new(std::cell::Cell::new(false));
+    window.connect_close_request({
+        let closed = closed.clone();
+        move |_| {
+            closed.set(true);
+            glib::Propagation::Proceed
+        }
+    });
+    let refusal: Rc<dyn Fn() -> Option<&'static str>> = {
+        let model = Rc::downgrade(model);
+        let user_id = user_id.clone();
+        let closed = closed.clone();
+        Rc::new(move || {
+            if user_id.as_ref().is_none_or(|id| id.is_empty()) {
+                return Some("The account identity is unavailable. Reopen game settings.");
+            }
+            let current = !closed.get()
+                && session == (online::account_session(), auth::session())
+                && model.upgrade().is_some_and(|model| {
+                    model.try_borrow().is_ok_and(|state| {
+                        state.account_epoch == epoch
+                            && !state.logout_pending
+                            && state
+                                .account_profile
+                                .as_ref()
+                                .map(|profile| &profile.user_id)
+                                == user_id.as_ref()
+                    })
+                });
+            (!current).then_some("The account changed. Reopen game settings.")
+        })
+    };
     let action_state = Rc::new(std::cell::Cell::new(BranchActionState::Idle));
+    let forget_pending = Rc::new(std::cell::Cell::new(false));
     let refresh_actions = connect_branch_selection(
         &branches,
         marker.galaxy_depot.as_ref().map(|depot| &depot.branch),
@@ -1497,14 +1580,60 @@ fn wire_branch_actions(
         &switch,
         &forget,
         &action_state,
+        &forget_pending,
+        refusal.clone(),
     );
+    let switch_started: Rc<dyn Fn()> = {
+        let action_state = action_state.clone();
+        let status = status.downgrade();
+        let refresh_actions = refresh_actions.clone();
+        Rc::new(move || {
+            action_state.set(BranchActionState::Started);
+            if let Some(status) = status.upgrade() {
+                status.set_label("Branch switch started.");
+            }
+            refresh_actions();
+        })
+    };
+    #[cfg(test)]
+    if TEST_BRANCH_FORGET.with(|requests| requests.borrow().is_some()) {
+        TEST_BRANCH_CONTROLS.with(|controls| {
+            *controls.borrow_mut() = Some(TestBranchControls {
+                state: action_state.clone(),
+                refresh: refresh_actions.clone(),
+                started: switch_started.clone(),
+            })
+        });
+    }
     {
         let branches = branches.clone();
-        let selector = selector.clone();
-        let status = status.clone();
-        let user_id = user_id.clone();
+        let selector = selector.downgrade();
+        let status = status.downgrade();
+        let window = window.downgrade();
         let action_state = action_state.clone();
-        forget.connect_clicked(move |_| {
+        let forget_pending = forget_pending.clone();
+        let refusal = refusal.clone();
+        let refresh_actions = refresh_actions.clone();
+        forget.connect_clicked(move |button| {
+            let (Some(window), Some(selector), Some(status)) =
+                (window.upgrade(), selector.upgrade(), status.upgrade())
+            else {
+                return;
+            };
+            if forget_pending.get()
+                || closed.get()
+                || !window.is_visible()
+                || button.root().as_ref() != Some(window.upcast_ref())
+                || selector.root().as_ref() != Some(window.upcast_ref())
+                || status.root().as_ref() != Some(window.upcast_ref())
+            {
+                return;
+            }
+            if let Some(reason) = refusal() {
+                status.set_label(reason);
+                refresh_actions();
+                return;
+            }
             if action_state.get() == BranchActionState::Preparing {
                 status.set_label(
                     "Wait for branch preparation to finish before forgetting a password.",
@@ -1519,12 +1648,123 @@ fn wire_branch_actions(
                 status.set_label("Master does not use a saved branch password.");
                 return;
             };
-            match StateStore::open().and_then(|store| {
-                crate::gog::depot_service::forget_one(&store, &user_id, product_id, branch)
-            }) {
-                Ok(()) => status.set_label("Saved branch password forgotten."),
-                Err(error) => status.set_label(&format!("Could not forget password: {error}")),
+            let branch = branch.clone();
+            forget_pending.set(true);
+            refresh_actions();
+            status.remove_css_class("error");
+            status.set_label("Forgetting saved branch password…");
+            let (sender, receiver) = mpsc::channel();
+            match crate::profile_reset::begin_activity("forgetting a saved branch password") {
+                Err(error) => {
+                    let _ = sender.send(Err(format!("{error:#}")));
+                }
+                Ok(activity) => {
+                    let user_id = user_id.clone().unwrap();
+                    let branch = branch.clone();
+                    #[cfg(test)]
+                    let fixture = TEST_BRANCH_FORGET.with(|requests| {
+                        requests.borrow_mut().as_mut().map(|requests| {
+                            requests
+                                .pop_front()
+                                .expect("missing inert branch forget request")
+                        })
+                    });
+                    std::thread::spawn(move || {
+                        let result = (|| -> anyhow::Result<()> {
+                            let _activity = activity;
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                fixture.before_open.recv_timeout(Duration::from_secs(10))?;
+                            }
+                            anyhow::ensure!(
+                                session == (online::account_session(), auth::session()),
+                                "The account changed before forgetting the password."
+                            );
+                            let store = StateStore::open()?;
+                            anyhow::ensure!(
+                                session == (online::account_session(), auth::session()),
+                                "The account changed before forgetting the password."
+                            );
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                fixture.entered.send(()).ok();
+                                if let Some(error) = &fixture.error {
+                                    anyhow::bail!("{error}");
+                                }
+                            }
+                            crate::gog::depot_service::forget_one(
+                                &store, &user_id, product_id, &branch,
+                            )?;
+                            #[cfg(test)]
+                            if let Some(fixture) = fixture.as_ref() {
+                                fixture.finish.recv_timeout(Duration::from_secs(10))?;
+                            }
+                            Ok(())
+                        })();
+                        #[cfg(test)]
+                        if fixture.as_ref().is_some_and(|fixture| fixture.disconnect) {
+                            return;
+                        }
+                        let _ = sender.send(result.map_err(|error| format!("{error:#}")));
+                    });
+                }
             }
+            let button = button.downgrade();
+            let window = window.downgrade();
+            let selector = selector.downgrade();
+            let status = status.downgrade();
+            let closed = closed.clone();
+            let refusal = refusal.clone();
+            let forget_pending = forget_pending.clone();
+            let refresh_actions = refresh_actions.clone();
+            let mut receiver = Some(receiver);
+            glib::timeout_add_local(Duration::from_millis(100), move || {
+                let (Some(window), Some(button), Some(selector), Some(status)) = (
+                    window.upgrade(),
+                    button.upgrade(),
+                    selector.upgrade(),
+                    status.upgrade(),
+                ) else {
+                    return glib::ControlFlow::Break;
+                };
+                if closed.get()
+                    || !window.is_visible()
+                    || button.root().as_ref() != Some(window.upcast_ref())
+                    || selector.root().as_ref() != Some(window.upcast_ref())
+                    || status.root().as_ref() != Some(window.upcast_ref())
+                {
+                    return glib::ControlFlow::Break;
+                }
+                if let Some(reason) = refusal() {
+                    drop(receiver.take());
+                    status.set_label(reason);
+                    forget_pending.set(false);
+                    refresh_actions();
+                    return glib::ControlFlow::Break;
+                }
+                let result = match receiver.as_ref().unwrap().try_recv() {
+                    Ok(result) => result,
+                    Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        Err("Password removal worker stopped unexpectedly. Try again.".into())
+                    }
+                };
+                drop(receiver.take());
+                match result {
+                    Ok(()) => status
+                        .set_label(&format!("Saved password for branch ‘{branch}’ forgotten.")),
+                    Err(error) => {
+                        status.add_css_class("error");
+                        status.set_label(&notifications::failure_message(
+                            "Could not forget password",
+                            &error,
+                        ));
+                    }
+                }
+                forget_pending.set(false);
+                refresh_actions();
+                glib::ControlFlow::Break
+            });
         });
     }
     let library_id = installed.library_id.clone();
@@ -1550,7 +1790,12 @@ fn wire_branch_actions(
     let epoch = model.borrow().account_epoch;
     let model = model.clone();
     switch.connect_clicked(move |_| {
-        if action_state.get() != BranchActionState::Idle {
+        if forget_pending.get() || action_state.get() != BranchActionState::Idle {
+            return;
+        }
+        if let Some(reason) = refusal() {
+            status.set_label(reason);
+            refresh_actions();
             return;
         }
         if model.borrow().account_epoch != epoch || model.borrow().logout_pending {
@@ -1650,6 +1895,7 @@ fn wire_branch_actions(
         let action_state = action_state.clone();
         let refresh_actions = refresh_actions.clone();
         let model = model.clone();
+        let switch_started = switch_started.clone();
         glib::timeout_add_local(Duration::from_millis(100), move || {
             if model.borrow().account_epoch != epoch
                 || model.borrow().logout_pending
@@ -1660,9 +1906,7 @@ fn wire_branch_actions(
             }
             match receiver.try_recv() {
                 Ok(Ok(_)) => {
-                    action_state.set(BranchActionState::Started);
-                    refresh_actions();
-                    status.set_label("Branch switch started.");
+                    switch_started();
                     glib::ControlFlow::Break
                 }
                 Ok(Err(error)) => {
@@ -3017,6 +3261,525 @@ mod control_tests {
     use super::*;
 
     #[test]
+    #[ignore = "private p376 HOME/all XDG/TMP, GTK and D-Bus; synthetic SQLite only"]
+    fn branch_forget_tracks_identity_activity_and_reentrant_controls() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p376-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn heartbeat() {
+            let tick = Rc::new(std::cell::Cell::new(false));
+            glib::timeout_add_local_once(Duration::from_millis(120), {
+                let tick = tick.clone();
+                move || tick.set(true)
+            });
+            wait(|| tick.get());
+        }
+        fn registered() {
+            assert!(
+                crate::profile_reset::reserve()
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("forgetting a saved branch password")
+            );
+        }
+        struct Attempt {
+            start: mpsc::Sender<()>,
+            entered: mpsc::Receiver<()>,
+            finish: mpsc::Sender<()>,
+        }
+        fn queue(error: Option<&str>, disconnect: bool) -> Attempt {
+            let (start, before_open) = mpsc::channel();
+            let (entered, capture) = mpsc::channel();
+            let (finish, release) = mpsc::channel();
+            TEST_BRANCH_FORGET.with(|requests| {
+                requests
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .push_back(TestBranchForget {
+                        before_open,
+                        entered,
+                        finish: release,
+                        error: error.map(str::to_owned),
+                        disconnect,
+                    })
+            });
+            Attempt {
+                start,
+                entered: capture,
+                finish,
+            }
+        }
+        struct Host {
+            window: adw::ApplicationWindow,
+            content: gtk::Box,
+            selector: gtk::DropDown,
+            password: adw::PasswordEntryRow,
+            status: gtk::Label,
+            switch: gtk::Button,
+            forget: gtk::Button,
+            controls: TestBranchControls,
+        }
+        fn host(app: &adw::Application, model: &Rc<RefCell<AppModel>>) -> Host {
+            let window = adw::ApplicationWindow::builder()
+                .application(app)
+                .default_width(650)
+                .default_height(400)
+                .build();
+            let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+            let selector = gtk::DropDown::from_strings(&["Master", "beta", "stable"]);
+            selector.set_selected(1);
+            let password = adw::PasswordEntryRow::new();
+            password.set_text("untouched synthetic entry");
+            let status = gtk::Label::new(Some("Initial branch status"));
+            let switch = gtk::Button::with_label("Switch");
+            let forget = gtk::Button::with_label("Forget Password");
+            for widget in [
+                selector.clone().upcast::<gtk::Widget>(),
+                password.clone().upcast(),
+                status.clone().upcast(),
+                switch.clone().upcast(),
+                forget.clone().upcast(),
+            ] {
+                content.append(&widget);
+            }
+            window.set_content(Some(&content));
+            let installed: crate::domain::InstalledGame = serde_json::from_value(serde_json::json!({
+                "product_id": 9376001, "library_id": "synthetic", "installation_directory": std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join("inert-game"),
+                "primary_executable": null, "installer_files": [], "installer_complete": true,
+                "installer_operating_system": "windows", "launch_arguments": [], "state": "installed",
+                "playtime_seconds": 0, "created_at": 1, "updated_at": 1
+            })).unwrap();
+            let mut marker = crate::installation::installation_marker_from_game(&installed, vec![]);
+            marker.galaxy_depot = Some(crate::domain::GalaxyDepotProvenance {
+                build_id: "inert".into(),
+                repository_id: "inert".into(),
+                manifest_fingerprint: "inert".into(),
+                branch: Some("beta".into()),
+                language: None,
+                architecture: None,
+                depots: vec![],
+                dlc: vec![],
+            });
+            let game = DetailPageModel::game(
+                Game {
+                    product_id: installed.product_id,
+                    ..Default::default()
+                },
+                false,
+            );
+            wire_branch_actions(
+                &window,
+                model,
+                &game,
+                &installed,
+                marker,
+                vec![None, Some("beta".into()), Some("stable".into())],
+                selector.clone(),
+                password.clone(),
+                status.clone(),
+                switch.clone(),
+                forget.clone(),
+            );
+            let controls =
+                TEST_BRANCH_CONTROLS.with(|controls| controls.borrow_mut().take().unwrap());
+            window.present();
+            wait(|| forget.is_mapped());
+            Host {
+                window,
+                content,
+                selector,
+                password,
+                status,
+                switch,
+                forget,
+                controls,
+            }
+        }
+        fn completed(host: &Host) {
+            wait(|| host.forget.is_sensitive());
+            wait(|| crate::profile_reset::reserve().is_ok());
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.BranchForgetTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let model = Rc::new(RefCell::new(AppModel {
+            account_profile: Some(auth::Profile {
+                user_id: "fixture-user".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }));
+        TEST_BRANCH_FORGET.with(|requests| *requests.borrow_mut() = Some(VecDeque::new()));
+        let store = StateStore::open().unwrap();
+        let seed = || {
+            for (user, product, branch) in [
+                ("fixture-user", 9376001, "beta"),
+                ("fixture-user", 9376001, "stable"),
+                ("other-user", 9376001, "beta"),
+                ("fixture-user", 9376002, "beta"),
+            ] {
+                store
+                    .save_galaxy_branch_credential(user, product, branch, 1, &[1, 2], &[3, 4])
+                    .unwrap();
+            }
+        };
+        seed();
+        let view = host(&app, &model);
+        let lock = rusqlite::Connection::open(crate::identity::database()).unwrap();
+        lock.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let attempt = queue(None, false);
+        attempt.start.send(()).unwrap();
+        view.forget.emit_clicked();
+        view.forget.emit_clicked();
+        attempt
+            .entered
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        registered();
+        heartbeat();
+        assert_eq!(view.status.text(), "Forgetting saved branch password…");
+        assert!(!view.switch.is_sensitive() && !view.forget.is_sensitive());
+        view.selector.set_selected(2);
+        view.switch.emit_clicked();
+        assert_eq!(view.status.text(), "Forgetting saved branch password…");
+        assert!(!view.switch.is_sensitive() && !view.forget.is_sensitive());
+        lock.execute_batch("ROLLBACK").unwrap();
+        attempt.finish.send(()).unwrap();
+        completed(&view);
+        assert!(view.status.text().contains("‘beta’ forgotten"));
+        assert_eq!(view.selector.selected(), 2);
+        assert_eq!(view.password.text(), "untouched synthetic entry");
+        assert!(
+            store
+                .galaxy_branch_credential("fixture-user", 9376001, "beta")
+                .unwrap()
+                .is_none()
+        );
+        for (user, product, branch) in [
+            ("fixture-user", 9376001, "stable"),
+            ("other-user", 9376001, "beta"),
+            ("fixture-user", 9376002, "beta"),
+        ] {
+            assert_eq!(
+                store
+                    .galaxy_branch_credential(user, product, branch)
+                    .unwrap(),
+                Some((1, vec![1, 2], vec![3, 4]))
+            );
+        }
+        // Missing rows remain idempotent and Started is not reset to Idle.
+        view.selector.set_selected(1);
+        view.controls.state.set(BranchActionState::Started);
+        (view.controls.refresh)();
+        let attempt = queue(None, false);
+        attempt.start.send(()).unwrap();
+        attempt.finish.send(()).unwrap();
+        view.forget.emit_clicked();
+        completed(&view);
+        assert!(!view.switch.is_sensitive());
+        assert!(view.controls.state.get() == BranchActionState::Started);
+        view.controls.state.set(BranchActionState::Preparing);
+        (view.controls.refresh)();
+        view.forget.emit_clicked();
+        assert!(view.status.text().contains("before forgetting"));
+        view.controls.state.set(BranchActionState::Idle);
+        (view.controls.refresh)();
+        view.selector.set_selected(0);
+        view.forget.emit_clicked();
+        assert!(view.status.text().contains("Master"));
+        let names = view
+            .selector
+            .model()
+            .and_downcast::<gtk::StringList>()
+            .unwrap();
+        names.splice(0, names.n_items(), &[]);
+        view.forget.emit_clicked();
+        assert_eq!(view.selector.selected(), gtk::INVALID_LIST_POSITION);
+        assert!(view.status.text().contains("Choose a named branch"));
+        view.window.destroy();
+
+        // Real controls reenter on both sensitivity setters; old refresh must converge.
+        for first_switch in [true, false] {
+            let view = host(&app, &model);
+            view.selector.set_selected(2);
+            view.controls.state.set(BranchActionState::Preparing);
+            (view.controls.refresh)();
+            let triggered = Rc::new(std::cell::Cell::new(false));
+            let target = if first_switch {
+                &view.switch
+            } else {
+                &view.forget
+            };
+            let observer = target.connect_sensitive_notify({
+                let triggered = triggered.clone();
+                let forget = view.forget.downgrade();
+                move |button| {
+                    if button.is_sensitive() && !triggered.replace(true) {
+                        forget.upgrade().unwrap().emit_clicked();
+                    }
+                }
+            });
+            let attempt = queue(None, false);
+            view.controls.state.set(BranchActionState::Idle);
+            (view.controls.refresh)();
+            assert!(triggered.get());
+            assert!(!view.switch.is_sensitive() && !view.forget.is_sensitive());
+            assert!(
+                view.forget
+                    .tooltip_text()
+                    .unwrap()
+                    .contains("Wait for the saved password")
+            );
+            heartbeat();
+            registered();
+            target.disconnect(observer);
+            attempt.start.send(()).unwrap();
+            attempt.finish.send(()).unwrap();
+            completed(&view);
+            view.window.destroy();
+        }
+        // A selection change inside a sensitivity observer must also update Forget eligibility.
+        let view = host(&app, &model);
+        view.selector.set_selected(2);
+        view.controls.state.set(BranchActionState::Preparing);
+        (view.controls.refresh)();
+        let observer = view.switch.connect_sensitive_notify({
+            let selector = view.selector.downgrade();
+            move |button| {
+                if button.is_sensitive() {
+                    selector.upgrade().unwrap().set_selected(0);
+                }
+            }
+        });
+        view.controls.state.set(BranchActionState::Idle);
+        (view.controls.refresh)();
+        assert_eq!(view.selector.selected(), 0);
+        assert!(view.switch.is_sensitive());
+        assert!(!view.forget.is_sensitive());
+        assert!(view.forget.tooltip_text().unwrap().contains("Master"));
+        view.switch.disconnect(observer);
+        view.window.destroy();
+
+        // The exact success handoff used by the Switch receiver may synchronously start Forget.
+        let view = host(&app, &model);
+        view.controls.state.set(BranchActionState::Preparing);
+        (view.controls.refresh)();
+        let trigger = Rc::new(std::cell::Cell::new(false));
+        let observer = view.forget.connect_sensitive_notify({
+            let trigger = trigger.clone();
+            move |button| {
+                if button.is_sensitive() && !trigger.replace(true) {
+                    button.emit_clicked();
+                }
+            }
+        });
+        let attempt = queue(None, false);
+        (view.controls.started)();
+        heartbeat();
+        assert_eq!(view.status.text(), "Forgetting saved branch password…");
+        assert!(!view.switch.is_sensitive() && !view.forget.is_sensitive());
+        view.forget.disconnect(observer);
+        attempt.start.send(()).unwrap();
+        attempt.finish.send(()).unwrap();
+        completed(&view);
+        assert!(view.controls.state.get() == BranchActionState::Started);
+        view.window.destroy();
+
+        for disconnect in [false, true] {
+            let view = host(&app, &model);
+            let attempt = queue(
+                (!disconnect).then_some("Synthetic failure access_token=synthetic-secret"),
+                disconnect,
+            );
+            attempt.start.send(()).unwrap();
+            attempt.finish.send(()).unwrap();
+            view.forget.emit_clicked();
+            completed(&view);
+            assert!(view.status.has_css_class("error"));
+            assert!(!view.status.text().contains("synthetic-secret"));
+            let retry = queue(None, false);
+            retry.start.send(()).unwrap();
+            retry.finish.send(()).unwrap();
+            view.forget.emit_clicked();
+            completed(&view);
+            assert!(view.status.text().contains("forgotten"));
+            view.window.destroy();
+        }
+        // Frozen recovery admission starts no worker and restores the current selection.
+        let view = host(&app, &model);
+        let reservation = crate::profile_reset::reserve().unwrap();
+        view.forget.emit_clicked();
+        wait(|| view.forget.is_sensitive());
+        assert!(view.status.has_css_class("error"));
+        drop(reservation);
+        view.window.destroy();
+
+        // Error restoration may reenter: retire the old result before unlocking controls.
+        let view = host(&app, &model);
+        let reservation = Rc::new(RefCell::new(Some(crate::profile_reset::reserve().unwrap())));
+        let trigger = Rc::new(std::cell::Cell::new(false));
+        let observer = view.forget.connect_sensitive_notify({
+            let reservation = reservation.clone();
+            let trigger = trigger.clone();
+            move |button| {
+                if button.is_sensitive() && !trigger.replace(true) {
+                    drop(reservation.borrow_mut().take());
+                    button.emit_clicked();
+                    button.emit_clicked();
+                }
+            }
+        });
+        let attempt = queue(None, false);
+        view.forget.emit_clicked();
+        wait(|| trigger.get());
+        heartbeat();
+        registered();
+        assert_eq!(view.status.text(), "Forgetting saved branch password…");
+        assert!(!view.forget.is_sensitive());
+        view.forget.disconnect(observer);
+        attempt.start.send(()).unwrap();
+        attempt.finish.send(()).unwrap();
+        completed(&view);
+        view.window.destroy();
+
+        for auth_change in [false, true] {
+            seed();
+            let view = host(&app, &model);
+            let attempt = queue(None, false);
+            view.forget.emit_clicked();
+            registered();
+            if auth_change {
+                auth::invalidate_session();
+            } else {
+                online::invalidate_library_session();
+            }
+            attempt.start.send(()).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            wait(|| view.status.text().contains("account changed"));
+            assert!(attempt.entered.try_recv().is_err());
+            assert!(
+                store
+                    .galaxy_branch_credential("fixture-user", 9376001, "beta")
+                    .unwrap()
+                    .is_some()
+            );
+            for selected in [2, 1, 0] {
+                view.selector.set_selected(selected);
+                assert!(!view.switch.is_sensitive() && !view.forget.is_sensitive());
+            }
+            view.forget.emit_clicked();
+            view.switch.emit_clicked();
+            assert!(crate::profile_reset::reserve().is_ok());
+            view.window.destroy();
+        }
+        // A fresh known identity can forget locally even with revoked auth and no token.
+        assert!(!auth::session_is_current(auth::session()));
+        let view = host(&app, &model);
+        let attempt = queue(None, false);
+        attempt.start.send(()).unwrap();
+        attempt.finish.send(()).unwrap();
+        view.forget.emit_clicked();
+        completed(&view);
+        assert!(view.status.text().contains("forgotten"));
+        view.window.destroy();
+
+        for mode in ["session", "identity", "logout", "close", "detach"] {
+            let view = host(&app, &model);
+            let attempt = queue(None, false);
+            attempt.start.send(()).unwrap();
+            view.forget.emit_clicked();
+            attempt
+                .entered
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap();
+            if mode == "session" {
+                model.borrow_mut().account_epoch += 1;
+            } else if mode == "identity" {
+                model.borrow_mut().account_profile.as_mut().unwrap().user_id = "other-user".into();
+            } else if mode == "logout" {
+                model.borrow_mut().logout_pending = true;
+            } else if mode == "close" {
+                view.window.set_hide_on_close(true);
+                view.window.close();
+            } else {
+                view.content.remove(&view.forget);
+            }
+            heartbeat();
+            registered();
+            let before = view.status.text();
+            attempt.finish.send(()).unwrap();
+            wait(|| crate::profile_reset::reserve().is_ok());
+            heartbeat();
+            assert_eq!(view.status.text(), before);
+            assert!(!view.forget.is_sensitive());
+            view.window.destroy();
+            model.borrow_mut().logout_pending = false;
+            model.borrow_mut().account_profile.as_mut().unwrap().user_id = "fixture-user".into();
+        }
+        // The new Forget callback/receiver do not retain their own button.
+        let view = host(&app, &model);
+        let attempt = queue(None, false);
+        view.forget.emit_clicked();
+        view.content.remove(&view.forget);
+        let weak = view.forget.downgrade();
+        drop(view.forget);
+        wait(|| weak.upgrade().is_none());
+        heartbeat();
+        registered();
+        attempt.start.send(()).unwrap();
+        attempt.finish.send(()).unwrap();
+        wait(|| crate::profile_reset::reserve().is_ok());
+        view.window.destroy();
+        for identity in [None, Some("")] {
+            model.borrow_mut().account_profile = identity.map(|id| auth::Profile {
+                user_id: id.into(),
+                ..Default::default()
+            });
+            let view = host(&app, &model);
+            view.forget.emit_clicked();
+            assert!(view.status.text().contains("identity is unavailable"));
+            view.selector.set_selected(2);
+            assert!(!view.forget.is_sensitive() && !view.switch.is_sensitive());
+            assert!(crate::profile_reset::reserve().is_ok());
+            view.window.destroy();
+        }
+        assert!(
+            TEST_BRANCH_FORGET.with(|requests| requests.borrow_mut().take().unwrap().is_empty())
+        );
+        assert!(TEST_BRANCH_CONTROLS.with(|controls| controls.borrow().is_none()));
+    }
+
+    #[test]
     #[ignore = "private p372 HOME/all XDG/TMP, GTK and D-Bus; inert metadata backend only"]
     fn metadata_retry_tracks_original_session_activity_and_page_lifetime() {
         for key in [
@@ -4360,6 +5123,8 @@ mod control_tests {
             &switch,
             &forget,
             &state,
+            &Rc::new(std::cell::Cell::new(false)),
+            Rc::new(|| None),
         );
         let app = adw::Application::builder()
             .application_id("io.github.ludomere.BranchEligibilityTest")
@@ -4470,6 +5235,8 @@ mod control_tests {
             &master_switch,
             &master_forget,
             &idle,
+            &Rc::new(std::cell::Cell::new(false)),
+            Rc::new(|| None),
         );
         content.append(&master_selector);
         content.append(&master_switch);
@@ -4489,6 +5256,8 @@ mod control_tests {
             &unknown_switch,
             &unknown_forget,
             &idle,
+            &Rc::new(std::cell::Cell::new(false)),
+            Rc::new(|| None),
         );
         assert!(
             unknown_switch.is_sensitive(),

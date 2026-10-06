@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADa3641c1. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEADd5d3c51. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered47 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered48 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
   572 library tests, six integration tests, five Python helper tests and build.80 library tests
@@ -19,11 +19,11 @@ Last meaningful update: 2026-10-06.
   settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound
   metadata Retry; P373 temporary Windows-check feedback; P374 consistent Downloads counters.
   Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
-- Active: P375 performance_audit implements only a fail-closed, animation-enabled inert repair
-  handoff diagnostic (reviewer file_summary), not a speculative product fix. P376 ui_critic
-  proposal for GTK-blocking Branch Forget deletion independently approved with narrow reentry/
-  stale-selection conditions; implementation not yet authorized. All work remains isolated until
-  root review and sequential integration; root alone owns Cargo/build/commits and records.
+- Active: P375 isolated animation-enabled inert repair diagnostic failed its Start-mapping
+  assumption; independently reviewed instrumentation rerun pending, no product fix. P376 Branch
+  Forget worker independently approved/integrated, awaiting root gates. P378 human-style
+  Downloads history critique uses only one specifically approved app screenshot and source.
+  Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
 - Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve13GB of40GB, covering
   payloads/prefixes/cache/staging/repeats; BIT.TRIP official requirement100MB, measured payload
   56.7MB/prefix409MB. All three rendered game screens and exited normally. Gungeon native
