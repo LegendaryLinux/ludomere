@@ -1314,6 +1314,176 @@ fn direct_game_filter_preserves_library_preferences_and_unknown_metadata() {
 
 #[test]
 #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+fn home_empty_results_preserve_filters_and_other_pages() {
+    assert!(
+        std::env::var("HOME")
+            .unwrap()
+            .starts_with("/tmp/ludomere-p334-")
+    );
+    adw::init().unwrap();
+    gtk::Settings::default()
+        .unwrap()
+        .set_gtk_enable_animations(false);
+    fn wait(check: impl Fn() -> bool) {
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while !check() && std::time::Instant::now() < until {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(check());
+    }
+    let app = adw::Application::builder()
+        .application_id("io.github.ludomere.EmptyResultsTest")
+        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .build();
+    app.register(gio::Cancellable::NONE).unwrap();
+    let w = Rc::new(window::create_widgets(&app, &Config::default()));
+    let model = Rc::new(RefCell::new(AppModel {
+        games: [(1, "Alpha"), (2, "Beta")]
+            .into_iter()
+            .map(|(product_id, title)| Game {
+                product_id,
+                title: title.into(),
+                ..Game::default()
+            })
+            .collect(),
+        section_states: (1..=2)
+            .map(|id| ((id, online::DetailSection::Metadata), SectionState::Ready))
+            .collect(),
+        ..AppModel::default()
+    }));
+    for game in &model.borrow().games {
+        let row = game_row(game, false, false);
+        row.set_widget_name(&game.product_id.to_string());
+        w.game_list.append(&row);
+        let card = gtk::Label::new(Some(&game.title));
+        card.set_widget_name(&game.product_id.to_string());
+        w.home_grid.insert(&card, -1);
+    }
+    window::connect_actions(&w, &model);
+    let home_scroll = w
+        .home_grid
+        .ancestor(gtk::ScrolledWindow::static_type())
+        .unwrap();
+    let card = w.home_grid.first_child().unwrap();
+    w.window.present();
+    let drain = || {
+        while glib::MainContext::default().iteration(false) {}
+    };
+    wait(|| w.search.is_mapped());
+    assert!(w.search.grab_focus());
+    let focus = gtk::prelude::GtkWindowExt::focus(&w.window);
+    let search = |query: &str| {
+        w.search.set_text(query);
+        w.search.emit_by_name::<()>("search-changed", &[]);
+        drain();
+    };
+    search("absent");
+    wait(|| w.home_no_results.is_mapped());
+    assert_eq!(w.home_no_results.title(), "No matching games");
+    assert_eq!(w.count.text(), "0 games");
+    assert!(!w.home_grid.child_at_index(0).unwrap().is_child_visible());
+    assert!(!w.home_grid.child_at_index(1).unwrap().is_child_visible());
+    assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focus);
+    search("Alpha");
+    assert!(!w.home_no_results.is_visible());
+    assert_eq!(w.count.text(), "1 games");
+    w.favorite_filter.set_active(true);
+    assert!(w.home_no_results.is_visible());
+    model.borrow_mut().favorites.insert(1);
+    refresh_filters(&w, &model.borrow());
+    assert!(!w.home_no_results.is_visible());
+    search("Beta");
+    assert!(w.home_no_results.is_visible());
+    w.clear_filters.emit_clicked();
+    assert!(!w.home_no_results.is_visible());
+    assert_eq!(w.search.text(), "Beta");
+    assert_eq!(model.borrow().query, "Beta");
+    search("");
+    w.playable_toggle.set_active(true);
+    assert_eq!(w.count.text(), "0 games");
+    assert!(!w.home_no_results.is_visible());
+    assert!(w.home_grid.child_at_index(0).unwrap().is_child_visible());
+    w.playable_toggle.set_active(false);
+    {
+        let mut state = model.borrow_mut();
+        state.sidebar_sort_mode = SidebarSortMode::LastPlayed;
+        state.activity_sections = vec![SidebarSection {
+            key: ActivitySectionKey::NeverPlayed,
+            label: "Never played".into(),
+            members: vec![1, 2],
+        }];
+        state
+            .collapsed_activity_sections
+            .insert(ActivitySectionKey::NeverPlayed);
+    }
+    refresh_filters(&w, &model.borrow());
+    assert!(!w.home_no_results.is_visible());
+    model.borrow_mut().hidden_products = HashSet::from([1, 2]);
+    refresh_filters(&w, &model.borrow());
+    assert!(w.home_no_results.is_visible());
+    assert_eq!(w.home_no_results.title(), "No games to show");
+    assert!(
+        w.home_no_results
+            .description()
+            .unwrap()
+            .contains("Show hidden")
+    );
+    w.organization_filters
+        .first_child()
+        .and_downcast::<gtk::CheckButton>()
+        .unwrap()
+        .set_active(true);
+    assert!(!w.home_no_results.is_visible());
+    assert_eq!(w.home_grid.first_child(), Some(card));
+    assert_eq!(
+        w.home_grid.ancestor(gtk::ScrolledWindow::static_type()),
+        Some(home_scroll)
+    );
+
+    for (name, body) in [("details", &w.details), ("downloads", &w.downloads)] {
+        let tall_content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        tall_content.set_height_request(2000);
+        body.append(&tall_content);
+        w.content.set_visible_child_name(name);
+        drain();
+        let scroll = body
+            .ancestor(gtk::ScrolledWindow::static_type())
+            .and_downcast::<gtk::ScrolledWindow>()
+            .unwrap();
+        wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size() + 50.0);
+        scroll.vadjustment().set_value(50.0);
+        let offset = scroll.vadjustment().value();
+        assert!(offset > 0.0);
+        assert!(w.search.grab_focus());
+        let focused = gtk::prelude::GtkWindowExt::focus(&w.window);
+        search("absent");
+        assert!(w.home_no_results.is_visible());
+        assert!(!w.home_no_results.is_mapped());
+        assert_eq!(w.content.visible_child_name().as_deref(), Some(name));
+        assert_eq!(scroll.vadjustment().value(), offset);
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focused);
+        search("");
+    }
+    gio::prelude::ActionGroupExt::activate_action(&w.window, "home", None);
+    assert_eq!(w.content.visible_child_name().as_deref(), Some("home"));
+    model.borrow_mut().games.clear();
+    refresh_filters(&w, &model.borrow());
+    assert!(!w.home_no_results.is_visible());
+    for description in [
+        "Sign in to GOG to load your library.",
+        "No installable games were found on this GOG account.",
+    ] {
+        w.empty.set_description(Some(description));
+        gio::prelude::ActionGroupExt::activate_action(&w.window, "home", None);
+        assert_eq!(w.content.visible_child_name().as_deref(), Some("empty"));
+        assert_eq!(w.empty.description().as_deref(), Some(description));
+    }
+    w.window.destroy();
+}
+
+#[test]
+#[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
 fn filter_controls_preserve_search_and_intersect_in_either_order() {
     assert!(
         std::env::var("HOME")
@@ -1772,6 +1942,31 @@ pub(super) fn sidebar_row_visible(model: &AppModel, row: &gtk::ListBoxRow) -> bo
 pub(super) fn refresh_filters(w: &Widgets, model: &AppModel) {
     let count = refresh_sidebar_visibility(w, model);
     w.home_grid.invalidate_filter();
+    // The sidebar's playable-only switch does not filter Home.
+    let no_results = !model.games.is_empty()
+        && count == 0
+        && !model
+            .games
+            .iter()
+            .any(|game| game_matches_filters(model, game));
+    w.home_no_results.set_visible(no_results);
+    if no_results {
+        let all_hidden = !model.show_hidden
+            && model
+                .games
+                .iter()
+                .all(|game| model.hidden_products.contains(&game.product_id));
+        w.home_no_results.set_title(if all_hidden {
+            "No games to show"
+        } else {
+            "No matching games"
+        });
+        w.home_no_results.set_description(Some(if all_hidden {
+            "Enable Show hidden in Filters to see your hidden games."
+        } else {
+            "Try a different search or adjust your filters."
+        }));
+    }
     let incomplete = model
         .games
         .iter()

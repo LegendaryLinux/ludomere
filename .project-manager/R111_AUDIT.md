@@ -118,7 +118,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   looked for a collapsed expander child too early; corrected fixture only, then passed.
 - Formatting, all-target Clippy and cargo build --locked PASS. Live retry on new code next.
 
-## Remaining findings
 ### P327 — confirm and track permanent Depot cancellation
 
 - Confirm Downloads cancellation, retain Keep as default, and show Cancelling while cleanup runs
@@ -135,6 +134,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   cloud sync and rendered language/title/profile-selection screens. No game save was deliberately
   created or cloud file deleted. Root used Ludomere Stop after discovering X11 windowclose does
   not end the game process; this is a test-driver correction, not a product defect.
+
+### P334 — explain empty library search results
+
+- Show no-match and hidden-games guidance in the existing Home view, without clearing filters,
+  replacing cards or navigating from another page. Preserve existing empty-account guidance.
+- Independent review PASS; mapped empty/filter/scroll/focus regression and existing search/filter
+  regression PASS. Formatting, all-target Clippy and build PASS before commit.
+- Coffee Talk Stop returned to Play and no Coffee Talk/Gungeon process remained. Live Stop exposed
+  a separate search/sidebar inconsistency, assigned P337. Normal game exit was not simulated by
+  destroying its X11 window; no automatic post-exit cloud-sync success is inferred from that action.
 
 ## Remaining findings
 

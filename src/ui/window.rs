@@ -1167,6 +1167,15 @@ pub(super) fn create_widgets(app: &adw::Application, config: &Config) -> Widgets
     home_grid.set_margin_top(24);
     home_grid.set_margin_bottom(24);
     let home_scroll = gtk::ScrolledWindow::builder().child(&home_grid).build();
+    let home_no_results = adw::StatusPage::builder()
+        .title("No matching games")
+        .description("Try a different search or adjust your filters.")
+        .icon_name("system-search-symbolic")
+        .visible(false)
+        .build();
+    let home_content = gtk::Overlay::new();
+    home_content.set_child(Some(&home_scroll));
+    home_content.add_overlay(&home_no_results);
     let collections = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let collections_scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
@@ -1190,7 +1199,7 @@ pub(super) fn create_widgets(app: &adw::Application, config: &Config) -> Widgets
 
     let content = gtk::Stack::new();
     content.set_transition_type(gtk::StackTransitionType::Crossfade);
-    content.add_named(&home_scroll, Some("home"));
+    content.add_named(&home_content, Some("home"));
     content.add_named(&collections_scroll, Some("collections"));
     content.add_named(&details_scroll, Some("details"));
     content.add_named(&downloads_scroll, Some("downloads"));
@@ -1329,6 +1338,7 @@ pub(super) fn create_widgets(app: &adw::Application, config: &Config) -> Widgets
         download_status_progress,
         game_list,
         home_grid,
+        home_no_results,
         collections,
         content,
         empty,
@@ -1586,7 +1596,15 @@ pub(super) fn connect_actions(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
     let home_action = gio::SimpleAction::new("home", None);
     {
         let w = w.clone();
-        home_action.connect_activate(move |_, _| w.content.set_visible_child_name("home"));
+        let model = model.clone();
+        home_action.connect_activate(move |_, _| {
+            let page = if model.borrow().games.is_empty() {
+                "empty"
+            } else {
+                "home"
+            };
+            w.content.set_visible_child_name(page);
+        });
     }
 
     connect_check_filter(w, model, &w.favorite_filter, |m, active| {
