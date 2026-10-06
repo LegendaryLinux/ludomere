@@ -44,7 +44,10 @@ Last meaningful update: 2026-10-06.
   Account Settings session subtitle is a stale snapshot. P355 additionally found mixed-case Linux
   dispatch inconsistency. Initial file summaries, completed-transfer colors, read-only free-space
   checks, cancellation admission and native marker issues have verified corrections.
-- P359 Account status review PASS, gate queued; P361 Move eligibility isolated implementation.
+- P359 Account status source review, actual-row expiry/lifetime test and fmt/Clippy/build PASS.
+  Initial fixture used nonexistent w.stack; corrected to w.content without weakened assertions.
+  Initial stale-binary invocation correctly refused zero tests. P361 Move eligibility reviewed,
+  gate queued. P362 separately investigates notification-popover teardown warning from P359 test.
   P360 malformed preference decoding assessment deferred: a strict-reader-only patch would abort
   whole reconciliation and cannot be repaired from current Properties. Needs separate safe
   per-game recovery/writer protection; no malformed actual user data was inspected or claimed.

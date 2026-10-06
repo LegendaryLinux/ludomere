@@ -115,7 +115,7 @@
 - P358 (complete diagnosis, file_summary): initial paused archive trash clicks unexplained; after
   revisiting Downloads ordinary clicks show confirmation and cancellation removes test transfer,
   retaining existing payload/two archives. Source finds no proven dead handler; no speculative fix.
-- P359 (review, performance_audit; reviewer file_summary): refresh Account GOG session subtitle
+- P359 (complete, performance_audit; reviewer file_summary): refresh Account GOG session subtitle
   from in-memory network/token/logout state using weak bounded updates, unchanged wording except
   no authenticated display during logout. Own isolated settings.rs; no wallet/DB/network probes,
   identity/action redesign or navigation. Actual row/state/destruction focused regression required.
@@ -128,6 +128,8 @@
   before click, including different target, selection, known Windows refusal and active Move.
   Own isolated ui/settings/storage.rs, explanation tooltip and recompute on input changes;
   preserve backend/click-time checks and no automatic destination choice. Synthetic controls only.
+- P362 (in_progress diagnosis, performance_audit): inspect notification-popover teardown warning
+  observed in private P359 fixture. Source-only lifecycle proposal; no edits or actual profile access.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

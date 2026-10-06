@@ -76,6 +76,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Fixes
 
+### P359 — keep Account session status current
+
+- Refresh the existing GOG session subtitle from in-memory network, token expiry and logout state.
+  Weak row/model references stop updates after destruction; unchanged text produces no updates.
+  No keyring, database or network probes, identity/action redesign or navigation added.
+- Actual mapped-row transition/time-expiry/borrow/focus/destruction fixture, independent review,
+  fmt/Clippy/build PASS. Fixture-only nonexistent stack field corrected to real content stack;
+  first old-binary run correctly rejected zero tests. Strict assertions retained.
+- A separate pre-existing notification-popover teardown warning appeared in this test and is
+  assigned P362 diagnosis; do not attribute it to status refresh or claim a clean global teardown.
+
 ### P355 — retain launch options through cached reinstalls and source migration
 
 - Fresh cached-offline and offline migration plans now retain saved arguments and full Windows

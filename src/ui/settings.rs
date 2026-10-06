@@ -1201,19 +1201,38 @@ fn settings_account_page(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) -> adw:
     let connection = adw::PreferencesGroup::new();
     connection.set_title("Connection");
     let status = adw::ActionRow::new();
-    let authenticated = model
-        .borrow()
-        .account_token
-        .as_ref()
-        .is_some_and(|token| token.expires_at > chrono::Utc::now().timestamp());
+    status.set_widget_name("settings-gog-session");
     status.set_title("GOG session");
-    status.set_subtitle(if !model.borrow().network_available {
-        "Offline"
-    } else if authenticated {
-        "Online and authenticated"
-    } else {
-        "Authentication required"
-    });
+    let refresh = {
+        let status = status.downgrade();
+        let model = Rc::downgrade(model);
+        move || {
+            let (Some(status), Some(model)) = (status.upgrade(), model.upgrade()) else {
+                return glib::ControlFlow::Break;
+            };
+            let Ok(model) = model.try_borrow() else {
+                return glib::ControlFlow::Continue;
+            };
+            let subtitle = if !model.network_available {
+                "Offline"
+            } else if !model.logout_pending
+                && model
+                    .account_token
+                    .as_ref()
+                    .is_some_and(|token| token.expires_at > chrono::Utc::now().timestamp())
+            {
+                "Online and authenticated"
+            } else {
+                "Authentication required"
+            };
+            if status.subtitle().as_deref() != Some(subtitle) {
+                status.set_subtitle(subtitle);
+            }
+            glib::ControlFlow::Continue
+        }
+    };
+    let _ = refresh();
+    glib::timeout_add_local(Duration::from_millis(500), refresh);
     connection.add(&status);
     page.add(&connection);
     {
@@ -1248,6 +1267,156 @@ fn clear_replaceable_images_at(cache_root: &std::path::Path) -> std::io::Result<
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    #[ignore = "requires private HOME/all XDG/TMP under /tmp/ludomere-p359-, GTK and D-Bus"]
+    fn account_session_row_tracks_current_model_without_retaining_destroyed_page() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p359-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn pump(duration: Duration) {
+            let deadline = std::time::Instant::now() + duration;
+            while std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.AccountStatusTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let config = Config::default();
+        let w = Rc::new(window::create_widgets(&app, &config));
+        let model = Rc::new(RefCell::new(AppModel {
+            config,
+            network_available: false,
+            ..Default::default()
+        }));
+        let page = settings_account_page(&w, &model);
+        let row = find_named_descendant(page.upcast_ref(), "settings-gog-session")
+            .and_downcast::<adw::ActionRow>()
+            .unwrap();
+        assert_eq!(row.subtitle().as_deref(), Some("Offline"));
+        let changes = Rc::new(std::cell::Cell::new(0));
+        row.connect_notify_local(Some("subtitle"), {
+            let changes = changes.clone();
+            move |_, _| changes.set(changes.get() + 1)
+        });
+        let settings = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(600)
+            .default_height(600)
+            .build();
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        let focus = gtk::Entry::new();
+        content.append(&focus);
+        content.append(&page);
+        settings.set_content(Some(&content));
+        settings.present();
+        wait(|| row.is_mapped());
+        assert!(focus.grab_focus());
+        let original_focus = gtk::prelude::GtkWindowExt::focus(&settings);
+        assert!(original_focus.is_some());
+        let original_page = w.content.visible_child_name();
+        let assert_status = |text: &str| {
+            wait(|| row.subtitle().as_deref() == Some(text));
+            assert_eq!(gtk::prelude::GtkWindowExt::focus(&settings), original_focus);
+            assert_eq!(w.content.visible_child_name(), original_page);
+            assert!(settings.visible_dialog().is_none());
+            assert_eq!(settings.content().as_ref(), Some(content.upcast_ref()));
+        };
+        pump(Duration::from_millis(1100));
+        assert_eq!(changes.get(), 0, "unchanged status must not notify");
+        model.borrow_mut().network_available = true;
+        assert_status("Authentication required");
+        let token = auth::Token {
+            access_token: "synthetic-never-used".into(),
+            refresh_token: "synthetic-never-used".into(),
+            user_id: "synthetic".into(),
+            expires_at: chrono::Utc::now().timestamp() + 60,
+        };
+        model.borrow_mut().account_token = Some(token.clone());
+        assert_status("Online and authenticated");
+        model.borrow_mut().network_available = false;
+        assert_status("Offline");
+        model.borrow_mut().network_available = true;
+        assert_status("Online and authenticated");
+        model
+            .borrow_mut()
+            .account_token
+            .as_mut()
+            .unwrap()
+            .expires_at = chrono::Utc::now().timestamp() - 1;
+        assert_status("Authentication required");
+        let unchanged = changes.get();
+        model.borrow_mut().account_token = None;
+        pump(Duration::from_millis(1100));
+        assert_eq!(changes.get(), unchanged);
+        model.borrow_mut().account_token = Some(token.clone());
+        assert_status("Online and authenticated");
+        model.borrow_mut().logout_pending = true;
+        assert_status("Authentication required");
+        model.borrow_mut().logout_pending = false;
+        assert_status("Online and authenticated");
+        model
+            .borrow_mut()
+            .account_token
+            .as_mut()
+            .unwrap()
+            .expires_at = chrono::Utc::now().timestamp() + 2;
+        assert_status("Authentication required");
+        {
+            let mut held = model.borrow_mut();
+            held.network_available = false;
+            pump(Duration::from_millis(600));
+            assert_eq!(row.subtitle().as_deref(), Some("Authentication required"));
+        }
+        assert_status("Offline");
+        let weak_row = row.downgrade();
+        let count = changes.get();
+        settings.set_content(None::<&gtk::Widget>);
+        content.remove(&page);
+        settings.destroy();
+        drop(row);
+        drop(page);
+        wait(|| weak_row.upgrade().is_none());
+        model.borrow_mut().network_available = true;
+        pump(Duration::from_millis(1100));
+        assert_eq!(
+            changes.get(),
+            count,
+            "destroyed row must receive no updates"
+        );
+        assert!(
+            !crate::identity::database().exists(),
+            "status refresh must not open the profile database"
+        );
+        w.window.destroy();
+    }
 
     #[test]
     #[ignore = "requires private HOME/all XDG, D-Bus and display; never activates a file manager"]
