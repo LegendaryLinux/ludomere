@@ -153,7 +153,7 @@
 - P366 (complete, file_summary; reviewer performance_audit): hide Account's empty reset-status
   scroller with one-way own-visible binding to label. Own isolated settings.rs and existing P359
   fixture: synthetic long error mapping/scroll/collapse, no actual Factory Reset or private screenshot.
-- P367 (in_progress, ui_critic; reviewer performance_audit): live native Repair fallback has edge-touching generic
+- P367 (complete, ui_critic; reviewer performance_audit): live native Repair fallback has edge-touching generic
   text/blank title; Review Reinstallation reuses tiny inspection dialog and clips installer rows
   while Install stays visible. Reviewed fix owns isolated download_chooser.rs; preserve
   actual repair/reinstall/reset/Browse consent and data flow. Only specifically named app screenshots
@@ -163,6 +163,10 @@
 - P368 (in_progress diagnosis, performance_audit): root finds repair inspection worker opens/reconciles StateStore without
   pre-spawn activity/original-session guard; receiver alone checks epoch. Separate lifecycle review
   needed after P367 ownership clears, no unreviewed worker edits mixed into layout fix.
+- P369 (in_progress diagnosis, file_summary): source-only review of initial Cloud Saves properties
+  loading and control responsiveness. Report concrete GTK-thread I/O, failure/busy behavior and
+  bounded proposals before edits. Exclude real account/cloud/profile data and P368 ownership;
+  no cloud operation, source mutation, new API or tests yet.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

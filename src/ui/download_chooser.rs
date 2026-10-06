@@ -1404,6 +1404,19 @@ pub(super) fn show_update_dialog(
     );
 }
 
+#[cfg(test)]
+type TestDepotInspectionResult = anyhow::Result<
+    Option<(
+        crate::domain::InstalledGame,
+        crate::installation::InstallationMarker,
+    )>,
+>;
+
+#[cfg(test)]
+thread_local! {
+    static TEST_DEPOT_INSPECTION_RESULT: RefCell<Option<TestDepotInspectionResult>> = const { RefCell::new(None) };
+}
+
 fn start_existing_depot_operation_dialog(
     window: &adw::ApplicationWindow,
     model: &Rc<RefCell<AppModel>>,
@@ -1416,18 +1429,41 @@ fn start_existing_depot_operation_dialog(
         (state.config.clone(), state.account_epoch)
     };
     let pending = adw::Dialog::builder()
+        .title(match kind {
+            crate::domain::DepotOperationKind::Update => "Update game",
+            _ => "Repair game",
+        })
         .content_width(420)
         .content_height(180)
         .build();
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let header = adw::HeaderBar::new();
+    header.set_widget_name("repair-inspection-header");
+    root.append(&header);
     let shell = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    shell.append(&adw::HeaderBar::new());
+    shell.set_margin_start(18);
+    shell.set_margin_end(18);
+    shell.set_margin_top(18);
+    shell.set_margin_bottom(18);
     let spinner = gtk::Spinner::new();
+    spinner.set_widget_name("repair-inspection-spinner");
     spinner.set_spinning(true);
     shell.append(&spinner);
     let label = gtk::Label::new(Some("Checking the installed game…"));
+    label.set_widget_name("repair-inspection-message");
+    label.set_xalign(0.0);
     label.set_wrap(true);
+    label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    label.set_selectable(true);
     shell.append(&label);
-    pending.set_child(Some(&shell));
+    let scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .child(&shell)
+        .build();
+    scroll.set_widget_name("repair-inspection-scroll");
+    root.append(&scroll);
+    pending.set_child(Some(&root));
     pending.present(Some(window));
     let closed = Rc::new(std::cell::Cell::new(false));
     pending.connect_closed({
@@ -1446,7 +1482,14 @@ fn start_existing_depot_operation_dialog(
         .map(|library| library.id.clone());
     let expected_directory = directory.clone();
     let (sender, receiver) = mpsc::channel();
+    #[cfg(test)]
+    let test_result = TEST_DEPOT_INSPECTION_RESULT.with(|result| result.borrow_mut().take());
     std::thread::spawn(move || {
+        #[cfg(test)]
+        if let Some(result) = test_result {
+            let _ = sender.send(result);
+            return;
+        }
         let result = (|| -> anyhow::Result<_> {
             let store = StateStore::open()?;
             let libraries = config
@@ -1497,11 +1540,16 @@ fn start_existing_depot_operation_dialog(
             }
             Ok(Ok(None)) => {
                 spinner.set_spinning(false);
-                label.set_label("No recognized Depot installation is available to repair. Review the reinstall choices, or inspect and reset the existing game folder first. Nothing has been changed.");
+                spinner.set_visible(false);
+                label.set_label(match kind {
+                    crate::domain::DepotOperationKind::Update => "This update tool checks Galaxy Depot installations. Review reinstallation options for other installation sources. Nothing has been changed.",
+                    _ => "This repair tool checks Galaxy Depot installations. For a game installed from an offline installer, review reinstallation options. Nothing has been changed.",
+                });
                 if directory.is_some() {
-                    label.set_label("This folder has no recognized Depot installation to repair. Browse its files or review a reset of this folder, then choose Install Again. Other installed copies are not changed.");
+                    label.set_label("Depot repair is unavailable for this folder. Browse its files or review a reset of this folder, then choose Install Again. Other installed copies are not changed.");
                 }
                 let reinstall = gtk::Button::with_label("Review Reinstallation…");
+                reinstall.set_widget_name("repair-review-reinstallation");
                 reinstall.set_visible(directory.is_none());
                 reinstall.connect_clicked({
                     let pending = pending.clone();
@@ -1518,6 +1566,7 @@ fn start_existing_depot_operation_dialog(
             }
             result => {
                 spinner.set_spinning(false);
+                spinner.set_visible(false);
                 label.set_label(&format!(
                     "Could not inspect the installation: {}",
                     match result {
@@ -1526,6 +1575,7 @@ fn start_existing_depot_operation_dialog(
                     }
                 ));
                 let retry = gtk::Button::with_label("Retry");
+                retry.set_widget_name("repair-inspection-retry");
                 retry.connect_clicked({
                     let pending = pending.clone();
                     let window = window.clone();
@@ -1550,6 +1600,7 @@ fn start_existing_depot_operation_dialog(
             }
         }
         let browse = gtk::Button::with_label("Browse Local Files");
+        browse.set_widget_name("repair-inspection-browse");
         browse.connect_clicked({
             let window = window.clone();
             let model = model.clone();
@@ -1567,6 +1618,7 @@ fn start_existing_depot_operation_dialog(
         });
         shell.append(&browse);
         let reset = gtk::Button::with_label("Review File Reset…");
+        reset.set_widget_name("repair-inspection-reset");
         reset.connect_clicked({
             let pending = pending.clone();
             let window = window.clone();
@@ -1598,6 +1650,7 @@ fn start_existing_depot_operation_dialog(
             }
         });
         shell.append(&reset);
+        pending.set_content_height(400);
         glib::ControlFlow::Break
     });
 }
@@ -2040,6 +2093,13 @@ fn populate_install_dialog(
     repair: bool,
     preparation: InstallPreparation,
 ) {
+    dialog.set_content_width(680);
+    dialog.set_content_height(620);
+    dialog.set_title(if repair {
+        "Repair game"
+    } else {
+        "Install game"
+    });
     let InstallPreparation {
         local_only,
         config,
@@ -2859,6 +2919,7 @@ fn populate_install_dialog(
         .vexpand(true)
         .child(&body)
         .build();
+    scroll.set_widget_name("install-choices-scroll");
     root.append(&scroll);
     let footer = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     footer.add_css_class("download-selector-footer");
@@ -2920,6 +2981,7 @@ fn populate_install_dialog(
     refresh_status();
     root.append(&status_scroll);
     let close = gtk::Button::with_label("Cancel");
+    close.set_widget_name("install-cancel");
     footer.append(&close);
     let install = gtk::Button::new();
     install.set_widget_name("install-confirm");
@@ -6479,6 +6541,335 @@ mod installer_version_tests {
         assert!(current_depot_session(&model).is_err());
         model.borrow_mut().account_token = None;
         assert!(current_depot_session(&model).is_err());
+    }
+
+    #[test]
+    #[ignore = "private HOME/all XDG/TMP, GTK and D-Bus; inert inspection/prepared choices only"]
+    fn repair_inspection_and_reused_chooser_keep_choices_and_controls_visible() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p367-"),
+                "{key}"
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        fn descendants(widget: &gtk::Widget) -> Vec<gtk::Widget> {
+            let mut found = vec![];
+            let mut child = widget.first_child();
+            while let Some(widget) = child {
+                child = widget.next_sibling();
+                found.extend(descendants(&widget));
+                found.push(widget);
+            }
+            found
+        }
+        #[track_caller]
+        fn inside(widget: &gtk::Widget, container: &gtk::Widget) {
+            assert!(widget.is_mapped());
+            let bounds = widget.compute_bounds(container).unwrap();
+            assert!(bounds.width() > 0.0 && bounds.height() > 0.0);
+            assert!(bounds.x() >= 0.0 && bounds.y() >= 0.0, "{bounds:?}");
+            assert!(
+                bounds.x() + bounds.width() <= container.width() as f32 + 1.0,
+                "{bounds:?}"
+            );
+            assert!(
+                bounds.y() + bounds.height() <= container.height() as f32 + 1.0,
+                "{bounds:?}"
+            );
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.RepairLayoutTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::builder()
+            .application(&app)
+            .default_width(900)
+            .default_height(400)
+            .build();
+        let original_page = gtk::Label::new(Some("Original page"));
+        window.set_content(Some(&original_page));
+        window.present();
+        wait(|| window.is_mapped());
+        let config = Config::default();
+        let detail = DetailPageModel::game(
+            Game {
+                product_id: 9367001,
+                slug: "fixture-native".into(),
+                title: "Fixture Native".into(),
+                ..Game::default()
+            },
+            false,
+        );
+        let model = Rc::new(RefCell::new(AppModel {
+            config: config.clone(),
+            ..AppModel::default()
+        }));
+        let long_error = format!(
+            "{}Final inspection cause",
+            "LongDiagnosticToken/".repeat(500)
+        );
+        for (kind, directory, failed) in [
+            (crate::domain::DepotOperationKind::Repair, None, false),
+            (crate::domain::DepotOperationKind::Update, None, false),
+            (
+                crate::domain::DepotOperationKind::Repair,
+                Some(
+                    std::path::PathBuf::from(std::env::var("HOME").unwrap())
+                        .join("synthetic-directory"),
+                ),
+                false,
+            ),
+            (crate::domain::DepotOperationKind::Repair, None, true),
+        ] {
+            TEST_DEPOT_INSPECTION_RESULT.with(|result| {
+                *result.borrow_mut() = Some(if failed {
+                    Err(anyhow::anyhow!(long_error.clone()))
+                } else {
+                    Ok(None)
+                })
+            });
+            start_existing_depot_operation_dialog(
+                &window,
+                &model,
+                &detail,
+                kind,
+                directory.clone(),
+            );
+            let dialog = window.visible_dialog().unwrap();
+            let root = dialog.child().unwrap();
+            let message = find_named_descendant(&root, "repair-inspection-message")
+                .and_downcast::<gtk::Label>()
+                .unwrap();
+            let spinner = find_named_descendant(&root, "repair-inspection-spinner")
+                .and_downcast::<gtk::Spinner>()
+                .unwrap();
+            let scroll = find_named_descendant(&root, "repair-inspection-scroll")
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let header = find_named_descendant(&root, "repair-inspection-header").unwrap();
+            wait(|| !spinner.get_visible() && root.height() >= 330 && scroll.height() > 0);
+            assert!(!spinner.is_spinning());
+            assert_eq!(
+                dialog.title(),
+                if kind == crate::domain::DepotOperationKind::Update {
+                    "Update game"
+                } else {
+                    "Repair game"
+                }
+            );
+            assert!(message.wraps() && message.is_selectable());
+            assert!(
+                root.height() <= 400,
+                "fallback expanded to {}px",
+                root.height()
+            );
+            assert!(window.height() <= 400);
+            let close = descendants(&header)
+                .into_iter()
+                .find(|widget| widget.is::<gtk::Button>() && widget.has_css_class("close"))
+                .unwrap();
+            wait(|| close.is_mapped() && close.width() > 0);
+            inside(&close, &root);
+            let close_bounds = close.compute_bounds(&root).unwrap();
+            let browse = find_named_descendant(&root, "repair-inspection-browse").unwrap();
+            let reset = find_named_descendant(&root, "repair-inspection-reset").unwrap();
+            if failed {
+                assert_eq!(
+                    message.text(),
+                    format!("Could not inspect the installation: {long_error}")
+                );
+                wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+                assert!(find_named_descendant(&root, "repair-inspection-retry").is_some());
+                scroll.vadjustment().set_value(scroll.vadjustment().upper());
+                wait(|| {
+                    reset
+                        .compute_bounds(&scroll)
+                        .is_some_and(|b| b.y() + b.height() <= scroll.height() as f32 + 1.0)
+                });
+                assert!(scroll.vadjustment().value() > 0.0);
+                inside(
+                    &find_named_descendant(&root, "repair-inspection-retry").unwrap(),
+                    scroll.upcast_ref(),
+                );
+            } else {
+                assert!(message.text().contains(if directory.is_some() {
+                    "Other installed copies are not changed"
+                } else {
+                    "Nothing has been changed"
+                }));
+                assert!(!message.text().contains("No recognized"));
+                let reinstall =
+                    find_named_descendant(&root, "repair-review-reinstallation").unwrap();
+                assert_eq!(reinstall.get_visible(), directory.is_none());
+                if directory.is_none() {
+                    inside(&reinstall, scroll.upcast_ref());
+                }
+                inside(message.upcast_ref(), scroll.upcast_ref());
+            }
+            for button in [&browse, &reset] {
+                inside(button, scroll.upcast_ref());
+                let bounds = button.compute_bounds(&scroll).unwrap();
+                assert!(bounds.x() >= 18.0);
+                assert!(bounds.x() + bounds.width() <= scroll.width() as f32 - 18.0);
+            }
+            assert_eq!(close.compute_bounds(&root).unwrap(), close_bounds);
+            assert_eq!(window.content().as_ref(), Some(original_page.upcast_ref()));
+            dialog.close();
+            wait(|| window.visible_dialog().is_none());
+        }
+
+        // Reuse an already-mapped inspection-sized dialog, then compare the fresh entry.
+        window.set_default_size(900, 760);
+        wait(|| window.height() >= 700);
+        for reused in [true, false] {
+            let dialog = adw::Dialog::builder()
+                .title("Update game")
+                .content_width(if reused { 420 } else { 680 })
+                .content_height(if reused { 180 } else { 620 })
+                .build();
+            let compact = gtk::Label::new(Some("Inspection complete"));
+            dialog.set_child(Some(&compact));
+            dialog.present(Some(&window));
+            wait(|| compact.is_mapped() && compact.height() > 0);
+            if reused {
+                assert!(compact.height() <= 180);
+            }
+            populate_install_dialog(
+                &dialog,
+                &window,
+                &model,
+                &detail,
+                true,
+                InstallPreparation {
+                    local_only: true,
+                    config: config.clone(),
+                    existing_installation: None,
+                    installed_dlc_ids: HashSet::new(),
+                    candidates: crate::installation::InstallerCandidates {
+                        usable: vec![crate::installation::InstallerCandidate {
+                            product_id: detail.product_id,
+                            revision_id: None,
+                            version: Some("1.2 fixture".into()),
+                            operating_system: Some("linux".into()),
+                            language: Some("English".into()),
+                            paths: vec![],
+                            launcher: None,
+                            method: crate::installation::InstallationMethod::NativeLinux,
+                            total_size: 4,
+                            currently_offered: false,
+                            complete: true,
+                        }],
+                        incomplete: vec![],
+                        preferred: Some(0),
+                    },
+                    dlc_candidates: HashMap::new(),
+                    galaxy_preflight: Ok(()),
+                    galaxy_selection: default_galaxy_selection(&detail, &config, None),
+                    library_statuses: vec![],
+                    remote_installers: vec![],
+                    offline_error: None,
+                },
+            );
+            let root = dialog.child().unwrap();
+            let menu = find_named_descendant(&root, "install-source-menu")
+                .and_downcast::<gtk::MenuButton>()
+                .unwrap();
+            let scroll = find_named_descendant(&root, "install-choices-scroll")
+                .and_downcast::<gtk::ScrolledWindow>()
+                .unwrap();
+            let source = descendants(menu.child().unwrap().upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                .find(|label| label.text() == "linux · English · 1.2 fixture")
+                .unwrap();
+            let cancel = find_named_descendant(&root, "install-cancel")
+                .and_downcast::<gtk::Button>()
+                .unwrap();
+            let install = find_named_descendant(&root, "install-confirm").unwrap();
+            wait(|| menu.is_mapped() && menu.height() >= 52 && scroll.height() >= 250);
+            assert_eq!(
+                (dialog.content_width(), dialog.content_height()),
+                (680, 620)
+            );
+            assert_eq!(dialog.title(), "Repair game");
+            inside(menu.upcast_ref(), scroll.upcast_ref());
+            inside(source.upcast_ref(), scroll.upcast_ref());
+            let mut ancestor = source.parent();
+            while let Some(widget) = ancestor {
+                if widget.is::<gtk::ScrolledWindow>() {
+                    inside(source.upcast_ref(), &widget);
+                }
+                if widget == root {
+                    break;
+                }
+                ancestor = widget.parent();
+            }
+            for button in [cancel.upcast_ref::<gtk::Widget>(), &install] {
+                inside(button, &root);
+            }
+            // At a smaller parent, the choices remain scrollable and the footer stays reachable.
+            window.set_default_size(900, 400);
+            wait(|| {
+                window.height() <= 400
+                    && root.height() <= 400
+                    && descendants(scroll.upcast_ref())
+                        .into_iter()
+                        .chain(std::iter::once(scroll.clone().upcast()))
+                        .filter_map(|widget| widget.downcast::<gtk::ScrolledWindow>().ok())
+                        .any(|scroll| {
+                            scroll.vadjustment().page_size() > 0.0
+                                && scroll.vadjustment().upper() > scroll.vadjustment().page_size()
+                        })
+            });
+            for button in [cancel.upcast_ref::<gtk::Widget>(), &install] {
+                inside(button, &root);
+            }
+            let body_scroll = descendants(scroll.upcast_ref())
+                .into_iter()
+                .chain(std::iter::once(scroll.clone().upcast()))
+                .filter_map(|widget| widget.downcast::<gtk::ScrolledWindow>().ok())
+                .find(|scroll| scroll.vadjustment().upper() > scroll.vadjustment().page_size())
+                .unwrap();
+            body_scroll
+                .vadjustment()
+                .set_value(body_scroll.vadjustment().upper());
+            wait(|| body_scroll.vadjustment().value() > 0.0);
+            for button in [cancel.upcast_ref::<gtk::Widget>(), &install] {
+                inside(button, &root);
+            }
+            assert_eq!(window.content().as_ref(), Some(original_page.upcast_ref()));
+            cancel.emit_clicked();
+            wait(|| window.visible_dialog().is_none());
+            window.set_default_size(900, 760);
+            wait(|| window.height() >= 700);
+        }
+        assert!(!crate::identity::database().exists());
+        window.destroy();
     }
 
     #[test]

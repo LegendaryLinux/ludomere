@@ -24,6 +24,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P367 repair presentation independently reviewed and verified: padded scrolling fallback with
+  clear Repair/Update title and hidden stopped spinner; reused reinstallation chooser restores
+  standard680x620 dimensions/title. Actual mapped constrained-geometry fixture PASS
+  (/tmp/ludomere-p367-8jvgzmkd), existing P346 source/destination fixture PASS
+  (/tmp/ludomere-p346-r96dc1gv). Initial Clippy test-type complexity corrected with an equivalent
+  cfg(test) alias, independently reviewed; final compile/fmt/Clippy PASS. No execution/consent
+  changes; live retest still pending and inspection lifecycle addressed separately in P368.
+
 - On695d738 the Account Factory Reset-to-Connection gap is visibly corrected; Connection remains
   Online and authenticated. No reset, sign-in exchange or settings mutation performed.
 
