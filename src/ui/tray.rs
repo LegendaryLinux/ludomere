@@ -105,8 +105,15 @@ impl ksni::Tray for LudomereTray {
 
 static TRAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 static QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
-static TRAY_HANDLE: LazyLock<Mutex<Option<ksni::blocking::Handle<LudomereTray>>>> =
-    LazyLock::new(|| Mutex::new(None));
+enum TrayLifecycle {
+    Idle,
+    Starting(mpsc::Sender<()>),
+    Running(mpsc::Sender<()>),
+    Stopped,
+}
+
+static TRAY_LIFECYCLE: LazyLock<Mutex<TrayLifecycle>> =
+    LazyLock::new(|| Mutex::new(TrayLifecycle::Idle));
 
 thread_local! {
     static PENDING_LAUNCHES: RefCell<HashSet<i64>> = RefCell::new(HashSet::new());
@@ -121,30 +128,82 @@ impl Drop for PendingLaunch {
 }
 
 pub(super) fn start_tray(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
-    if TRAY_ACTIVE.load(Ordering::Acquire) {
-        return;
+    let (stop, stopped) = mpsc::channel();
+    {
+        let mut lifecycle = TRAY_LIFECYCLE.lock().unwrap();
+        if !matches!(*lifecycle, TrayLifecycle::Idle) || QUIT_REQUESTED.load(Ordering::Acquire) {
+            return;
+        }
+        *lifecycle = TrayLifecycle::Starting(stop);
     }
     let (sender, receiver) = mpsc::channel();
+    let (ready, registration) = mpsc::channel();
     let tray = LudomereTray {
         commands: sender,
         // ksni refreshes the menu via menu_about_to_show on its service thread.
         recent_games: Vec::new(),
     };
-    let handle = match tray.spawn() {
-        Ok(handle) => handle,
-        Err(error) => {
-            tracing::warn!(?error, "system tray is unavailable");
-            return;
-        }
-    };
-    *TRAY_HANDLE.lock().unwrap() = Some(handle);
-    QUIT_REQUESTED.store(false, Ordering::Release);
-    TRAY_ACTIVE.store(true, Ordering::Release);
+    std::thread::spawn(move || run_tray(tray, ready, stopped));
 
-    let widgets = w.clone();
-    let model = model.clone();
+    let mut registration = Some(registration);
+    let widgets = Rc::downgrade(w);
+    let model = Rc::downgrade(model);
+    #[cfg(test)]
+    let poll_lifetime = {
+        tests::POLLERS.fetch_add(1, Ordering::SeqCst);
+        tests::PollLifetime
+    };
     glib::timeout_add_local(Duration::from_millis(100), move || {
-        while let Ok(command) = receiver.try_recv() {
+        #[cfg(test)]
+        let _ = &poll_lifetime;
+        if matches!(
+            *TRAY_LIFECYCLE.lock().unwrap(),
+            TrayLifecycle::Idle | TrayLifecycle::Stopped
+        ) {
+            return glib::ControlFlow::Break;
+        }
+        let (Some(widgets), Some(model)) = (widgets.upgrade(), model.upgrade()) else {
+            stop_tray(false);
+            return glib::ControlFlow::Break;
+        };
+        if let Some(pending) = registration.as_ref() {
+            let result = match pending.try_recv() {
+                Ok(result) => result,
+                Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Err(anyhow::anyhow!("tray registration stopped unexpectedly"))
+                }
+            };
+            registration.take();
+            if let Err(error) = result {
+                stop_tray(false);
+                tracing::warn!(?error, "system tray is unavailable");
+                return glib::ControlFlow::Break;
+            }
+            let mut lifecycle = TRAY_LIFECYCLE.lock().unwrap();
+            if !matches!(*lifecycle, TrayLifecycle::Starting(_)) {
+                return glib::ControlFlow::Break;
+            }
+            let TrayLifecycle::Starting(stop) =
+                std::mem::replace(&mut *lifecycle, TrayLifecycle::Idle)
+            else {
+                unreachable!();
+            };
+            *lifecycle = TrayLifecycle::Running(stop);
+            TRAY_ACTIVE.store(true, Ordering::Release);
+        }
+        loop {
+            if !TRAY_ACTIVE.load(Ordering::Acquire) || QUIT_REQUESTED.load(Ordering::Acquire) {
+                return glib::ControlFlow::Break;
+            }
+            let command = match receiver.try_recv() {
+                Ok(command) => command,
+                Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    stop_tray(false);
+                    return glib::ControlFlow::Break;
+                }
+            };
             match command {
                 TrayCommand::Show => show_main_window(&widgets),
                 TrayCommand::Settings => show_settings(&widgets, &model),
@@ -158,8 +217,59 @@ pub(super) fn start_tray(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>) {
                 }
             }
         }
-        glib::ControlFlow::Continue
     });
+}
+
+fn run_tray(
+    tray: LudomereTray,
+    ready: mpsc::Sender<anyhow::Result<()>>,
+    stopped: mpsc::Receiver<()>,
+) {
+    #[cfg(test)]
+    let script = tests::DRIVER.lock().unwrap().as_mut().map(|scripts| {
+        scripts
+            .pop_front()
+            .expect("missing inert tray registration")
+    });
+    #[cfg(test)]
+    if let Some(script) = script {
+        assert!(tray.recent_games.is_empty());
+        script.entered.send(tray.commands).unwrap();
+        script.permit.recv_timeout(Duration::from_secs(10)).unwrap();
+        match script.outcome {
+            tests::Outcome::Ready => {
+                finish_tray_registration(ready, stopped, || script.done.send(true).unwrap());
+            }
+            tests::Outcome::Failed => {
+                let _ = ready.send(Err(anyhow::anyhow!("inert registration failure")));
+                script.done.send(false).unwrap();
+            }
+            tests::Outcome::Disconnected => {
+                drop(ready);
+                script.done.send(false).unwrap();
+            }
+        }
+        return;
+    }
+    match tray.spawn() {
+        Ok(handle) => finish_tray_registration(ready, stopped, || handle.shutdown().wait()),
+        Err(error) => {
+            let _ = ready.send(Err(error.into()));
+        }
+    }
+}
+
+fn finish_tray_registration(
+    ready: mpsc::Sender<anyhow::Result<()>>,
+    stopped: mpsc::Receiver<()>,
+    shutdown: impl FnOnce(),
+) {
+    if matches!(stopped.try_recv(), Err(mpsc::TryRecvError::Empty)) && ready.send(Ok(())).is_ok() {
+        #[cfg(test)]
+        tests::PUBLISHED.fetch_add(1, Ordering::SeqCst);
+        let _ = stopped.recv();
+    }
+    shutdown();
 }
 
 fn show_main_window(w: &Widgets) {
@@ -395,8 +505,302 @@ pub(super) fn should_hide_on_close() -> bool {
 }
 
 pub(crate) fn shutdown_tray() {
-    TRAY_ACTIVE.store(false, Ordering::Release);
-    if let Some(handle) = TRAY_HANDLE.lock().unwrap().take() {
-        handle.shutdown().wait();
+    stop_tray(true);
+}
+
+fn stop_tray(shutdown: bool) {
+    let previous = {
+        let mut lifecycle = TRAY_LIFECYCLE.lock().unwrap();
+        if shutdown {
+            QUIT_REQUESTED.store(true, Ordering::Release);
+        }
+        TRAY_ACTIVE.store(false, Ordering::Release);
+        let next = if shutdown || matches!(*lifecycle, TrayLifecycle::Stopped) {
+            TrayLifecycle::Stopped
+        } else {
+            TrayLifecycle::Idle
+        };
+        std::mem::replace(&mut *lifecycle, next)
+    };
+    if let TrayLifecycle::Starting(stop) | TrayLifecycle::Running(stop) = previous {
+        // Dropping the sole sender wakes the owning worker, including after late registration.
+        drop(stop);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{cell::Cell, collections::VecDeque, sync::atomic::AtomicUsize};
+
+    pub(super) enum Outcome {
+        Ready,
+        Failed,
+        Disconnected,
+    }
+
+    pub(super) struct Script {
+        pub(super) outcome: Outcome,
+        pub(super) entered: mpsc::Sender<mpsc::Sender<TrayCommand>>,
+        pub(super) permit: mpsc::Receiver<()>,
+        pub(super) done: mpsc::Sender<bool>,
+    }
+
+    pub(super) static DRIVER: Mutex<Option<VecDeque<Script>>> = Mutex::new(None);
+    pub(super) static POLLERS: AtomicUsize = AtomicUsize::new(0);
+    pub(super) static PUBLISHED: AtomicUsize = AtomicUsize::new(0);
+
+    pub(super) struct PollLifetime;
+
+    impl Drop for PollLifetime {
+        fn drop(&mut self) {
+            POLLERS.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    #[track_caller]
+    fn wait_until(check: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !check() && std::time::Instant::now() < deadline {
+            while glib::MainContext::default().iteration(false) {}
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(check());
+    }
+
+    fn script(
+        outcome: Outcome,
+    ) -> (
+        mpsc::Sender<()>,
+        mpsc::Receiver<mpsc::Sender<TrayCommand>>,
+        mpsc::Receiver<bool>,
+    ) {
+        let (entered, registration) = mpsc::channel();
+        let (permit, proceed) = mpsc::channel();
+        let (done, completion) = mpsc::channel();
+        DRIVER.lock().unwrap().as_mut().unwrap().push_back(Script {
+            outcome,
+            entered,
+            permit: proceed,
+            done,
+        });
+        (permit, registration, completion)
+    }
+
+    fn reset_after_worker() {
+        wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+        assert!(!TRAY_ACTIVE.load(Ordering::Acquire));
+        let mut lifecycle = TRAY_LIFECYCLE.lock().unwrap();
+        assert!(matches!(
+            *lifecycle,
+            TrayLifecycle::Idle | TrayLifecycle::Stopped
+        ));
+        *lifecycle = TrayLifecycle::Idle;
+        QUIT_REQUESTED.store(false, Ordering::Release);
+    }
+
+    fn finished(done: &mpsc::Receiver<bool>, disposed: bool) {
+        assert_eq!(done.recv_timeout(Duration::from_secs(5)).unwrap(), disposed);
+        wait_until(|| match done.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => true,
+            Err(mpsc::TryRecvError::Empty) => false,
+            Ok(_) => panic!("tray worker completed more than once"),
+        });
+    }
+
+    #[test]
+    #[ignore = "requires private HOME/all XDG/TMP and private GTK; tray registration is fail-closed inert"]
+    fn tray_registration_keeps_gtk_responsive_and_disposes_late_handles() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p389-")
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
+        *DRIVER.lock().unwrap() = Some(VecDeque::new());
+        // A lost result receiver still requires explicit disposal, even before a stop signal.
+        let (ready, registration) = mpsc::channel();
+        drop(registration);
+        let (stop, stopped) = mpsc::channel();
+        let (disposed, disposal) = mpsc::channel();
+        std::thread::spawn(move || {
+            finish_tray_registration(ready, stopped, || disposed.send(()).unwrap());
+        });
+        disposal.recv_timeout(Duration::from_secs(5)).unwrap();
+        drop(stop);
+        adw::init().unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.TrayStartupTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let config = Config::default();
+        let widgets = Rc::new(super::super::window::create_widgets(&app, &config));
+        let model = Rc::new(RefCell::new(AppModel {
+            config,
+            ..AppModel::default()
+        }));
+        widgets.window.present();
+        wait_until(|| widgets.window.is_mapped());
+        let content = widgets.content.visible_child_name();
+        let heartbeat = Rc::new(Cell::new(0));
+        let heartbeat_source = glib::timeout_add_local(Duration::from_millis(10), {
+            let heartbeat = heartbeat.clone();
+            move || {
+                heartbeat.set(heartbeat.get() + 1);
+                glib::ControlFlow::Continue
+            }
+        });
+
+        // Pending and empty channels are normal: duplicate admission must not consume a script.
+        let (permit, entered, done) = script(Outcome::Ready);
+        start_tray(&widgets, &model);
+        let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        start_tray(&widgets, &model);
+        assert_eq!(POLLERS.load(Ordering::SeqCst), 1);
+        assert!(DRIVER.lock().unwrap().as_ref().unwrap().is_empty());
+        wait_until(|| heartbeat.get() >= 15);
+        assert!(!should_hide_on_close());
+        assert_eq!(POLLERS.load(Ordering::SeqCst), 1);
+        assert_eq!(widgets.content.visible_child_name(), content);
+        assert!(matches!(done.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        widgets.window.set_visible(false);
+        permit.send(()).unwrap();
+        wait_until(should_hide_on_close);
+        assert!(
+            !widgets.window.is_visible(),
+            "registration must not present the window"
+        );
+        assert_eq!(widgets.content.visible_child_name(), content);
+        start_tray(&widgets, &model);
+        assert_eq!(POLLERS.load(Ordering::SeqCst), 1);
+        let before = heartbeat.get();
+        wait_until(|| heartbeat.get() >= before + 15);
+        assert!(
+            should_hide_on_close(),
+            "hidden window remains a valid tray owner"
+        );
+        commands.send(TrayCommand::Show).unwrap();
+        wait_until(|| widgets.window.is_mapped());
+        assert_eq!(widgets.content.visible_child_name(), content);
+        shutdown_tray();
+        assert!(!should_hide_on_close());
+        assert!(QUIT_REQUESTED.load(Ordering::Acquire));
+        finished(&done, true);
+        drop(commands);
+        start_tray(&widgets, &model);
+        assert!(matches!(
+            *TRAY_LIFECYCLE.lock().unwrap(),
+            TrayLifecycle::Stopped
+        ));
+        reset_after_worker();
+
+        // Failed registration/disconnected result retire the attempt and permit an explicit retry.
+        for outcome in [Outcome::Failed, Outcome::Disconnected] {
+            let (permit, entered, done) = script(outcome);
+            start_tray(&widgets, &model);
+            let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            permit.send(()).unwrap();
+            finished(&done, false);
+            wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+            assert!(!should_hide_on_close());
+            assert!(!QUIT_REQUESTED.load(Ordering::Acquire));
+            assert!(matches!(
+                *TRAY_LIFECYCLE.lock().unwrap(),
+                TrayLifecycle::Idle
+            ));
+            drop(commands);
+        }
+
+        // Shutdown does not wait for a held registration; a late successful handle is disposed.
+        let (permit, entered, done) = script(Outcome::Ready);
+        start_tray(&widgets, &model);
+        let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        widgets.window.set_visible(false);
+        commands.send(TrayCommand::Show).unwrap();
+        let published = PUBLISHED.load(Ordering::SeqCst);
+        shutdown_tray();
+        assert!(matches!(done.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(!should_hide_on_close());
+        start_tray(&widgets, &model);
+        permit.send(()).unwrap();
+        finished(&done, true);
+        wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+        assert_eq!(PUBLISHED.load(Ordering::SeqCst), published);
+        assert!(!widgets.window.is_visible());
+        assert!(QUIT_REQUESTED.load(Ordering::Acquire));
+        drop(commands);
+        reset_after_worker();
+
+        // Publication can race shutdown before GTK consumes readiness; it still cannot reactivate.
+        let (permit, entered, done) = script(Outcome::Ready);
+        start_tray(&widgets, &model);
+        let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let published = PUBLISHED.load(Ordering::SeqCst);
+        permit.send(()).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while PUBLISHED.load(Ordering::SeqCst) == published && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(PUBLISHED.load(Ordering::SeqCst), published + 1);
+        assert!(!TRAY_ACTIVE.load(Ordering::Acquire));
+        shutdown_tray();
+        finished(&done, true);
+        wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+        assert!(!should_hide_on_close());
+        assert!(!widgets.window.is_visible());
+        assert!(QUIT_REQUESTED.load(Ordering::Acquire));
+        drop(commands);
+        reset_after_worker();
+
+        // Losing the service's command sender clears close-to-tray and explicitly stops its owner.
+        let (permit, entered, done) = script(Outcome::Ready);
+        start_tray(&widgets, &model);
+        let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        permit.send(()).unwrap();
+        wait_until(should_hide_on_close);
+        drop(commands);
+        wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+        finished(&done, true);
+        assert!(!should_hide_on_close());
+        assert!(matches!(
+            *TRAY_LIFECYCLE.lock().unwrap(),
+            TrayLifecycle::Idle
+        ));
+
+        // Release actual Rc owners, not just GtkWindow.destroy with retained Rc<Widgets>.
+        let (permit, entered, done) = script(Outcome::Ready);
+        start_tray(&widgets, &model);
+        let commands = entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let weak_widgets = Rc::downgrade(&widgets);
+        let weak_model = Rc::downgrade(&model);
+        widgets.window.close();
+        drop(widgets);
+        drop(model);
+        assert!(weak_widgets.upgrade().is_none());
+        assert!(weak_model.upgrade().is_none());
+        wait_until(|| POLLERS.load(Ordering::SeqCst) == 0);
+        assert!(matches!(done.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        permit.send(()).unwrap();
+        finished(&done, true);
+        drop(commands);
+        assert!(!should_hide_on_close());
+        heartbeat_source.remove();
+        shutdown_tray();
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
+        assert!(DRIVER.lock().unwrap().take().unwrap().is_empty());
     }
 }

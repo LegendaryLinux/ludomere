@@ -17,12 +17,14 @@
   No tag model/persistence redesign; proportionate existing fixture if implementation authorized.
   Existing mapped dialog/private persistence fixture PASS, fmt/Clippy/compile PASS.
 
-- P389 (in_progress implementation, file_summary; reviewer performance_audit): source-proven blocking tray registration on GTK.
+- P389 (complete, file_summary; reviewer performance_audit): source-proven blocking tray registration on GTK.
   Return bounded worker/lifecycle proposal and proportionate private test design before edits.
   Preserve close/quit, pending-start deduplication, command dispatch and late-handle cleanup.
   No actual bus/account access, broad shutdown rewrite or configuration writer changes.
   Independent proposal GO; worker owns registration and explicit shutdown, GTK only lifecycle
   admission/readiness. Private held-driver gate, late cleanup and weak owner checks required.
+  Corrected private lifecycle gate PASS; fmt/Clippy/compile/build PASS. Real KDE tray startup,
+  window hide/Open and normal Close PASS without panic/GTK critical or tray-unavailable log.
 
 - P388 (deferred after failed live gate, performance_audit; reviewer ui_critic): make detail-tab overflow visibly
   discoverable with native non-overlay horizontal scrolling only on this local scroller.

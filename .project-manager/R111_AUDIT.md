@@ -38,6 +38,23 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P389 corrected exact lifecycle gate PASS (p389-5k6sf0cd); disposal helper waits for producer
+  disconnect and rejects duplicate acknowledgments. Independent source/correction GO;
+  fmt/Clippy/compile/build PASS. Real KDE app270006 advertises expected tray commands, normal
+  window X hides while process survives, explicit tray Open restores same window, tray Close
+  exits normally. Immediate search after Open preceded100ms dispatch; settled check passes.
+  p389-{started,tray-reopened}.png and app-tray-startup-preview.log; zero panic/Gtk-CRITICAL/
+  tray-unavailable markers in that run. No real delayed-watcher claim beyond private driver.
+
+- P389 initial private lifecycle gate fails an immediate channel-disconnection assertion after
+  explicit disposal acknowledgment (p389-a2k30y5f, tray.rs692). Compilation/fmt/Clippy pass;
+  no commit. Author investigates producer-drop timing, preserving exactly-once disposal and
+  eventual disconnection checks. No real tray/profile touched in this fixture.
+
+- P391 commitb89ed5f exact build PASS, bringing61 separate built audit commits. The last
+  file-popup and tab-preview application logs contain zero panic/Gtk-CRITICAL/GLib-CRITICAL
+  markers; this is limited to those two runs and does not resolve deferred earlier P375 evidence.
+
 - P391 Rename starts disabled and follows trimmed entry text, avoiding silent empty submission.
   Existing actual Manage tags fixture PASS (p270-u8jsxqlm): empty/whitespace/valid/cleared,
   Cancel/no-write and valid trimmed SQLite rename; stale/reset checks retained. Initial fixture

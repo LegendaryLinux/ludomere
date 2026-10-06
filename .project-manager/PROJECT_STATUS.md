@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD0d10311. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEADb89ed5f. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered60 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered61 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS at99eeb3d: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.86 library tests
@@ -24,7 +24,8 @@ Last meaningful update: 2026-10-06.
   P385 popup handoff committed, private and real pointer gates PASS. P386 component cycles and
   P387 singular copy committed/built. P388 native scrollbar candidate failed live narrow labels,
   reverted without commit; existing tab navigation remains verified. P389 tray startup and P390
-  Maintenance refresh feedback proposals under review; P391 tag validation in isolation.
+  Maintenance refresh feedback implementations in isolation; P391 tag validation committed/built.
+  P392 tray profile-work admission proposal under review separately from startup.
   P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.
