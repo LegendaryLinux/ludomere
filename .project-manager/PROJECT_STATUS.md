@@ -8,7 +8,7 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified62 separate audit commits throughde41bc5, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified63 separate audit commits through435ddc1, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS at99eeb3d: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.86 library tests
@@ -27,8 +27,9 @@ Last meaningful update: 2026-10-06.
   Maintenance refresh feedback simplified draft under review; P391 tag validation committed/built.
   P389 tray startup committed with private lifecycle and real KDE hide/Open/Close gates PASS.
   P390 final private and actual Settings refresh gates PASS; local progress and duplicate
-  prevention verified, fixture-only row-focus warning corrected. P392 tray profile-work and
-  P393 popup ownership source GO; root integration gates pending.
+  prevention verified, fixture-only row-focus warning corrected. P392 tray profile-work passes
+  private menu, strict foreground and real Gungeon tray launch gates. P393/P394/P395 source GO;
+  root integration pending. P396 folder-origin and P397 operation-log admission are isolated.
   P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.

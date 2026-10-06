@@ -2,18 +2,40 @@
 
 ## R111 interactive audit
 
+- P397 (in_progress, performance_audit; reviewer file_summary): operation-log refresh registers
+  activity before spawn and retains original session through profile I/O/publication. Own
+  isolated details.rs log worker and existing focused fixture only. Preserve partial results,
+  explicit Retry and loading-row ownership; no locks across I/O or cancellation/rollback claim.
+  No actual logs/account/reset by agents; root private gates/build.
+
+- P396 (in_progress, file_summary; reviewer ui_critic): guard generic async directory opening by
+  original raw auth/account and visible parent, reusing launch_validated_directory. Own isolated
+  widgets/file_open.rs plus focused inert launch fixture; preserve all config/path validation,
+  signed-out local use and error handling. No profile-activity redesign or new chooser; no real
+  file manager by agents. Root gates. Source-backed R111 unwanted delayed-focus finding.
+
+- P394 (in_progress, ui_critic; reviewer performance_audit): Add tag disabled for empty/whitespace,
+  native Enter submits same eligible action. Own organization.rs and existing synthetic fixture
+  in isolated checkout; retain backend/session guards, parent-busy refusal and tag semantics.
+  No actual tag changes by agents; root focused gates/build. Source-backed R111 UI no-op finding.
+- P395 (in_progress, file_summary; reviewer ui_critic): clarify retired Achievements/Logs guidance to Home then reopen, matching
+  actual detail identity reset. Copy only, no automatic navigation or account rebinding.
+  Isolated achievements.rs/logs.rs strings and necessary exact expectation only; no extra fixture.
+
 - P393 (review, file_summary; reviewer performance_audit): source-audit game-management popup strong
   captures in close handlers (files.rs main/manage action loops) after unparented context use.
   Bounded component-lifetime proposal only; no whole-window release claim or broad conversion.
   Independent proposal GO: three weak-target blocks, unchanged signal/action/close ordering,
   actual builder in existing focused fixture; preserve P385 file-row popup behavior.
 
-- P392 (review, performance_audit; reviewer file_summary): tray recent-game menu/launch inspection
+- P392 (complete, performance_audit; reviewer file_summary): tray recent-game menu/launch inspection
   accesses profile without activity admission; bounded guards/session proposal separate from
   P389 startup. Preserve signed-out local use, menu order and installedness; private fixtures
   only, no actual reset/account or menu DB operations. No implementation before review.
   Independent proposal GO, including repeated existing Windows foreground/detail check after
   status setters. Isolated base de41bc5 retains completed P389; no startup lifecycle changes.
+  Private menu and strict foreground launch gates PASS; P389 regression retained. Root-only
+  synthetic X11/private-profile harness supplies focus absent from clientless Broadway.
 
 - P390 (complete, ui_critic; reviewer performance_audit): Maintenance metadata refresh local feedback and
   repeat-click prevention using current sync state/generation. Proposal before edits; preserve

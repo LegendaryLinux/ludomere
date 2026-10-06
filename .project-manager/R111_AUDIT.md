@@ -38,6 +38,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P392 strict launch gate PASS p392-dlgfz8zp under independently reviewed root-only X11
+  wrapper: private profile/bus and inert backend, real desktop focus only for its verified PID/
+  title. Original active/post-Starting assertions unchanged; Broadway failure retained. Only
+  known private GSettings warnings remain. Menu and retained P389 gates already passed;
+  compile/fmt/Clippy/build PASS. Separate real app277842 tray AboutToShow lists only the three
+  test games; Gungeon tray launch reaches native2.1.9 title/menu, then normal windowquit.
+  App normal tray Close exits; no panic/Gtk-CRITICAL/GLib-GIO-CRITICAL in this run.
+  Evidence p392-gungeon-tray-title-settled.png, app-tray-profile-preview.log. No new transfer.
+
+- P390 commit435ddc1 exact post-build PASS (63 built audit commits). P392 menu gate PASS
+  p392-90kfrtg6 and retained P389 lifecycle PASS p389-r5z6gw4p; fmt/compile/Clippy PASS.
+  P392 launch fixture reaches its explicit active-window wait, which fails on clientless Broadway
+  (p392-xbz5__e6, tray.rs1096). No assertion weakened; active-window environment remains a gate.
+
 - P390 final private gate PASS (p390-6yecu2en), including separate real library/account counters,
   reentry, terminal restoration, closed/stale/no-start/local paths. Correct native fixture parent
   eliminates row-focus criticals; only known private GSettings-schema warnings remain. Final

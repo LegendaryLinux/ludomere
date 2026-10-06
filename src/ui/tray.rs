@@ -278,18 +278,43 @@ fn show_main_window(w: &Widgets) {
 }
 
 fn recent_played_games() -> Vec<RecentGame> {
+    let session = (online::account_session(), auth::session());
+    let Ok(_activity) = crate::profile_reset::begin_activity("loading recent tray games") else {
+        return Vec::new();
+    };
+    #[cfg(test)]
+    let probe = tests::menu_probe();
+    #[cfg(test)]
+    if let Some(probe) = &probe {
+        tests::wait_barrier(&probe.before);
+    }
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     let Ok(store) = StateStore::open() else {
         return Vec::new();
     };
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     let config = Config::load_or_create().unwrap_or_default();
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     let installed = crate::installation::reconcile_installed_games(&store, &config.game_libraries)
         .unwrap_or_default();
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     let titles = store
         .normalized_games()
         .unwrap_or_default()
         .into_iter()
         .map(|game| (game.product_id, game.title))
         .collect::<HashMap<_, _>>();
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     let activity = store.all_product_activity().unwrap_or_default();
     let mut games = installed
         .into_iter()
@@ -306,7 +331,18 @@ fn recent_played_games() -> Vec<RecentGame> {
         })
         .collect::<Vec<_>>();
     games.sort_by_key(|(played, _)| std::cmp::Reverse(*played));
+    #[cfg(test)]
+    if let Some(probe) = &probe {
+        tests::wait_barrier(&probe.after);
+    }
+    if !tray_session_is_current(session) {
+        return Vec::new();
+    }
     games.into_iter().take(5).map(|(_, game)| game).collect()
+}
+
+fn tray_session_is_current(session: (u64, u64)) -> bool {
+    session == (online::account_session(), auth::session())
 }
 
 fn launch_recent_game(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>, product_id: i64) {
@@ -333,11 +369,64 @@ fn launch_recent_game(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>, product_id
     let session = online::account_session();
     let auth_session = auth::session();
     show_status(w, "Preparing game launch — checking installed files…");
+    if !tray_session_is_current((session, auth_session))
+        || model.borrow().account_epoch != epoch
+        || model.borrow().logout_pending
+    {
+        return;
+    }
+    let activity = match crate::profile_reset::begin_activity("preparing recent tray game launch") {
+        Ok(activity) => activity,
+        Err(error) => {
+            show_status(
+                w,
+                &notifications::failure_message(
+                    "Could not prepare game launch",
+                    &error.to_string(),
+                ),
+            );
+            return;
+        }
+    };
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
-        let result = StateStore::open()
-            .and_then(|store| crate::installation::reconcile_installed_games(&store, &libraries))
-            .map(|games| games.into_iter().find(|game| game.product_id == product_id));
+        let _activity = activity;
+        #[cfg(test)]
+        let probe = tests::preflight_probe();
+        #[cfg(test)]
+        if let Some(probe) = &probe {
+            tests::wait_barrier(&probe.before);
+        }
+        #[cfg(test)]
+        let disconnected = probe.as_ref().is_some_and(|probe| probe.disconnect);
+        let result = (|| {
+            anyhow::ensure!(
+                tray_session_is_current((session, auth_session)),
+                "The account changed before inspecting installed files."
+            );
+            #[cfg(test)]
+            if let Some(probe) = probe {
+                if probe.disconnect {
+                    return Ok(None);
+                }
+                tests::PREFLIGHT_ENTRIES.fetch_add(1, Ordering::SeqCst);
+                return probe.result;
+            }
+            let store = StateStore::open()?;
+            anyhow::ensure!(
+                tray_session_is_current((session, auth_session)),
+                "The account changed before inspecting installed files."
+            );
+            crate::installation::reconcile_installed_games(&store, &libraries)
+                .map(|games| games.into_iter().find(|game| game.product_id == product_id))
+        })();
+        #[cfg(test)]
+        if disconnected {
+            return;
+        }
+        if !tray_session_is_current((session, auth_session)) {
+            return;
+        }
         let _ = sender.send(result);
     });
     let widgets = w.clone();
@@ -365,6 +454,23 @@ fn launch_recent_game(w: &Rc<Widgets>, model: &Rc<RefCell<AppModel>>, product_id
                     );
                 } else {
                     show_status(&widgets, "Starting game…");
+                    if !tray_session_is_current((session, auth_session))
+                        || model.borrow().account_epoch != epoch
+                        || model.borrow().logout_pending
+                    {
+                        return glib::ControlFlow::Break;
+                    }
+                    if game.installer_operating_system.as_deref() != Some("linux")
+                        && (model.borrow().detail_generation != launch_generation
+                            || !widgets.window.is_visible()
+                            || !widgets.window.is_active())
+                    {
+                        show_status(
+                            &widgets,
+                            "Launch preparation finished. Select the game again when you are ready to continue Windows setup.",
+                        );
+                        return glib::ControlFlow::Break;
+                    }
                     start_recent_game(
                         &widgets,
                         &model,
@@ -399,6 +505,17 @@ fn start_recent_game(
     launch_generation: u64,
     pending: PendingLaunch,
 ) {
+    #[cfg(test)]
+    if tests::HANDOFFS.with(|handoffs| {
+        if let Some(handoffs) = handoffs.borrow_mut().as_mut() {
+            handoffs.push(game.clone());
+            true
+        } else {
+            false
+        }
+    }) {
+        return;
+    }
     let product_id = game.product_id;
     let session = online::account_session();
     let auth_session = auth::session();
@@ -549,6 +666,463 @@ mod tests {
     pub(super) static DRIVER: Mutex<Option<VecDeque<Script>>> = Mutex::new(None);
     pub(super) static POLLERS: AtomicUsize = AtomicUsize::new(0);
     pub(super) static PUBLISHED: AtomicUsize = AtomicUsize::new(0);
+
+    pub(super) type Barrier = (mpsc::Sender<()>, mpsc::Receiver<()>);
+    pub(super) struct MenuProbe {
+        pub(super) before: Option<Barrier>,
+        pub(super) after: Option<Barrier>,
+    }
+    pub(super) struct PreflightProbe {
+        pub(super) before: Option<Barrier>,
+        pub(super) result: anyhow::Result<Option<crate::domain::InstalledGame>>,
+        pub(super) disconnect: bool,
+    }
+    static MENU_PROBES: Mutex<Option<VecDeque<MenuProbe>>> = Mutex::new(None);
+    static PREFLIGHT_PROBES: Mutex<Option<VecDeque<PreflightProbe>>> = Mutex::new(None);
+    pub(super) static PREFLIGHT_ENTRIES: AtomicUsize = AtomicUsize::new(0);
+    thread_local! {
+        pub(super) static HANDOFFS: RefCell<Option<Vec<crate::domain::InstalledGame>>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn menu_probe() -> Option<MenuProbe> {
+        MENU_PROBES
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|probes| probes.pop_front().expect("missing inert tray menu probe"))
+    }
+
+    pub(super) fn preflight_probe() -> Option<PreflightProbe> {
+        PREFLIGHT_PROBES
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|probes| probes.pop_front().expect("missing inert tray preflight"))
+    }
+
+    pub(super) fn wait_barrier(barrier: &Option<Barrier>) {
+        if let Some((entered, proceed)) = barrier {
+            entered.send(()).unwrap();
+            proceed.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
+    }
+
+    fn barrier() -> (Barrier, mpsc::Receiver<()>, mpsc::Sender<()>) {
+        let (entered, entry) = mpsc::channel();
+        let (release, proceed) = mpsc::channel();
+        ((entered, proceed), entry, release)
+    }
+
+    fn private_profile() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p392-"),
+                "{key}"
+            );
+        }
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
+    }
+
+    fn installed_game(product_id: i64, windows: bool) -> crate::domain::InstalledGame {
+        let slug = format!("tray-{product_id}");
+        crate::domain::InstalledGame {
+            product_id,
+            library_id: "tray-test".into(),
+            installed_version: None,
+            installation_directory: std::env::temp_dir().join(&slug),
+            installer_revision_id: None,
+            installer_job_id: None,
+            installer_files: Vec::new(),
+            installer_complete: true,
+            installer_operating_system: Some(if windows { "windows" } else { "linux" }.into()),
+            installer_language: None,
+            compatibility: windows.then(|| crate::compatibility::GameCompatibilityPreferences {
+                backend: crate::compatibility::CompatibilityBackendKind::Umu,
+                prefix_slug: slug,
+                profile: crate::compatibility::UmuProfile::fallback(),
+                pending_profile: None,
+            }),
+            primary_executable: None,
+            launch_arguments: Vec::new(),
+            state: crate::domain::InstallationState::Installed,
+            error: None,
+            installed_at: Some(1),
+            verified_at: None,
+            last_played_at: None,
+            playtime_seconds: 0,
+            created_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    #[test]
+    #[ignore = "requires fresh private HOME/all XDG/TMP; actual menu inspection uses only synthetic files, no bus"]
+    fn recent_menu_admits_profile_work_and_keeps_local_ordering() {
+        use ksni::Tray;
+        use std::os::unix::fs::PermissionsExt;
+        private_profile();
+        *MENU_PROBES.lock().unwrap() = Some(VecDeque::new());
+        let inspect = || {
+            std::thread::spawn(|| {
+                let (commands, _) = mpsc::channel();
+                let mut tray = LudomereTray {
+                    commands,
+                    recent_games: Vec::new(),
+                };
+                tray.menu_about_to_show();
+                assert_eq!(
+                    tray.menu().len(),
+                    if tray.recent_games.is_empty() {
+                        4
+                    } else {
+                        tray.recent_games.len() + 5
+                    }
+                );
+                tray.recent_games
+            })
+        };
+        let frozen = crate::profile_reset::reserve().unwrap();
+        assert!(inspect().join().unwrap().is_empty());
+        assert!(MENU_PROBES.lock().unwrap().as_ref().unwrap().is_empty());
+        drop(frozen);
+        for invalidate in [
+            auth::invalidate_session as fn(),
+            online::invalidate_library_session as fn(),
+        ] {
+            let (before, entered, release) = barrier();
+            MENU_PROBES
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .push_back(MenuProbe {
+                    before: Some(before),
+                    after: None,
+                });
+            let worker = inspect();
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(crate::profile_reset::reserve().is_err());
+            invalidate();
+            release.send(()).unwrap();
+            assert!(worker.join().unwrap().is_empty());
+            drop(crate::profile_reset::reserve().unwrap());
+            assert!(!crate::identity::database().exists());
+            assert!(!Config::path().exists());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let library = crate::config::GameLibrary {
+            id: "tray-test".into(),
+            name: "Tray".into(),
+            path: root.path().join("games"),
+            default: true,
+        };
+        Config {
+            game_libraries: vec![library.clone()],
+            offline_libraries: Vec::new(),
+            extras_libraries: Vec::new(),
+            ..Config::default()
+        }
+        .save()
+        .unwrap();
+        let store = StateStore::open().unwrap();
+        let mut catalog = Vec::new();
+        for product_id in 1..=9 {
+            let marker = crate::installation::installation_marker_from_game(
+                &installed_game(product_id, product_id == 7),
+                Vec::new(),
+            );
+            catalog.push(Game {
+                product_id,
+                slug: marker.slug.clone(),
+                title: format!("Local {product_id}"),
+                ..Game::default()
+            });
+            if product_id != 9 {
+                let directory = library.path.join(&marker.slug);
+                std::fs::create_dir_all(&directory).unwrap();
+                let executable = directory.join(if product_id == 7 {
+                    "game.exe"
+                } else {
+                    "start.sh"
+                });
+                std::fs::write(&executable, b"inert payload; never execute").unwrap();
+                std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o700))
+                    .unwrap();
+                crate::installation::write_installation_marker(&marker, &directory).unwrap();
+            }
+            if product_id != 8 {
+                store
+                    .record_game_session(product_id, product_id * 100, 1)
+                    .unwrap();
+            }
+        }
+        store.upsert_normalized_library(&catalog).unwrap();
+        drop(store);
+        assert!(!library.path.join(".ludomere/compatibility/tray-7").exists());
+        MENU_PROBES
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .push_back(MenuProbe {
+                before: None,
+                after: None,
+            });
+        let games = inspect().join().unwrap();
+        assert_eq!(
+            games.iter().map(|game| game.product_id).collect::<Vec<_>>(),
+            vec![7, 6, 5, 4, 3]
+        );
+        assert_eq!(games[0].title, "Local 7");
+        let (after, entered, release) = barrier();
+        MENU_PROBES
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .push_back(MenuProbe {
+                before: None,
+                after: Some(after),
+            });
+        let worker = inspect();
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(crate::profile_reset::reserve().is_err());
+        online::invalidate_library_session();
+        release.send(()).unwrap();
+        assert!(worker.join().unwrap().is_empty());
+        drop(crate::profile_reset::reserve().unwrap());
+        assert!(MENU_PROBES.lock().unwrap().take().unwrap().is_empty());
+    }
+
+    #[test]
+    #[ignore = "requires fresh private HOME/all XDG/TMP and active private GTK; preflight and launch handoff are fail-closed inert"]
+    fn recent_launch_preflight_is_responsive_and_origin_guarded() {
+        private_profile();
+        *PREFLIGHT_PROBES.lock().unwrap() = Some(VecDeque::new());
+        HANDOFFS.with(|handoffs| *handoffs.borrow_mut() = Some(Vec::new()));
+        adw::init().unwrap();
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.TrayProfileTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let config = Config::default();
+        let widgets = Rc::new(super::super::window::create_widgets(&app, &config));
+        let model = Rc::new(RefCell::new(AppModel {
+            config,
+            ..AppModel::default()
+        }));
+        widgets.window.present();
+        wait_until(|| widgets.window.is_mapped());
+        let heartbeat = Rc::new(Cell::new(0));
+        let clock = glib::timeout_add_local(Duration::from_millis(10), {
+            let heartbeat = heartbeat.clone();
+            move || {
+                heartbeat.set(heartbeat.get() + 1);
+                glib::ControlFlow::Continue
+            }
+        });
+        let game = |windows| installed_game(42, windows);
+        let enqueue = |result, disconnect| {
+            let (before, entered, release) = barrier();
+            PREFLIGHT_PROBES
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .push_back(PreflightProbe {
+                    before: Some(before),
+                    result,
+                    disconnect,
+                });
+            (entered, release)
+        };
+        let pending = || PENDING_LAUNCHES.with(|pending| pending.borrow().contains(&42));
+        let launches = || HANDOFFS.with(|handoffs| handoffs.borrow().as_ref().unwrap().len());
+        let drained = || {
+            wait_until(|| !pending());
+            wait_until(|| crate::profile_reset::reserve().is_ok());
+        };
+
+        let frozen = crate::profile_reset::reserve().unwrap();
+        launch_recent_game(&widgets, &model, 42);
+        assert!(!pending());
+        assert!(
+            widgets
+                .status
+                .text()
+                .contains("Could not prepare game launch")
+        );
+        assert!(
+            PREFLIGHT_PROBES
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        );
+        drop(frozen);
+        // Revocation from preparation feedback occurs before activity/spawn.
+        let invalidate = widgets
+            .status
+            .connect_notify_local(Some("label"), |label, _| {
+                if label.text().starts_with("Preparing game launch") {
+                    auth::invalidate_session();
+                }
+            });
+        launch_recent_game(&widgets, &model, 42);
+        widgets.status.disconnect(invalidate);
+        assert!(!pending());
+        assert!(
+            PREFLIGHT_PROBES
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        );
+
+        // Admission is already registered while the worker is held; duplicate clicks
+        // cannot consume a second script or block GTK.
+        let (entered, release) = enqueue(Err(anyhow::anyhow!("inert inspection error")), false);
+        launch_recent_game(&widgets, &model, 42);
+        assert!(crate::profile_reset::reserve().is_err());
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        let ticks = heartbeat.get();
+        wait_until(|| heartbeat.get() >= ticks + 3);
+        launch_recent_game(&widgets, &model, 42);
+        assert!(widgets.status.text().contains("already being prepared"));
+        release.send(()).unwrap();
+        drained();
+        assert!(widgets.status.text().contains("inert inspection error"));
+        let (entered, release) = enqueue(Ok(None), true);
+        launch_recent_game(&widgets, &model, 42);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        drained();
+        assert!(widgets.status.text().contains("stopped unexpectedly"));
+
+        for invalidate in [
+            auth::invalidate_session as fn(),
+            online::invalidate_library_session as fn(),
+        ] {
+            let count = PREFLIGHT_ENTRIES.load(Ordering::SeqCst);
+            let (entered, release) = enqueue(Ok(Some(game(false))), false);
+            launch_recent_game(&widgets, &model, 42);
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            invalidate();
+            release.send(()).unwrap();
+            drained();
+            assert_eq!(PREFLIGHT_ENTRIES.load(Ordering::SeqCst), count);
+            assert_eq!(launches(), 0);
+        }
+        for logout in [false, true] {
+            let (entered, release) = enqueue(Ok(Some(game(false))), false);
+            launch_recent_game(&widgets, &model, 42);
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            if logout {
+                model.borrow_mut().logout_pending = true;
+            } else {
+                model.borrow_mut().account_epoch += 1;
+            }
+            release.send(()).unwrap();
+            drained();
+            assert_eq!(launches(), 0);
+            model.borrow_mut().logout_pending = false;
+        }
+        // Starting feedback must not let the next helper recapture a revoked origin.
+        for invalidate in [
+            auth::invalidate_session as fn(),
+            online::invalidate_library_session as fn(),
+        ] {
+            let hook = widgets
+                .status
+                .connect_notify_local(Some("label"), move |label, _| {
+                    if label.text() == "Starting game…" {
+                        invalidate();
+                    }
+                });
+            let (entered, release) = enqueue(Ok(Some(game(false))), false);
+            launch_recent_game(&widgets, &model, 42);
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            release.send(()).unwrap();
+            drained();
+            widgets.status.disconnect(hook);
+            assert_eq!(launches(), 0);
+        }
+        // Native handoff remains allowed after a view/window change; no real
+        // launch function can run while the capture slot is armed.
+        let hook = widgets.status.connect_notify_local(Some("label"), {
+            let model = Rc::downgrade(&model);
+            let window = widgets.window.downgrade();
+            move |label, _| {
+                if label.text() == "Starting game…" {
+                    model.upgrade().unwrap().borrow_mut().detail_generation += 1;
+                    window.upgrade().unwrap().set_visible(false);
+                }
+            }
+        });
+        let (entered, release) = enqueue(Ok(Some(game(false))), false);
+        launch_recent_game(&widgets, &model, 42);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        drained();
+        widgets.status.disconnect(hook);
+        assert_eq!(launches(), 1);
+        assert!(!widgets.window.is_visible());
+
+        // Windows keeps its existing foreground policy both before and after
+        // Starting feedback, including changes caused by that feedback itself.
+        let (entered, release) = enqueue(Ok(Some(game(true))), false);
+        launch_recent_game(&widgets, &model, 42);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        model.borrow_mut().detail_generation += 1;
+        release.send(()).unwrap();
+        drained();
+        assert!(widgets.status.text().contains("continue Windows setup"));
+        assert_eq!(launches(), 1);
+        widgets.window.present();
+        wait_until(|| widgets.window.is_active());
+        let reached = Rc::new(Cell::new(false));
+        let hook = widgets.status.connect_notify_local(Some("label"), {
+            let model = Rc::downgrade(&model);
+            let reached = reached.clone();
+            move |label, _| {
+                if label.text() == "Starting game…" {
+                    reached.set(true);
+                    model.upgrade().unwrap().borrow_mut().detail_generation += 1;
+                }
+            }
+        });
+        let (entered, release) = enqueue(Ok(Some(game(true))), false);
+        launch_recent_game(&widgets, &model, 42);
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        drained();
+        widgets.status.disconnect(hook);
+        assert!(reached.get());
+        assert_eq!(launches(), 1);
+        assert!(widgets.status.text().contains("continue Windows setup"));
+        assert!(!crate::identity::database().exists());
+        assert!(!Config::path().exists());
+        assert!(PREFLIGHT_PROBES.lock().unwrap().take().unwrap().is_empty());
+        HANDOFFS.with(|handoffs| {
+            handoffs.borrow_mut().take();
+        });
+        clock.remove();
+        widgets.window.close();
+    }
 
     pub(super) struct PollLifetime;
 
