@@ -2870,12 +2870,15 @@ fn artifact_download_action(
                                 "✕"
                             });
                             status.set_visible(!files.is_empty());
-                            status.add_css_class(if complete { "success" } else { "error" });
-                            status.set_tooltip_text(Some(if complete {
-                                "Downloaded"
-                            } else {
-                                "Download files are missing or their file sizes do not match."
-                            }));
+                            status.set_tooltip_text(None);
+                            if !files.is_empty() {
+                                status.add_css_class(if complete { "success" } else { "error" });
+                                status.set_tooltip_text(Some(if complete {
+                                    "Downloaded"
+                                } else {
+                                    "Download files are missing or their file sizes do not match."
+                                }));
+                            }
                             button.set_icon_name(if complete {
                                 "folder-open-symbolic"
                             } else {
@@ -3071,7 +3074,9 @@ fn artifact_download_action(
                 let _ = prepared_sender.send(prepared);
             });
             status_for_download.remove_css_class("success");
+            status_for_download.remove_css_class("error");
             status_for_download.add_css_class("dim-label");
+            status_for_download.set_tooltip_text(None);
             status_for_download.set_label("Preparing download…");
             status_for_download.set_visible(true);
             progress_for_download.set_visible(true);
@@ -3104,6 +3109,12 @@ fn artifact_download_action(
                                 None,
                             ) {
                                 Ok(_) => {
+                                    // Queue capture cancels instead of transferring; the fixture
+                                    // can now drive this real receiver with synthetic events.
+                                    assert!(matches!(
+                                        receiver.try_recv(),
+                                        Ok(download::DownloadEvent::Cancelled)
+                                    ));
                                     prepared = true;
                                     button.set_sensitive(true);
                                     return glib::ControlFlow::Continue;
@@ -3121,6 +3132,8 @@ fn artifact_download_action(
                             status.set_label("Starting…");
                         }
                         Ok(Err(error)) => {
+                            status.remove_css_class("dim-label");
+                            status.add_css_class("error");
                             status.set_label(&format!("Cannot prepare this download: {error}"));
                             progress.set_visible(false);
                             button.set_sensitive(true);
@@ -3131,6 +3144,8 @@ fn artifact_download_action(
                             return glib::ControlFlow::Continue;
                         }
                         Err(mpsc::TryRecvError::Disconnected) => {
+                            status.remove_css_class("dim-label");
+                            status.add_css_class("error");
                             status.set_label("Download preparation stopped. Retry the download.");
                             progress.set_visible(false);
                             button.set_sensitive(true);
@@ -3217,6 +3232,8 @@ fn artifact_download_action(
                     }
                     Ok(download::DownloadEvent::Failed(error)) => {
                         *running.borrow_mut() = None;
+                        status.remove_css_class("dim-label");
+                        status.add_css_class("error");
                         status.set_label("Failed — retry");
                         status.set_tooltip_text(Some(&error.message));
                         progress.set_visible(false);
@@ -3228,6 +3245,8 @@ fn artifact_download_action(
                     Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         *running.borrow_mut() = None;
+                        status.remove_css_class("dim-label");
+                        status.add_css_class("error");
                         status.set_label("Download stopped unexpectedly — retry");
                         progress.set_visible(false);
                         button.set_icon_name("folder-download-symbolic");
@@ -4546,11 +4565,13 @@ mod unified_row_tests {
         });
         model.borrow_mut().local_revision += 1;
         wait(|| count.text() == "1/1 Downloaded");
-        assert!(descendants(row.upcast_ref()).iter().any(|widget| {
-            widget
-                .downcast_ref::<gtk::Label>()
-                .is_some_and(|label| label.text() == "✓" && label.is_visible())
-        }));
+        let status = descendants(row.upcast_ref())
+            .into_iter()
+            .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+            .find(|label| label.text() == "✓" && label.is_visible())
+            .unwrap();
+        assert!(status.has_css_class("success"));
+        assert!(!status.has_css_class("error"));
         assert_eq!(collection.last_child().as_ref(), Some(&row));
         assert_eq!(language.selected(), selected);
         assert_eq!(tabs.visible_child_name().as_deref(), Some("files"));
@@ -4587,6 +4608,7 @@ mod unified_row_tests {
         wait(|| window.visible_dialog().is_some());
         respond(&window, "Delete");
         wait(|| notice.text().contains("Could not delete downloaded files"));
+        assert!(status.has_css_class("error"));
         assert!(file.exists());
         assert!(row.is_sensitive());
         assert!(menu.is_visible());
@@ -4610,6 +4632,10 @@ mod unified_row_tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(count.text(), "0/1 Downloaded");
+        assert!(!status.is_visible());
+        assert!(!status.has_css_class("error"));
+        assert!(!status.has_css_class("success"));
+        assert!(status.tooltip_text().is_none());
         assert!(!menu.is_visible());
         assert_eq!(direct_buttons(), 1);
         assert!(!delete.is_visible());
@@ -4645,6 +4671,97 @@ mod unified_row_tests {
                 .len()
                 == 1
         });
+        assert!(!status.has_css_class("error"));
+        assert!(status.tooltip_text().is_none());
+        for attempt in 0..3 {
+            let events = super::super::download_chooser::TEST_DOWNLOAD_QUEUE
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()[attempt]
+                .0[0]
+                .events
+                .clone();
+            events
+                .send(download::DownloadEvent::Progress {
+                    downloaded: 5,
+                    total: Some(15),
+                })
+                .unwrap();
+            wait(|| status.text().starts_with("Downloading "));
+            assert!(!status.has_css_class("error"));
+            assert!(!status.has_css_class("success"));
+            assert!(status.tooltip_text().is_none());
+            if attempt == 0 {
+                events
+                    .send(download::DownloadEvent::Failed(download::DownloadFailure {
+                        kind: download::DownloadFailureKind::Other,
+                        message: "Synthetic transfer failure".into(),
+                    }))
+                    .unwrap();
+                wait(|| status.text() == "Failed — retry");
+                assert!(status.has_css_class("error"));
+                assert_eq!(
+                    status.tooltip_text().as_deref(),
+                    Some("Synthetic transfer failure")
+                );
+            } else {
+                if attempt == 2 {
+                    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+                    std::fs::write(&file, b"inert installer").unwrap();
+                }
+                events
+                    .send(download::DownloadEvent::Complete {
+                        files: vec![file.clone()],
+                    })
+                    .unwrap();
+                wait(|| status.text() == if attempt == 1 { "✕" } else { "✓" });
+                assert_eq!(status.has_css_class("error"), attempt == 1);
+                assert_eq!(status.has_css_class("success"), attempt == 2);
+            }
+            if attempt < 2 {
+                if menu.is_visible() {
+                    menu.popup();
+                    wait(|| popover.is_mapped());
+                    descendants(popover.upcast_ref())
+                        .into_iter()
+                        .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                        .find(|button| {
+                            button.tooltip_text().as_deref()
+                                == Some("Download all required parts again")
+                        })
+                        .unwrap()
+                        .emit_clicked();
+                } else {
+                    download.emit_clicked();
+                }
+                wait(|| window.visible_dialog().is_some());
+                wait(|| {
+                    descendants(window.visible_dialog().unwrap().upcast_ref())
+                        .iter()
+                        .filter_map(|widget| widget.downcast_ref::<gtk::Button>())
+                        .any(|button| {
+                            button.label().as_deref() == Some("Download") && button.is_sensitive()
+                        })
+                });
+                respond(&window, "Download");
+                wait(|| status.text() == "Preparing download…");
+                assert!(!status.has_css_class("error"));
+                assert!(status.tooltip_text().is_none());
+                wait(|| {
+                    super::super::download_chooser::TEST_DOWNLOAD_QUEUE
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .unwrap()
+                        .len()
+                        == attempt + 2
+                });
+            }
+        }
+        assert_eq!(std::fs::read(&payload).unwrap(), b"keep installed game");
+        assert_eq!(collection.last_child().as_ref(), Some(&row));
+        assert_eq!(tabs.visible_child_name().as_deref(), Some("files"));
         window.close();
     }
 

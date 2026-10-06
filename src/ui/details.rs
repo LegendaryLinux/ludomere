@@ -2338,6 +2338,7 @@ fn installation_status_panel(
                         "media-playback-pause-symbolic",
                         "Pause",
                     );
+                    primary_action.add_css_class("operational-action");
                     action_group.add_css_class("operational-state");
                 }
                 cancel.set_visible(false);
@@ -2408,6 +2409,7 @@ fn installation_status_panel(
             }
             if let Some(failed) = jobs.iter().find(|job| job.state == DownloadState::Failed) {
                 action_visual.set(0);
+                primary_action.remove_css_class("operational-action");
                 action_group.remove_css_class("operational-state");
                 set_primary_button_content(
                     &primary_action,
@@ -2432,6 +2434,7 @@ fn installation_status_panel(
             if jobs.iter().any(|job| job.state == DownloadState::Paused) {
                 view_error.set_visible(false);
                 action_visual.set(0);
+                primary_action.remove_css_class("operational-action");
                 action_group.remove_css_class("operational-state");
                 set_primary_button_content(
                     &primary_action,
@@ -3895,6 +3898,63 @@ mod installation_progress_tests {
             assert_eq!(manage.get_visible(), is_installed);
             assert_eq!(alternate.is_visible(), is_installed || has_archive);
             assert_eq!(alternate.popover(), Some(popover.clone()));
+            assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
+        }
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        model
+            .borrow_mut()
+            .installed_games
+            .insert(1, installed.clone());
+        model.borrow_mut().local_actions.insert(
+            1,
+            sections::LocalActionState {
+                installed: Some(installed),
+                ..Default::default()
+            },
+        );
+        model
+            .borrow_mut()
+            .download_jobs
+            .push(crate::state::DownloadJobRecord {
+                job_id: "synthetic-archive".into(),
+                product_id: 1,
+                title: "Fixture".into(),
+                artifacts: Vec::new(),
+                state: DownloadState::Downloading,
+                destination: "/synthetic/archives".into(),
+                bytes_downloaded: 5,
+                total_bytes: Some(10),
+                completed_files: Vec::new(),
+                error: None,
+                status_message: None,
+                queue_position: None,
+                retry_started_at: None,
+                next_retry_at: None,
+                created_at: 0,
+                updated_at: 0,
+                completed_at: None,
+            });
+        for terminal in [
+            DownloadState::Paused,
+            DownloadState::Failed,
+            DownloadState::Complete,
+        ] {
+            model.borrow_mut().download_jobs[0].state = DownloadState::Downloading;
+            wait(|| button.tooltip_text().as_deref() == Some("Pause"));
+            assert!(button.has_css_class("operational-action"));
+            assert!(actions.has_css_class("operational-state"));
+            model.borrow_mut().download_jobs[0].state = terminal;
+            wait(|| button.tooltip_text().as_deref() == Some("Play"));
+            assert!(!button.has_css_class("operational-action"));
+            assert!(!actions.has_css_class("operational-state"));
+            assert!(button.is_sensitive());
             assert_eq!(actions.parent().as_ref(), Some(page.upcast_ref()));
         }
         model.borrow_mut().detail_generation += 1;

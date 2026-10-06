@@ -183,7 +183,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - No byte-counting or traversal changes. Independent review, existing async-summary regression
   extended through nonzero/zero/repeated refresh, formatting/all-target Clippy/build PASS.
 
+### P341 — clear stale transfer colors
+
+- Neutral empty/preparing/downloading archive rows clear earlier error styling and tooltip;
+  actual failures remain red and verified completion green. Active archive Pause gets operational
+  blue styling, with paused/failed/complete paths restoring normal idle styling.
+- Independent review and three focused GTK regressions PASS, covering real row-event transitions,
+  deletion/retry/error/complete and existing library-selection queue proxies. Fixture recreated a
+  deleted inert parent for simulated transfer completion; production deletion was not changed.
+- Formatting, all-target Clippy and build PASS. Live evidence originally reproduced both colors.
+
 ## Remaining findings
+
+- Gungeon uninstall completed through its own Yes/remove, Yes/keep-saves and final OK prompts.
+  Ludomere restored Download without reopening details and retained its offline archive; external
+  prompt guidance needs improvement. Download retained old green Play styling, proposed P345.
 
 - Real Gungeon archive-only deletion/re-download verified: one confirmation removes one archive,
   restores single Download/counts while preserving installed Play; explicit library Download

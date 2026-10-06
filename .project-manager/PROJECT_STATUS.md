@@ -4,6 +4,12 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P339 committed4fd61fa exact post-commit build PASS. P341 independent review and three focused
+  GTK state/queue regressions PASS, formatting/all-target Clippy/build PASS. One fixture recreated
+  the simulated download parent after real cleanup removed it; production cleanup unchanged.
+  Live Gungeon uninstall completed after external confirmation/saves/success prompts, retained
+  offline archive and restored Download in place. Green Download styling assigned P345.
+
 - P337 committed6c2e603 exact post-commit build PASS. P339 independent review, extended P329
   mapped regression, formatting/all-target Clippy/build PASS; preparing separate wording commit.
   P338/P340/P341 independent reviews PASS and await serial integration/gates. P342/P343 isolated.
