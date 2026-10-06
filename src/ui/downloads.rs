@@ -683,6 +683,7 @@ fn depot_active(state: &str) -> bool {
             | "extracting"
             | "committing"
             | "finalizing"
+            | "cancelling"
     )
 }
 
@@ -1133,6 +1134,21 @@ fn active_depot_header(
         model,
     );
     header.set_widget_name(&format!("active-depot-{}", operation.operation_id));
+    if operation.state == "cancelling" {
+        let progress = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        progress.append(&gtk::Spinner::builder().spinning(true).build());
+        progress.append(
+            &gtk::Label::builder()
+                .label("Cancelling… Waiting for installation to stop and removing temporary files.")
+                .wrap(true)
+                .wrap_mode(gtk::pango::WrapMode::WordChar)
+                .max_width_chars(70)
+                .xalign(0.0)
+                .build(),
+        );
+        details.append(&progress);
+        return header;
+    }
     details.append(&transfer_stats(model, depot_active(&operation.state)));
     let (phase_label, completed, total) = depot_phase_progress(operation);
     let download_fraction = total.map_or(0.0, |total| depot_download_fraction(completed, total));
@@ -1227,15 +1243,54 @@ fn active_depot_header(
         footer.append(&resume);
         let cancel = gtk::Button::from_icon_name("user-trash-symbolic");
         cancel.set_tooltip_text(Some("Cancel permanently"));
-        cancel.connect_clicked(move |button| {
-            if crate::installation::abandon_depot_operation(&operation_id) {
-                button.set_sensitive(false);
-            }
-        });
+        connect_depot_cancellation(
+            &cancel,
+            window,
+            operation_id,
+            crate::installation::abandon_depot_operation,
+        );
         footer.append(&cancel);
     }
     details.append(&footer);
     header
+}
+
+fn connect_depot_cancellation(
+    button: &gtk::Button,
+    window: &adw::ApplicationWindow,
+    operation_id: String,
+    abandon: impl Fn(&str) -> bool + 'static,
+) {
+    let window = window.downgrade();
+    let abandon = Rc::new(abandon);
+    button.connect_clicked(move |button| {
+        let Some(window) = window.upgrade() else { return; };
+        let confirmation = adw::AlertDialog::builder()
+            .heading("Cancel this installation?")
+            .body("This abandons the current attempt and deletes its resumable temporary files. Files already published into the game directory are not rolled back.")
+            .build();
+        confirmation.add_responses(&[("keep", "Keep"), ("cancel", "Cancel Installation")]);
+        confirmation.set_default_response(Some("keep"));
+        confirmation.set_close_response("keep");
+        confirmation.set_response_appearance("cancel", adw::ResponseAppearance::Destructive);
+        let button = button.downgrade();
+        let parent = window.downgrade();
+        let operation_id = operation_id.clone();
+        let abandon = abandon.clone();
+        confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
+            if response != "cancel" { return; }
+            if abandon(&operation_id) {
+                if let Some(button) = button.upgrade() { button.set_sensitive(false); }
+            } else if let Some(window) = parent.upgrade() {
+                let error = adw::AlertDialog::builder()
+                    .heading("Cancellation unavailable")
+                    .body("The installation has finished, changed, or is already being cancelled. Refresh its status before trying again.")
+                    .build();
+                error.add_response("close", "Close");
+                error.present(Some(&window));
+            }
+        });
+    });
 }
 
 fn depot_stage_label(state: &str) -> &'static str {
@@ -1250,6 +1305,7 @@ fn depot_stage_label(state: &str) -> &'static str {
         "extracting" => "EXTRACTING GAME FILES",
         "committing" => "INSTALLING FILES",
         "finalizing" => "FINALIZING",
+        "cancelling" => "CANCELLING",
         "dependencies" => "DOWNLOADING REQUIRED COMPONENTS",
         "setup" => "SETTING UP REQUIRED COMPONENTS",
         "interrupted" => "PAUSED",
@@ -1331,6 +1387,11 @@ fn depot_operation_card(
         copy.append(&progress);
     }
     row.append(&copy);
+    if operation.state == "cancelling" {
+        detail.set_label("Cancelling…");
+        row.append(&gtk::Spinner::builder().spinning(true).build());
+        return row;
+    }
     let operation_id = operation.operation_id.clone();
     if depot_active(&operation.state) {
         let pause = gtk::Button::from_icon_name("media-playback-pause-symbolic");
@@ -1366,11 +1427,12 @@ fn depot_operation_card(
         let cancel = gtk::Button::from_icon_name("user-trash-symbolic");
         cancel.set_tooltip_text(Some("Cancel and remove partial files"));
         let operation_id = operation.operation_id.clone();
-        cancel.connect_clicked(move |button| {
-            if crate::installation::abandon_depot_operation(&operation_id) {
-                button.set_sensitive(false);
-            }
-        });
+        connect_depot_cancellation(
+            &cancel,
+            &w.window,
+            operation_id,
+            crate::installation::abandon_depot_operation,
+        );
         row.append(&cancel);
     }
     let _ = w;
@@ -2192,6 +2254,186 @@ mod active_transfer_tests {
             assert!(message.wraps() && message.is_selectable());
             assert_eq!(message.ellipsize(), gtk::pango::EllipsizeMode::None);
         }
+        assert_eq!(widgets.content.visible_child_name(), visible_page);
+        assert!(widgets.window.visible_dialog().is_none());
+        widgets.window.destroy();
+    }
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]
+    fn depot_cancel_requires_consent_and_keeps_progress_and_errors_visible() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p327-")
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.DepotCancellationTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let widgets = window::create_widgets(&app, &Config::default());
+        widgets.window.present();
+        let visible_page = widgets.content.visible_child_name();
+        let count = Rc::new(std::cell::Cell::new(0));
+        let accepted = Rc::new(std::cell::Cell::new(true));
+        let button = gtk::Button::with_label("Cancel permanently");
+        widgets.downloads.append(&button);
+        let requests = count.clone();
+        let allowed = accepted.clone();
+        connect_depot_cancellation(&button, &widgets.window, "fixture".into(), move |id| {
+            assert_eq!(id, "fixture");
+            requests.set(requests.get() + 1);
+            allowed.get()
+        });
+        let drain = || {
+            while glib::MainContext::default().pending() {
+                glib::MainContext::default().iteration(false);
+            }
+        };
+        fn descendants(widget: &gtk::Widget) -> Vec<gtk::Widget> {
+            let mut result = vec![widget.clone()];
+            let mut child = widget.first_child();
+            while let Some(widget) = child {
+                result.extend(descendants(&widget));
+                child = widget.next_sibling();
+            }
+            result
+        }
+        fn respond(dialog: &adw::AlertDialog, label: &str) {
+            let button = descendants(dialog.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.label().as_deref() == Some(label))
+                .unwrap_or_else(|| panic!("Missing dialog response button: {label}"));
+            assert!(button.is_sensitive());
+            button.emit_clicked();
+        }
+        for close in [false, true] {
+            button.emit_clicked();
+            drain();
+            let dialog = widgets
+                .window
+                .visible_dialog()
+                .unwrap()
+                .downcast::<adw::AlertDialog>()
+                .unwrap();
+            assert_eq!(dialog.default_response().as_deref(), Some("keep"));
+            assert_eq!(dialog.close_response(), "keep");
+            assert!(dialog.body().contains("not rolled back"));
+            assert_eq!(count.get(), 0);
+            if close {
+                dialog.close();
+            } else {
+                respond(&dialog, "Keep");
+            }
+            drain();
+            assert_eq!(count.get(), 0);
+            assert!(button.is_sensitive());
+        }
+        button.emit_clicked();
+        drain();
+        respond(
+            &widgets
+                .window
+                .visible_dialog()
+                .unwrap()
+                .downcast::<adw::AlertDialog>()
+                .unwrap(),
+            "Cancel Installation",
+        );
+        drain();
+        assert_eq!(count.get(), 1);
+        assert!(!button.is_sensitive());
+        button.set_sensitive(true);
+        accepted.set(false);
+        button.emit_clicked();
+        drain();
+        respond(
+            &widgets
+                .window
+                .visible_dialog()
+                .unwrap()
+                .downcast::<adw::AlertDialog>()
+                .unwrap(),
+            "Cancel Installation",
+        );
+        drain();
+        assert_eq!(count.get(), 2);
+        let error = widgets
+            .window
+            .visible_dialog()
+            .unwrap()
+            .downcast::<adw::AlertDialog>()
+            .unwrap();
+        assert_eq!(error.heading().as_deref(), Some("Cancellation unavailable"));
+        respond(&error, "Close");
+        drain();
+
+        let mut model = AppModel {
+            depot_operations: vec![crate::installation::DepotOperationSnapshot {
+                setup: None,
+                operation_id: "fixture".into(),
+                product_id: 43,
+                state: "cancelling".into(),
+                bytes_completed: 0,
+                bytes_downloaded: 0,
+                bytes_written: 0,
+                total_write_bytes: 0,
+                total_bytes: 0,
+                download_total_bytes: None,
+                error: None,
+            }],
+            ..AppModel::default()
+        };
+        rebuild_downloads_page(&widgets, &model);
+        update_depot_page_progress(&widgets, &model);
+        let header =
+            find_named_descendant(widgets.downloads.upcast_ref(), "active-depot-fixture").unwrap();
+        let busy = descendants(&header);
+        assert!(busy.iter().any(|widget| {
+            widget
+                .downcast_ref::<gtk::Label>()
+                .is_some_and(|label| label.text().contains("Cancelling"))
+        }));
+        assert!(!busy.iter().any(|widget| matches!(
+            widget.tooltip_text().as_deref(),
+            Some("Resume" | "Pause" | "Cancel permanently")
+        )));
+        assert!(widgets.window.visible_dialog().is_none());
+        model.depot_operations[0].state = "failed".into();
+        model.depot_operations[0].error =
+            Some("Cancellation cleanup failed: protected temporary path is a directory".into());
+        rebuild_downloads_page(&widgets, &model);
+        update_depot_page_progress(&widgets, &model);
+        let message = find_named_descendant(widgets.downloads.upcast_ref(), "active-depot-message")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        assert_eq!(
+            message.text().as_str(),
+            model.depot_operations[0].error.as_deref().unwrap()
+        );
+        assert!(
+            descendants(widgets.downloads.upcast_ref())
+                .iter()
+                .any(
+                    |widget| widget.tooltip_text().as_deref() == Some("Cancel permanently")
+                        && widget.is_sensitive()
+                )
+        );
         assert_eq!(widgets.content.visible_child_name(), visible_page);
         assert!(widgets.window.visible_dialog().is_none());
         widgets.window.destroy();

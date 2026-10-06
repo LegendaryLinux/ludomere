@@ -21,11 +21,16 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Missing configured installer/extras directories created explicitly by root; existing files untouched.
 - Enter the Gungeon Windows offline installer (about 382 MB) downloaded through the detail action,
   automatic installation completed, and Play appeared without reopening details. Game process/window
-  launched, sidebar turned green and Stop appeared. Root closed its game window normally afterward.
+  launched, sidebar turned green and Stop appeared. Root removed its X11 game window afterward;
+  later checked xdotool's manual and corrected that this destroys the window rather than requesting
+  normal process exit. Do not infer game exit/stop defects from that automation action.
 - Measured Gungeon payload339,363,121 B, prefix355,554,544 B and archive382,662,456 B: about1.078 GB
   on disk. Coffee Talk Depot preparation succeeded after wallet activation; component/install consent
   accepted through UI. Track subsequent transfer/disk changes before adding more test games.
-- Test game transfer budget used: approximately 0.383 GB so far (under40 GB). No intentional cloud
+- Test game transfer budget initially0.383 GB, then Coffee Talk Depot (557 MB installed payload).
+  Measured combined payload/prefix/archive plus dependency cache approximately2.15 GB; reserve
+  a conservative4 GB of the40 GB allowance including download overhead until exact totals settle.
+  No intentional cloud
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
@@ -103,7 +108,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   existing durable guard/MSI-path tests. Formatting, all-target Clippy and build PASS.
   Real Coffee Talk retry remains pending the rebuilt binary; no live success claimed yet.
 
-## Remaining findings
 ### P332 — keep setup outcomes visible while reading diagnostics
 
 - Pin concise sanitized failure/status above a diagnostics-only scroller, keep Close outside it,
@@ -113,6 +117,24 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   formatting/error test and mapped400px GTK scrolling/control regression PASS. Initial GTK test
   looked for a collapsed expander child too early; corrected fixture only, then passed.
 - Formatting, all-target Clippy and cargo build --locked PASS. Live retry on new code next.
+
+## Remaining findings
+### P327 — confirm and track permanent Depot cancellation
+
+- Confirm Downloads cancellation, retain Keep as default, and show Cancelling while cleanup runs
+  off GTK. Preserve published payloads and current temporary-file safety checks; full errors become
+  terminal failures with retry controls instead of stale busy state or silent refusal.
+- Retain cleanup ownership/profile activity through terminal publication and reject competing
+  resume/pause/cancel admissions. Independent review found two races; corrected recovery admission
+  ordering and preserve an installation's proven success if it beats a late cancellation request.
+- Three focused backend and one GTK regression PASS, including protected-directory refusal,
+  journal preservation/retry, held-gate responsiveness, stale admission and late completion.
+  Fixture-only AlertDialog API/unnamed-widget lookup issues corrected before successful run.
+  Independent UI/backend re-review, formatting, all-target Clippy and build PASS.
+- Coffee Talk real retry completed setup, updated Play/installed title in place, enabled normal
+  cloud sync and rendered language/title/profile-selection screens. No game save was deliberately
+  created or cloud file deleted. Root used Ludomere Stop after discovering X11 windowclose does
+  not end the game process; this is a test-driver correction, not a product defect.
 
 ## Remaining findings
 

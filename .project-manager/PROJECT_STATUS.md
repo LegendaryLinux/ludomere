@@ -36,6 +36,12 @@ Last meaningful update: 2026-10-06.
   correcting a fixture's collapsed-expander lookup; production unchanged by that correction.
   Formatting, all-target Clippy and build PASS; preparing P332 commit. P327 review found recovery
   admission and late-success/cancel races; owner correcting both before any integration.
+- P332 committed5b51541 and exact post-commit build PASS. Coffee Talk real Depot Resume now
+  completes; Play/installed title refresh in place, normal cloud launch enabled, rendered game
+  reaches profile selection. Root corrected X11 windowclose versus windowquit test-driver use;
+  use Ludomere Stop for the surviving test process, not a false application-exit bug report.
+- P327 both reviewed race blockers corrected and re-reviewed; four focused regressions,
+  formatting, all-target Clippy and build PASS. Preparing commit; P333 bounded long errors next.
 
 ## R110 complete — 0.3.2 release and new PR
 
