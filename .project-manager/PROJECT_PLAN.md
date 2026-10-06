@@ -176,7 +176,7 @@
   component consent layout only, isolated chooser. Header outside padded body, matching left
   alignment/top-aligned list; preserve consent/actions/admission. Actual short/long text origin,
   scrolling and400px parent controls fixture, no helper/queue/network/realdata execution.
-- P370b (in_progress, ui_critic; reviewer performance_audit): approved setup Details
+- P370b (complete, ui_critic; implementation reviewer file_summary): approved setup Details
   counter wording only. Separate actual payload writes/full estimate, explain potential reuse,
   scoped known-zero Depot downloads; dependencies/unknown-origin amounts are processed data, not
   necessarily network traffic. No backend counter, completion, policy or inferred reuse changes.
@@ -186,10 +186,13 @@
   history already skips duplicate recipe while retaining separate required vendor receipts.
   Root aggregate fresh-install log check confirms one vcrun2010 command. No speculative backend
   deduplication, dependency skipping, actual agent data/helper access, source edits or tests.
-- P372 (in_progress diagnosis, performance_audit): refine bounded P369 finding2 metadata Retry
-  lifecycle proposal, separate from local loader and override race. Capture original authenticated
-  session before work, tracked activity, weak feedback and safe inert fixtures; no source edits,
-  actual account/cloud/profile/desktop/helper access. Implementation waits for P369 and review.
+- P372 (in_progress, file_summary; proposal performance_audit, implementation reviewer ui_critic):
+  approved metadata Retry lifecycle after P369, isolated game_settings.rs. Capture original page
+  authenticated session, pre-spawn activity, explicit-session backend, weak current feedback and
+  receiver retirement before restoring Retry. Inert actual-handler pre-entry/result/reentry/
+  activity/lifetime fixture; preserve cached offline loader and all availability controls. No
+  actual cloud/data/helper access, new backend policy or override-race changes. Author starts
+  after finishing P370b independent review; root owns runtime gates.
 - P373 (in_progress, performance_audit; reviewer file_summary): approved narrow transient
   Windows-check footer slot in isolated proton.rs/window.rs. Per-request weak label ownership,
   one visible line with overlap-safe cleanup; remove progress/Ready history writes, preserve

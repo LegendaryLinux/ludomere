@@ -699,7 +699,72 @@ enum SetupOperation {
     Depot(String),
     Offline(crate::installation::TrackedInstallation),
     #[cfg(test)]
-    Fixture(Result<(), String>),
+    Fixture(Result<(), String>, String),
+}
+
+fn depot_setup_details(snapshot: &crate::installation::DepotOperationSnapshot) -> String {
+    let mut details = format!("Stage: {}", snapshot.state.replace('_', " "));
+    let component_phase = snapshot.state == "dependencies";
+    let phase_progress = snapshot.total_bytes > 0
+        && matches!(
+            snapshot.state.as_str(),
+            "verifying" | "verifying_existing" | "dependencies" | "extracting"
+        );
+    if phase_progress {
+        details.push_str(&format!(
+            "\n{}: {} / {}",
+            if component_phase {
+                "Component data processed"
+            } else {
+                "Processed"
+            },
+            human_size(snapshot.bytes_completed),
+            human_size(snapshot.total_bytes)
+        ));
+    }
+    if (snapshot.bytes_downloaded > 0 || snapshot.download_total_bytes.is_some())
+        && !(component_phase
+            && phase_progress
+            && snapshot.bytes_downloaded == snapshot.bytes_completed
+            && snapshot.download_total_bytes.is_none())
+    {
+        if !component_phase
+            && snapshot.bytes_downloaded == 0
+            && snapshot.download_total_bytes == Some(0)
+        {
+            details.push_str("\nNo Depot file download required.");
+        } else {
+            details.push_str(&format!(
+                "\n{}: {}{}",
+                if component_phase {
+                    "Component data processed"
+                } else if snapshot.download_total_bytes.is_none() {
+                    "Data processed"
+                } else {
+                    "Depot files downloaded"
+                },
+                human_size(snapshot.bytes_downloaded),
+                snapshot
+                    .download_total_bytes
+                    .filter(|total| *total > 0)
+                    .map(|total| format!(" / {}", human_size(total)))
+                    .unwrap_or_default()
+            ));
+        }
+    }
+    if snapshot.bytes_written > 0 || snapshot.total_write_bytes > 0 {
+        details.push_str(&format!(
+            "\nPayload data written this run: {}",
+            human_size(snapshot.bytes_written)
+        ));
+        if snapshot.total_write_bytes > 0 {
+            details.push_str(&format!(
+                "\nFull write estimate: {}\nExisting files can be reused without rewriting them.",
+                human_size(snapshot.total_write_bytes)
+            ));
+        }
+    }
+    details
 }
 
 fn setup_failure_summary(error: &str) -> String {
@@ -722,7 +787,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
         SetupOperation::Depot(id) => format!("Depot operation: {id}"),
         SetupOperation::Offline(_) => "Offline installer setup (current attempt)".to_owned(),
         #[cfg(test)]
-        SetupOperation::Fixture(_) => "Synthetic setup attempt".to_owned(),
+        SetupOperation::Fixture(..) => "Synthetic setup attempt".to_owned(),
     };
     let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
     root.append(&adw::HeaderBar::new());
@@ -837,7 +902,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
             })
         }
         #[cfg(test)]
-        SetupOperation::Fixture(_) => Box::new(|| {}),
+        SetupOperation::Fixture(..) => Box::new(|| {}),
     };
     let stopping = Rc::new(std::cell::Cell::new(false));
     stop.connect_clicked({
@@ -880,7 +945,10 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
         let mut terminal_stopped = false;
         match &operation {
             #[cfg(test)]
-            SetupOperation::Fixture(result) => terminal = Some(result.clone()),
+            SetupOperation::Fixture(result, details) => {
+                stage_details = details.clone();
+                terminal = Some(result.clone());
+            }
             SetupOperation::Offline(tracked) => {
                 loop {
                     match tracked.events.try_recv() {
@@ -930,36 +998,7 @@ fn monitor_setup(dialog: &adw::Dialog, model: &Rc<RefCell<AppModel>>, operation:
             }
             SetupOperation::Depot(id) => {
                 if let Some(snapshot) = crate::installation::depot_operation_snapshot(id) {
-                    stage_details = format!("Stage: {}", snapshot.state.replace('_', " "));
-                    if snapshot.total_bytes > 0
-                        && matches!(
-                            snapshot.state.as_str(),
-                            "verifying" | "verifying_existing" | "dependencies" | "extracting"
-                        )
-                    {
-                        stage_details.push_str(&format!(
-                            "\nProcessed: {} / {}",
-                            human_size(snapshot.bytes_completed),
-                            human_size(snapshot.total_bytes)
-                        ));
-                    }
-                    if snapshot.bytes_downloaded > 0 || snapshot.download_total_bytes.is_some() {
-                        stage_details.push_str(&format!(
-                            "\nDownloaded: {}{}",
-                            human_size(snapshot.bytes_downloaded),
-                            snapshot
-                                .download_total_bytes
-                                .map(|total| format!(" / {}", human_size(total)))
-                                .unwrap_or_default()
-                        ));
-                    }
-                    if snapshot.total_write_bytes > 0 {
-                        stage_details.push_str(&format!(
-                            "\nWritten: {} / {}",
-                            human_size(snapshot.bytes_written),
-                            human_size(snapshot.total_write_bytes)
-                        ));
-                    }
+                    stage_details = depot_setup_details(&snapshot);
                     fraction = None;
                     components.set_visible(false);
                     match snapshot.state.as_str() {
@@ -6730,6 +6769,87 @@ mod installer_version_tests {
         );
     }
 
+    fn setup_counter_snapshot(state: &str) -> crate::installation::DepotOperationSnapshot {
+        crate::installation::DepotOperationSnapshot {
+            operation_id: "synthetic-setup-counters".into(),
+            product_id: 1,
+            state: state.into(),
+            bytes_completed: 0,
+            bytes_downloaded: 0,
+            bytes_written: 0,
+            total_write_bytes: 0,
+            total_bytes: 0,
+            download_total_bytes: None,
+            error: None,
+            setup: None,
+        }
+    }
+
+    #[test]
+    fn setup_counters_preserve_actual_values_without_inferred_work() {
+        let mut snapshot = setup_counter_snapshot("complete");
+        snapshot.download_total_bytes = Some(0);
+        snapshot.total_write_bytes = 200;
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: complete\nNo Depot file download required.\nPayload data written this run: 0 B\nFull write estimate: 200 B\nExisting files can be reused without rewriting them."
+        );
+        for (state, downloaded, written) in [("materializing", 25, 50), ("complete", 100, 200)] {
+            snapshot.state = state.into();
+            snapshot.bytes_downloaded = downloaded;
+            snapshot.download_total_bytes = Some(100);
+            snapshot.bytes_written = written;
+            assert_eq!(
+                depot_setup_details(&snapshot),
+                format!(
+                    "Stage: {state}\nDepot files downloaded: {downloaded} B / 100 B\nPayload data written this run: {written} B\nFull write estimate: 200 B\nExisting files can be reused without rewriting them."
+                )
+            );
+        }
+        snapshot.download_total_bytes = Some(0);
+        snapshot.total_write_bytes = 0;
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: complete\nDepot files downloaded: 100 B\nPayload data written this run: 200 B"
+        );
+        snapshot = setup_counter_snapshot("dependencies");
+        snapshot.bytes_completed = 100;
+        snapshot.total_bytes = 200;
+        // Dependency acquisition also reports verified cached bytes in this field.
+        snapshot.bytes_downloaded = 100;
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: dependencies\nComponent data processed: 100 B / 200 B"
+        );
+        snapshot.total_bytes = 0;
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: dependencies\nComponent data processed: 100 B"
+        );
+        // Terminal snapshots can retain that count without retaining its origin.
+        for state in ["failed", "interrupted", "paused", "cancelled", "abandoned"] {
+            snapshot.state = state.into();
+            assert_eq!(
+                depot_setup_details(&snapshot),
+                format!("Stage: {state}\nData processed: 100 B")
+            );
+        }
+        snapshot = setup_counter_snapshot("verifying_existing");
+        snapshot.bytes_completed = 50;
+        snapshot.total_bytes = 200;
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: verifying existing\nProcessed: 50 B / 200 B"
+        );
+        snapshot = setup_counter_snapshot("downloading");
+        assert_eq!(depot_setup_details(&snapshot), "Stage: downloading");
+        snapshot.download_total_bytes = Some(100);
+        assert_eq!(
+            depot_setup_details(&snapshot),
+            "Stage: downloading\nDepot files downloaded: 0 B / 100 B"
+        );
+    }
+
     #[test]
     #[ignore = "requires private HOME/all XDG, D-Bus and GTK; synthetic setup results only"]
     fn setup_outcome_and_close_stay_visible_while_diagnostics_scroll() {
@@ -6765,10 +6885,30 @@ mod installer_version_tests {
             "Fixture Game\n\nRequired dependency DirectX failed (exit status: 1). Log: /synthetic/install.log\n{}\naccess_token=synthetic-secret https://example.invalid/signed?token=secret\nFinal diagnostic line",
             "Repeated diagnostic detail with a very long path-like-token/".repeat(150)
         );
-        for result in [Err(error.clone()), Ok(())] {
+        for (result, stage) in [
+            (Err(error.clone()), "failed"),
+            (Err(error.clone()), "dependencies"),
+            (Ok(()), "complete"),
+        ] {
             let dialog = adw::Dialog::builder().content_width(600).build();
             let failed = result.is_err();
-            monitor_setup(&dialog, &model, SetupOperation::Fixture(result));
+            let mut snapshot = setup_counter_snapshot(stage);
+            if failed {
+                snapshot.bytes_downloaded = 100;
+                if stage == "dependencies" {
+                    snapshot.bytes_completed = 100;
+                    snapshot.total_bytes = 200;
+                }
+            } else {
+                snapshot.download_total_bytes = Some(0);
+                snapshot.total_write_bytes = 558_300_000;
+            }
+            let counters = depot_setup_details(&snapshot);
+            monitor_setup(
+                &dialog,
+                &model,
+                SetupOperation::Fixture(result, counters.clone()),
+            );
             // Presentation here is the fixture's direct action, never a worker result.
             dialog.present(Some(&window));
             let root = dialog.child().unwrap();
@@ -6808,6 +6948,16 @@ mod installer_version_tests {
             assert_eq!(failure.is_visible(), failed);
             if failed {
                 wait(|| scroll.vadjustment().upper() > scroll.vadjustment().page_size());
+            }
+            assert!(details.text().contains(&counters));
+            assert!(details.is_selectable());
+            assert_eq!(details.ellipsize(), gtk::pango::EllipsizeMode::None);
+            let close_bounds = close.compute_bounds(&root).unwrap();
+            assert!(close_bounds.y() >= 0.0);
+            assert!(close_bounds.y() + close_bounds.height() <= root.height() as f32);
+            assert!(root.height() <= 400);
+            assert!(close.is_sensitive());
+            if failed {
                 assert!(
                     failure
                         .text()
@@ -6818,28 +6968,22 @@ mod installer_version_tests {
                 assert_eq!(
                     details.text(),
                     notifications::failure_message("", &format!(
-                        "Result: {error}\n\nSynthetic setup attempt\nWaiting for this operation to start.\n\nRecent stages:\nWaiting to start setup…"
+                        "Result: {error}\n\nSynthetic setup attempt\n{counters}\n\nRecent stages:\nWaiting to start setup…"
                     )).trim_start()
                 );
-                assert!(details.is_selectable());
-                assert_eq!(details.ellipsize(), gtk::pango::EllipsizeMode::None);
                 let cause_bounds = failure.compute_bounds(&root).unwrap();
                 let status_bounds = status.compute_bounds(&root).unwrap();
-                let close_bounds = close.compute_bounds(&root).unwrap();
                 assert!(cause_bounds.height() > 0.0);
                 assert!(cause_bounds.y() >= 0.0);
                 assert!(
                     cause_bounds.y() + cause_bounds.height()
                         <= scroll.compute_bounds(&root).unwrap().y()
                 );
-                assert!(close_bounds.y() + close_bounds.height() <= root.height() as f32);
-                assert!(root.height() <= 400);
                 scroll.vadjustment().set_value(scroll.vadjustment().upper());
                 wait(|| scroll.vadjustment().value() > 0.0);
                 assert_eq!(failure.compute_bounds(&root).unwrap(), cause_bounds);
                 assert_eq!(status.compute_bounds(&root).unwrap(), status_bounds);
                 assert_eq!(close.compute_bounds(&root).unwrap(), close_bounds);
-                assert!(close.is_sensitive());
             } else {
                 assert_eq!(status.text(), "Game setup completed.");
                 assert!(details.text().starts_with("Result: Game setup completed."));

@@ -4,12 +4,17 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P370b formatter and real setup Details fixture PASS in private profiles (p370b-_en33cny,
+  p332-tmoxo3nd); compile/fmt/Clippy and independent review PASS. Actual counters preserved,
+  full write estimate separated, cached component amounts called processed data. P373 source
+  review PASS; awaits integration. P372 isolated implementation underway after reviewer handoff.
+
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD6c4fb05. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEAD5a05fe8. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve13GB of40GB
   test allowance for Gungeon/Coffee Talk plus under2GB BIT.TRIP Runner (official100MB requirement).
   No push, PR, package, version or schema change.
-- Delivered42 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered43 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -32,6 +37,10 @@ Last meaningful update: 2026-10-06.
   PASS; compilation/fmt/Clippy and independent review PASS. No live/cloud-service gate inferred
   from synthetic tests. P370b counter wording and P373 transient check feedback in isolated
   implementation; P372 metadata Retry lifecycle design independently approved, not implemented.
+- Consolidated isolated build gate PASS on5a05fe8: fmt, all-target Clippy,571 library tests,
+  six integration tests, five Python tests and build;77 library tests ignored by default, with
+  affected GTK fixtures separately verified. Log /tmp/ludomere-r111-full-build-ebwyytx7/build.log.
+  Next live restart tests committed Cloud/layout fixes; no main-source or Cargo overlap occurred.
 - Live P352 on c9f5b99: existing native Gungeon launches/rendered intro, normal quit ends process
   and restores Play/search in place; original marker hash unchanged. Earlier real Windows offline/
   Depot Gungeon and Coffee Talk launches passed. Collections/Home keyboard activation, archive

@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- At5a05fe8 consolidated private gate PASS: formatting, all-target Clippy with warnings denied,
+  571 library tests, six integration tests, five Python helper tests and build.77 ignored library
+  entries excluded from default suite; affected GTK fixtures run separately. Log:
+  /tmp/ludomere-r111-full-build-ebwyytx7/build.log. All43 commits have exact post-commit build PASS.
+
 - Atb3f9227 the next private full build gate PASS: formatting, all-target Clippy with warnings
   denied,570 library tests, six integration tests, five Python helper tests and build.69 ignored
   library entries excluded by default; changed GTK paths independently exercised. Log:
@@ -23,6 +28,15 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
  the same chooser shows full paths while hiding Depot feedback for offline selections.
 
 ## Live testing
+
+- P370b independent review, pure counter matrix and actual mapped setup Details fixture PASS
+  (/tmp/ludomere-p370b-_en33cny, /tmp/ludomere-p332-tmoxo3nd). Compile/fmt/Clippy PASS.
+  Payload bytes written are distinct from full estimate; no inferred reuse or manufactured
+  completion fraction. Component/unknown-origin counters use processed wording; known-zero
+  Depot download is scoped. Backend counters, controls and progress policy unchanged.
+- On5a05fe8 Coffee Talk Properties displays the saved enabled cloud policy, last successful
+  sync and full save location without navigation. Root invoked read-only inventory check;
+  no cloud export, force or deletion. Screenshot cloud-loader-live-properties.png retained.
 
 - P369 new actual Cloud local-loader fixture PASS (/tmp/ludomere-p369-1qnzpsyc): reader-blocking
   SQLite lock/GTK heartbeat, accurate saved/missing records, real read error/Retry, unchanged
