@@ -284,6 +284,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining gates and live evidence
 
+### P353 — explain drive capacity versus library contents
+
+- Add compact Drive usage label and wrapping explanation that managed categories count this
+  library while capacity/free/Other cover the containing drive. Short Other legend avoids widening
+  the category row. No calculation, scan, selection or action behavior changes.
+- Independent source/layout review and formatting/Clippy/build PASS; no new wording-only test.
+  Live narrow-window visual confirmation follows the next app restart.
+
 ### P351 — keyboard access within Collections
 
 - Native game-grid activation and full-title accessibility now match Home; preserve collection

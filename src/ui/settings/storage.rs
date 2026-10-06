@@ -391,6 +391,7 @@ fn build_storage_section(
         }
     });
     let usage_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    usage_row.append(&gtk::Label::new(Some("Drive usage")));
     usage.set_hexpand(true);
     usage_row.append(&usage);
     let manage_library = gtk::MenuButton::new();
@@ -421,7 +422,7 @@ fn build_storage_section(
     let (installers_legend, installers_size) =
         storage_legend_item("Installers", "storage-installers");
     let (extras_legend, extras_size) = storage_legend_item("Extras", "storage-extras");
-    let (others_legend, others_size) = storage_legend_item("Others", "storage-others");
+    let (others_legend, others_size) = storage_legend_item("Other", "storage-others");
     let (free_legend, free_size) = storage_legend_item("Free", "storage-free");
     for item in [
         games_legend,
@@ -433,6 +434,14 @@ fn build_storage_section(
         legend.append(&item);
     }
     root.append(&legend);
+    let usage_explanation = gtk::Label::new(Some(
+        "Capacity and free space cover the drive. Games, Installers and Extras count this library; Other is the remaining used or unavailable space.",
+    ));
+    usage_explanation.set_xalign(0.0);
+    usage_explanation.set_wrap(true);
+    usage_explanation.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+    usage_explanation.add_css_class("dim-label");
+    root.append(&usage_explanation);
 
     let list_header = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     let item_count = gtk::Label::new(Some("Installed games"));

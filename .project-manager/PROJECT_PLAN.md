@@ -80,9 +80,17 @@
 - P351 (complete, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
-- P352 (in_progress, performance_audit): diagnose live Windows→native Linux offline reinstall
-  writing schema2/UMU compatibility despite native payload and no Windows executable. Proposal
-  before changes; preserve durable preferences and native independence, root alone reads real data.
+- P352 (in_progress, performance_audit; reviewer file_summary): approved explicit-Linux suppression
+  across auto-install/native completion/reconciliation and native-save Windows-preference retention.
+  Normalize only identified schema2/Linux/offline matching-managed-UMU/no-provenance shape in memory;
+  future/unknown shapes stay strict, Windows missing-prefix stays installed, unknown OS policy stays.
+  Own auto_install.rs, installation.rs, executor.rs, marker.rs in isolation; root alone reads real data.
+- P353 (complete, ui_critic; reviewer file_summary): clarify that Storage capacity bar covers the
+  containing drive while managed category totals cover the selected library. Wording/layout only
+  in isolated storage.rs; preserve arithmetic/workers and P350 feedback; verify narrow layout.
+- P354 (pending proposal, ui_critic): inspect initial Files page GTK database/filesystem work and
+  propose bounded loading/worker conversion using existing request/session guards. No edits before
+  review; retain usable actions and avoid new general UI/state frameworks or duplicate workers.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

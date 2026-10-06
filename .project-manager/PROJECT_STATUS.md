@@ -4,6 +4,17 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P353 independent copy/layout review and fmt/Clippy/build PASS; no test added for wording-only
+  change. P352 prevention/recovery implementation isolated. P354 source audit confirms initial
+  Files construction performs more GTK I/O than summary alone; bounded snapshot proposal pending,
+  no broad conversion approved. Latest idle app closed normally for upcoming live UI restart.
+
+- P351 committed68fb1a1 exact postbuildPASS. P352 implementation approved after independent
+  explicit-OS/recovery/preference review: narrowly recover the known native marker in memory only,
+  retain saved Windows choices, no prefix mutation or schema change. P353 copy review/integration
+  next; P354 initial Files page source-only proposal requested. Live Gungeon native launch still
+  blocked until P352, original marker retained; no inappropriate Windows repair accepted.
+
 - P350 committed38a4f4e exact postbuildPASS. P351 independent review, private native keyboard/
   accessibility/membership regression and fmt/Clippy/build PASS; separate commit next. P352 traced
   native marker pollution to auto-install preference copying and reconciliation; strict proposal
