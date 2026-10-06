@@ -24,7 +24,9 @@ Last meaningful update: 2026-10-06.
   formatting, all-target Clippy and cargo build --locked PASS. Preparing separate commit.
   P330 provider activation patch independently reviewed; seven focused isolated regressions,
   formatting, all-target Clippy and build PASS. Preparing separate local commit.
-  P329 off-thread file summaries independently reviewing in an isolated checkout.
+  P329 off-thread file summaries independently reviewed, integrated and verified with three private
+  regressions, formatting, all-target Clippy and build. P328 committed6c9813e, P330 committed8d37fe0;
+  both exact post-commit builds PASS. P327 cancellation and P331 installer restart fixes isolated.
 
 ## R110 complete — 0.3.2 release and new PR
 

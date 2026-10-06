@@ -1447,6 +1447,7 @@ pub(super) fn build_files_page(
     summary.set_xalign(0.0);
     summary.add_css_class("dim-label");
     page.append(&summary);
+    let refresh_summary = managed_detail_refresher(window, Some(model), &page, game.product_id);
     if let Some(management) = management {
         page.append(&management.status);
         page.append(&management.progress);
@@ -1471,6 +1472,7 @@ pub(super) fn build_files_page(
         .cloned()
         .collect::<Vec<_>>();
     let installer_context = RemoteFileContext {
+        refresh_summary: &refresh_summary,
         model: Some(model),
         product_id: game.product_id,
         product_slug: &game.slug,
@@ -1496,6 +1498,7 @@ pub(super) fn build_files_page(
     if !remote_patches.is_empty() {
         let patch_folder = game.location.join("patches");
         let patch_context = RemoteFileContext {
+            refresh_summary: &refresh_summary,
             model: Some(model),
             product_id: game.product_id,
             product_slug: &game.slug,
@@ -1522,6 +1525,7 @@ pub(super) fn build_files_page(
     if !remote_extras.is_empty() {
         let extras_folder = game.location.join("extras");
         let extras_context = RemoteFileContext {
+            refresh_summary: &refresh_summary,
             model: Some(model),
             product_id: game.product_id,
             product_slug: &game.slug,
@@ -1602,6 +1606,7 @@ fn dlc_file_section(
     show_retired_artifacts: bool,
 ) -> gtk::Box {
     let section = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    let refresh_summary = managed_detail_refresher(window, Some(model), &section, dlc.product_id);
     section.add_css_class("dlc-files-section");
     let title = gtk::Label::new(Some(&dlc.title));
     title.set_xalign(0.0);
@@ -1645,6 +1650,7 @@ fn dlc_file_section(
             }
             let folder = dlc_root.join(kind.as_str());
             let context = RemoteFileContext {
+                refresh_summary: &refresh_summary,
                 model: Some(model),
                 product_id: dlc.product_id,
                 product_slug: &dlc.slug,
@@ -1705,6 +1711,7 @@ pub(super) struct InstallerFilterDefaults {
 type InstallerFilterRows = Rc<RefCell<Vec<(gtk::Box, Option<String>, Option<String>)>>>;
 
 struct RemoteFileContext<'a> {
+    refresh_summary: &'a Rc<dyn Fn()>,
     model: Option<&'a Rc<RefCell<AppModel>>>,
     product_id: i64,
     product_slug: &'a str,
@@ -2292,6 +2299,7 @@ fn remote_file_collection(
         let row_for_delete = row.clone();
         let window = context.window.clone();
         let product_id = context.product_id;
+        let refresh_summary = context.refresh_summary.clone();
         let deletion_warning = if retired_artifact.is_some() {
             "This previous version is no longer offered by GOG and most likely cannot be downloaded again."
         } else {
@@ -2315,7 +2323,7 @@ fn remote_file_collection(
             let path = path.clone();
             let row = row_for_delete.clone();
             let button = button.clone();
-            let response_window = window.clone();
+            let refresh_summary = refresh_summary.clone();
             confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
                 if response != "delete" {
                     return;
@@ -2324,7 +2332,7 @@ fn remote_file_collection(
                 delete_downloaded_files(product_id, paths, move |result| match result {
                     Ok(()) => {
                         row.set_visible(false);
-                        refresh_managed_detail_labels(&response_window, product_id);
+                        refresh_summary();
                     }
                     Err(error) => {
                         tracing::warn!(%error, path = %path.display(), "could not delete managed file");
@@ -2730,6 +2738,7 @@ fn artifact_download_action(
     let status_for_download = status.clone();
     let progress_for_download = progress.clone();
     let window_for_download = context.window.clone();
+    let refresh_summary_for_download = context.refresh_summary.clone();
     let count_for_download = collection_count.clone();
     let copy_for_download = download_copy.clone();
     let product_slug = context
@@ -2998,6 +3007,7 @@ fn artifact_download_action(
         let progress_for_download = progress_for_download.clone();
         let count_for_download = count_for_download.clone();
         let window_for_response = window_for_download.clone();
+        let refresh_summary = refresh_summary_for_download.clone();
         let artifacts = artifacts.clone();
         let title = title.clone();
         let product_slug = product_slug.clone();
@@ -3192,7 +3202,7 @@ fn artifact_download_action(
                             if !counted.replace(true) {
                                 adjust_downloaded_collection_count(&count_for_response, 1);
                             }
-                            refresh_managed_detail_labels(&window_for_response, product_id);
+                            refresh_summary();
                             glib::ControlFlow::Break
                         }
                     }
@@ -3245,6 +3255,7 @@ fn artifact_download_action(
         let title = context.product_title.to_owned();
         let can_download = context.access_token.is_some();
         let deleting = gtk::Spinner::new();
+        let refresh_summary = context.refresh_summary.clone();
         deleting.set_visible(false);
         if let Some(action) = action.upgrade() {
             action.append(&deleting);
@@ -3281,6 +3292,7 @@ fn artifact_download_action(
             let deleting = deleting.clone();
             let title = title.clone();
             let counted = counted.clone();
+            let refresh_summary = refresh_summary.clone();
             confirmation.choose(Some(&window), gio::Cancellable::NONE, move |response| {
                 if response != "delete"
                     || (online::account_session(), auth::session()) != (session, auth_session)
@@ -3330,7 +3342,7 @@ fn artifact_download_action(
                             if counted.replace(false) {
                                 adjust_downloaded_collection_count(&count_for_response, -1);
                             }
-                            refresh_managed_detail_labels(&window_for_response, product_id);
+                            refresh_summary();
                             notifications::failure_message(
                                 "",
                                 &format!("{title}: Downloaded files deleted."),
@@ -4445,6 +4457,7 @@ mod unified_row_tests {
             macos: false,
         };
         let context = RemoteFileContext {
+            refresh_summary: &managed_detail_refresher(&window, Some(&model), &content, 9306001),
             model: Some(&model),
             product_id: 9306001,
             product_slug: "fixture",
@@ -4713,6 +4726,7 @@ mod unified_row_tests {
         for case in 0..3 {
             let statuses = crate::storage::inspect_libraries(&config).unwrap();
             let context = RemoteFileContext {
+                refresh_summary: &managed_detail_refresher(&window, None, &content, 9296002),
                 model: None,
                 product_id: 9296002,
                 product_slug: "fixture",

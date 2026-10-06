@@ -16,7 +16,7 @@
 - P328 (complete, reliability_audit; reviewer performance_audit): propagate current authenticated session through direct Depot actions, avoiding
   redundant wallet reads. Independent proposal review requires auth/online-generation, expiry,
   account-match and pre-persistence checks; no token serialization or new global cache.
-- P329 (ready, file_summary): move managed-file summary reads/stats off GTK with current-view,
+- P329 (complete, file_summary; reviewer ui_critic): move managed-file summary reads/stats off GTK with current-view,
   session and request guards. Isolated checkout /tmp/ludomere-r111-file-summary at ec29d3d;
   own ui/mod.rs helper and necessary call-site plumbing in ui/files.rs. No main-tree edits.
 - P330 (complete, reliability_audit; reviewer performance_audit): ensure saved-login reads use existing credential-provider discovery/activation,

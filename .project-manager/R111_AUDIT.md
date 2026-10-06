@@ -64,7 +64,6 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Coffee Talk real Depot setup exposed a separate .NET4.5.2 exit194, queued as P331. DirectX
   setup completed; retain downloaded game files and investigate before retrying or resetting.
 
-## Findings queued
 ### P330 — discover the credential service before reading a saved login
 
 - Saved-login reads reuse existing bounded Secret Service discovery/advertised provider activation.
@@ -76,6 +75,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 - Independent security/lifecycle review PASS. Seven focused synthetic/private-bus regressions,
   formatting, all-target Clippy and cargo build --locked PASS. User-unlocked real provider remains
   running; no forced wallet restart/lock was used to claim a cold-start integration test.
+
+### P329 — refresh managed-file summaries without blocking GTK
+
+- Move refreshed archive counts/sizes and legacy-file metadata reads to workers. Share one refresh
+  callback per files page/product, discard older requests and detached/account-stale results,
+  and reserve profile activity before worker entry so reset cannot race profile recreation.
+- Keep prior summary on read failure and update existing labels in place. Initial page construction
+  still has older synchronous reads; this does not claim every Files path is now asynchronous.
+- Independent source/lifecycle review PASS. Three private regressions PASS: summary equivalence,
+  SQLite-lock/GTK heartbeat with stale/reset cases, and existing archive arrival/deletion controls.
+  First existing-test invocation stopped at its required fixture-prefix guard; corrected isolated
+  invocation passed. Formatting, all-target Clippy and cargo build --locked PASS.
 
 ## Further findings
 
