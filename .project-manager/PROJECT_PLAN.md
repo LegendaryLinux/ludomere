@@ -128,7 +128,7 @@
   before click, including different target, selection, known Windows refusal and active Move.
   Own isolated ui/settings/storage.rs, explanation tooltip and recompute on input changes;
   preserve backend/click-time checks and no automatic destination choice. Synthetic controls only.
-- P362 (in_progress, performance_audit; reviewer file_summary): replace notification-popover
+- P362 (complete, performance_audit; reviewer file_summary): replace notification-popover
   unrealize cleanup with guarded weak cleanup on its actual anchor's destruction. Independent
   proposal review approves local GTK API fit; isolated notifications.rs only, no real data.
   Require never-realized disposal, real detach/reinsert, mapped teardown and pending-timeout

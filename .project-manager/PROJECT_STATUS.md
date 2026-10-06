@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD5a14c9a. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEADb3f9227. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered33 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered34 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -18,10 +18,9 @@ Last meaningful update: 2026-10-06.
   Depot Gungeon and Coffee Talk launches passed. Collections/Home keyboard activation, archive
   delete/re-download, uninstall completion, filter retention, Comet checks and Storage wording
   also exercised. No exhaustive UI/game/controller or cold-wallet-start claim.
-- Consolidated build PASS at6b7328d: fmt, Clippy,566 library tests,6 integration tests,5 Python
-  helper tests and build.57 ignored tests excluded from default suite; affected private GTK gates
-  run separately. Later changes pass focused gates/builds; next consolidated gate after this batch.
-  Harness/log: /tmp/ludomere-r111-full-build.py and full-build-odjoz3gv/build.log. Two earlier
+- Consolidated build PASS atb3f9227: fmt, Clippy,570 library tests,6 integration tests,5 Python
+  helper tests and build.69 ignored tests excluded from default suite; affected private GTK gates
+  run separately. Harness/log: /tmp/ludomere-r111-full-build.py and full-build-8kbq3zr4/build.log. Two earlier
   harness-only mount/NSS failures corrected without exposing real profile/bus/network or changing tests.
 - P354 verified (ui_critic; reviewer file_summary): one-worker initial Files preparation and
   loading/Retry shell, with session/view/local-revision/profile-activity guards. Review corrected
@@ -50,8 +49,9 @@ Last meaningful update: 2026-10-06.
   compile/Clippy/build and backend preflight pass. Controls fixture initially failed because GTK
   ignored invalid selection on a nonempty dropdown; actual empty-model setup retains all strict
   assertions and now passes (p361-5nevxott). Independent correction review passes.
-  P362 destruction-bound notification-popover cleanup approved after independent source review;
-  isolated implementation and strict lifecycle fixture underway.
+  P362 destruction-bound notification-popover cleanup passes independent review, strict lifecycle
+  fixture, unchanged notification/P359 regressions, formatting/Clippy/compilation. Exact GTK
+  children-left and surface warnings absent in all three private logs.
   P360 malformed preference decoding assessment deferred: a strict-reader-only patch would abort
   whole reconciliation and cannot be repaired from current Properties. Needs separate safe
   per-game recovery/writer protection; no malformed actual user data was inspected or claimed.

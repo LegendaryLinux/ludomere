@@ -5,6 +5,11 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Consolidated verification checkpoint
 
+- Atb3f9227 the next private full build gate PASS: formatting, all-target Clippy with warnings
+  denied,570 library tests, six integration tests, five Python helper tests and build.69 ignored
+  library entries excluded by default; changed GTK paths independently exercised. Log:
+  /tmp/ludomere-r111-full-build-8kbq3zr4/build.log. All34 commits have exact post-commit build PASS.
+
 - At6b7328d the private build gate passes cargo fmt, all-target Clippy with warnings denied,
  566 library tests, six integration tests, five Python helper tests and cargo build --locked.
  57 ignored library entries are excluded by default; changed GTK paths were exercised separately.
@@ -75,6 +80,17 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P362 — retain notification hover across remapping and clean up on destruction
+
+- Bind manually parented notification popover cleanup to its anchor's destruction, using a weak
+  reference and parent check. Surface unrealization no longer permanently detaches the popover;
+  never-presented windows now also clean up. History, timers, focus and click behavior unchanged.
+- Independent source/lifecycle review PASS. Strict never-presented, mapped detach/reinsert,
+  hide/show and pending-timeout teardown fixture PASS, along with unchanged notification action
+  and Account status tests. Root verified no children-left/popover/surface warnings in all logs;
+  isolated harness's pre-existing GSettings source diagnostics remain separate.
+- Evidence p362-xqiig396, p362-cjd5fixj, p359-_vwcgyk0; formatting, Clippy and compilation PASS.
 
 ### P361 — explain unavailable Storage moves before clicking
 
