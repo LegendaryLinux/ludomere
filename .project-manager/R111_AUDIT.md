@@ -3,6 +3,35 @@
 Window: 08:13:55–20:13:55 UTC. Branch: `improvement/interactive-ux-audit-2026-10-06`.
 Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
+## Closeout
+
+- Completed82 separate local change commits through`71ecd7b`, each with an exact post-commit
+  `cargo build --locked` pass. Final full build and affected native-pointer/GTK/real-app gates
+  pass as detailed below. This records-only closeout is separate from those82 changes.
+- Final source verified at20:01:44 UTC, within the authorized12-hour window. All actual and
+  synthetic app windows are closed; no download, installation or game remains active from this
+  audit. No publication, version bump, schema change or package build/install was performed.
+- Main outcomes: wallet discovery and authenticated Depot reuse; native Linux/preference and
+  prerequisite handling; responsive file/Storage/cloud/tray work; consistent search, keyboard,
+  compact layout, cancellation, diagnostics and download completion feedback. Git history and
+  the task entries retain individual changes and their failed-before/corrected-after evidence.
+- Real test games were Gungeon, Coffee Talk and BIT.TRIP Runner. Conservative reservation16GB
+  of40GB includes repeated transfers/cache/staging; it is not measured new disk consumption.
+  Gungeon's three archives are restored (900.7MB total including its extra). Coffee's Audit Test
+  save remains preserved and normally synchronized; no deliberate cloud-save deletion occurred.
+- Remaining user-assisted checks: cold-start/locked-wallet interoperability, cloud export through
+  the native destination picker, applying an actually available game update, and fuller gameplay/
+  controller/accessibility coverage. Normal Coffee cloud sync passed; export did not start and
+  its picker was canceled through normal app close. No exhaustive prototype-readiness claim.
+- Deferred technical findings remain in PROJECT_STATUS and the source reports: complete stale
+  Properties identity, malformed preference recovery, broader native popup/Cloud-page retention,
+  and unmeasured secondary performance proposals. P411 corrects the reproduced repair warning;
+  it does not establish the stripped native stack's exact internal cause.
+- Final source gate: `/tmp/ludomere-r111-full-build-pd7d9sna/build.log`.
+  Exact P411 commit build: `/tmp/ludomere-r111-p411-postbuild.log`.
+  Records-only closeout follows the same post-commit build procedure, with its output retained
+  at `/tmp/ludomere-r111-closeout-postbuild.log`.
+
 ## Consolidated verification checkpoint
 
 - Final P411 source fresh consolidated build PASS: formatting, all-target Clippy-Dwarnings,
