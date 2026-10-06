@@ -659,6 +659,19 @@ fn native_completion(plan: &InstalledGame, executable: Option<PathBuf>, now: i64
     completed
 }
 
+fn completed_windows_preferences(
+    previous: Option<&crate::compatibility::GameCompatibilityPreferences>,
+    prefix_slug: String,
+    profile: crate::compatibility::UmuProfile,
+) -> crate::compatibility::GameCompatibilityPreferences {
+    crate::compatibility::GameCompatibilityPreferences {
+        backend: crate::compatibility::CompatibilityBackendKind::Umu,
+        prefix_slug,
+        profile,
+        pending_profile: previous.and_then(|preferences| preferences.pending_profile.clone()),
+    }
+}
+
 fn run_windows_installation(
     plan: &InstalledGame,
     additional: &[AdditionalInstaller],
@@ -684,8 +697,7 @@ fn run_windows_installation(
         install_base,
     )?;
     use crate::compatibility::{
-        CompatibilityBackend, CompatibilityBackendKind, CompatibilityRunRequest,
-        GameCompatibilityPreferences, InitializePrefixRequest,
+        CompatibilityBackend, CompatibilityRunRequest, InitializePrefixRequest,
     };
     // Adding DLC to an existing installation does not use the base-game
     // installer. Requiring its archived files here caused DLC-only operations
@@ -798,12 +810,11 @@ fn run_windows_installation(
         Ok(())
     };
     let mut completed = plan.clone();
-    completed.compatibility = Some(GameCompatibilityPreferences {
-        backend: CompatibilityBackendKind::Umu,
-        prefix_slug: slug.clone(),
-        profile: profile.clone(),
-        pending_profile: None,
-    });
+    completed.compatibility = Some(completed_windows_preferences(
+        plan.compatibility.as_ref(),
+        slug.clone(),
+        profile.clone(),
+    ));
     if install_base {
         run_one(&plan.installer_files, "base game", 1, cancellation)?;
         if !super::directory_has_installed_payload(&plan.installation_directory) {
@@ -1445,6 +1456,54 @@ mod tests {
         installation::marker::{InstallationMarker, InstalledCompatibility, InstalledComponent},
     };
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn windows_completion_retains_unapplied_profile_without_using_it() {
+        use crate::compatibility::{
+            CompatibilityBackendKind, GameCompatibilityPreferences, UmuProfile, UmuProfileSource,
+        };
+        let resolved = UmuProfile {
+            game_id: "umu-resolved".into(),
+            store: "gog".into(),
+            source: UmuProfileSource::GogProductId,
+        };
+        let mut previous = GameCompatibilityPreferences {
+            backend: CompatibilityBackendKind::Umu,
+            prefix_slug: "old-location".into(),
+            profile: UmuProfile::fallback(),
+            pending_profile: Some(UmuProfile {
+                game_id: "umu-pending".into(),
+                ..resolved.clone()
+            }),
+        };
+        let completed = completed_windows_preferences(
+            Some(&previous),
+            "selected-location".into(),
+            resolved.clone(),
+        );
+        assert_eq!(completed.profile, resolved);
+        assert_eq!(completed.prefix_slug, "selected-location");
+        assert_eq!(completed.pending_profile, previous.pending_profile);
+        assert_ne!(
+            completed.profile,
+            completed.pending_profile.clone().unwrap()
+        );
+        previous.pending_profile = None;
+        assert_eq!(
+            completed_windows_preferences(
+                Some(&previous),
+                "selected-location".into(),
+                resolved.clone()
+            )
+            .pending_profile,
+            None
+        );
+        assert_eq!(
+            completed_windows_preferences(None, "selected-location".into(), resolved)
+                .pending_profile,
+            None
+        );
+    }
 
     #[test]
     fn native_completion_drops_stale_runtime_at_each_checkpoint() {

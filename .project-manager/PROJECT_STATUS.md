@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADaa23e68. Root alone uses real wallet/profile/
-  desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve8GB of40GB
+  improvement/interactive-ux-audit-2026-10-06; HEADe4f8c17. Root alone uses real wallet/profile/
+  desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered30 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered31 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -29,9 +29,10 @@ Last meaningful update: 2026-10-06.
   regressions, final review, fmt/Clippy/build PASS. Two initial existing-test runs refused the wrong
   private prefix; reruns with mandatory p296 prefix passed, tests/product unchanged for that refusal.
   Inherited persistence decode suppression remains deferred; returned errors stay visible.
-- Active P355 (performance_audit; reviewer file_summary): approved cached-offline/source-migration
-  preference retention, native boundary and pending-profile preservation, with tracked cached
-  preparation before DB access. Isolated implementation; no product integration yet.
+- P355 verified (performance_audit; implementation reviewer ui_critic): cached-offline/source-
+  migration preference retention, native boundary and unapplied pending-profile preservation;
+  cached preparation tracked before DB access. Eight focused private regressions, independent
+  review, fmt/Clippy/build PASS. Inherited malformed preference JSON fallback remains deferred.
 - P357 verified (file_summary; reviewer performance_audit): track both Storage inspection workers
   for reset draining. Initial independent review caught lifetime session capture disabling reused
   Settings; corrected per-admission snapshots restore deliberate same-page retry while rejecting
@@ -43,6 +44,10 @@ Last meaningful update: 2026-10-06.
   Account Settings session subtitle is a stale snapshot. P355 additionally found mixed-case Linux
   dispatch inconsistency. Initial file summaries, completed-transfer colors, read-only free-space
   checks, cancellation admission and native marker issues have verified corrections.
+- P359 Account status review PASS, gate queued; P361 Move eligibility isolated implementation.
+  P360 malformed preference decoding assessment deferred: a strict-reader-only patch would abort
+  whole reconciliation and cannot be repaired from current Properties. Needs separate safe
+  per-game recovery/writer protection; no malformed actual user data was inspected or claimed.
 - Use normal windowquit for game windows and app tray Close; X11 windowclose destroys a window
   without proving process exit. Current live client c9f5b99 is idle after native Gungeon test.
   Actual game markers/data remain private; subagents receive only normalized diagnostic facts.

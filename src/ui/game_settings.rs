@@ -1729,12 +1729,13 @@ fn launch_source_migration(
     let game = game.clone();
     let installed = installed.clone();
     let candidates = candidates.to_vec();
+    let auth_session = auth::session();
     let (sender, receiver) = mpsc::channel();
     let (stages, stage_receiver) = mpsc::sync_channel(8);
     std::thread::spawn(move || {
         let result = (|| -> anyhow::Result<()> {
             anyhow::ensure!(
-                online::account_session() == session,
+                online::account_session() == session && auth::session() == auth_session,
                 "Account changed; reopen game properties."
             );
             let _activity =
@@ -1757,30 +1758,17 @@ fn launch_source_migration(
                             "The selected installer is no longer available. Reopen source selection."
                         );
                     };
-                    let now = chrono::Utc::now().timestamp();
-                    let plan = crate::domain::InstalledGame {
-                        product_id: game.product_id,
-                        library_id: library.id.clone(),
-                        installed_version: candidate.version.clone(),
-                        installation_directory: library.path.join(&game.slug),
-                        installer_revision_id: candidate.revision_id,
-                        installer_job_id: None,
-                        installer_files: candidate.paths.clone(),
-                        installer_complete: candidate.complete,
-                        installer_operating_system: candidate.operating_system.clone(),
-                        installer_language: candidate.language.clone(),
-                        compatibility: None,
-                        primary_executable: None,
-                        launch_arguments: Vec::new(),
-                        state: crate::domain::InstallationState::Pending,
-                        error: None,
-                        installed_at: None,
-                        verified_at: None,
-                        last_played_at: installed.last_played_at,
-                        playtime_seconds: installed.playtime_seconds,
-                        created_at: installed.created_at,
-                        updated_at: now,
-                    };
+                    anyhow::ensure!(
+                        online::account_session() == session && auth::session() == auth_session,
+                        "Account changed; reopen game properties."
+                    );
+                    let plan = prepare_offline_migration_plan(
+                        &StateStore::open()?,
+                        &game,
+                        &installed,
+                        library,
+                        candidate,
+                    )?;
                     let additional_installers = game
                         .dlcs
                         .iter()
@@ -1881,7 +1869,7 @@ fn launch_source_migration(
                 "The selected Game Files library changed; reopen source selection."
             );
             anyhow::ensure!(
-                online::account_session() == session,
+                online::account_session() == session && auth::session() == auth_session,
                 "Account changed; reopen game properties."
             );
             let _ = stages
@@ -1900,7 +1888,7 @@ fn launch_source_migration(
                 target,
             )?;
             anyhow::ensure!(
-                online::account_session() == session,
+                online::account_session() == session && auth::session() == auth_session,
                 "Account changed; migration stopped before removing the existing installation."
             );
             let _ =
@@ -1927,6 +1915,22 @@ fn launch_source_migration(
         let _ = sender.send(result);
     });
     monitor_source_migration(view, model, session, receiver, stage_receiver);
+}
+
+fn prepare_offline_migration_plan(
+    store: &StateStore,
+    game: &DetailPageModel,
+    installed: &crate::domain::InstalledGame,
+    library: &crate::config::GameLibrary,
+    candidate: &crate::installation::InstallerCandidate,
+) -> anyhow::Result<crate::domain::InstalledGame> {
+    let preferences = store.game_preferences(game.product_id)?;
+    let mut plan = offline_installation_plan(game.product_id, library, &game.slug, candidate);
+    plan.last_played_at = installed.last_played_at;
+    plan.playtime_seconds = installed.playtime_seconds;
+    plan.created_at = installed.created_at;
+    retain_offline_launch_preferences(&mut plan, preferences.as_ref(), Some(installed));
+    Ok(plan)
 }
 
 fn monitor_source_migration(
@@ -2572,6 +2576,184 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    fn offline_migration_plan_preserves_saved_options_and_missing_row_fallback() {
+        use crate::compatibility::{
+            CompatibilityBackendKind, GameCompatibilityPreferences, UmuProfile, UmuProfileSource,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let database = root.path().join("state.db");
+        let store = StateStore::open_at(&database).unwrap();
+        let library = crate::config::GameLibrary {
+            id: "chosen".into(),
+            name: "Chosen".into(),
+            path: root.path().join("chosen-library"),
+            default: true,
+        };
+        let retained = GameCompatibilityPreferences {
+            backend: CompatibilityBackendKind::Umu,
+            prefix_slug: "previous-folder".into(),
+            profile: UmuProfile {
+                game_id: "umu-saved".into(),
+                store: "gog".into(),
+                source: UmuProfileSource::GogProductId,
+            },
+            pending_profile: Some(UmuProfile {
+                game_id: "umu-pending".into(),
+                store: "gog".into(),
+                source: UmuProfileSource::GogProductId,
+            }),
+        };
+        for (index, (os, saved)) in [
+            (Some("windows"), 2),
+            (Some("windows"), 1),
+            (Some("windows"), 0),
+            (Some("linux"), 2),
+            (Some("LiNuX"), 1),
+            (Some("linux"), 0),
+            (Some("unknown"), 2),
+            (None, 0),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let id = index as i64 + 1;
+            let detail = DetailPageModel::game(
+                Game {
+                    product_id: id,
+                    slug: "chosen-folder".into(),
+                    ..Default::default()
+                },
+                false,
+            );
+            let candidate = crate::installation::InstallerCandidate {
+                product_id: id,
+                revision_id: Some(91),
+                version: Some("chosen-version".into()),
+                operating_system: os.map(str::to_owned),
+                language: Some("Polish".into()),
+                paths: vec![root.path().join("chosen-installer")],
+                launcher: None,
+                method: if os == Some("windows") {
+                    crate::installation::InstallationMethod::WindowsCompatibility
+                } else {
+                    crate::installation::InstallationMethod::NativeLinux
+                },
+                total_size: 4,
+                currently_offered: true,
+                complete: true,
+            };
+            let mut installed = offline_installation_plan(id, &library, "old-folder", &candidate);
+            installed.installer_operating_system = Some("windows".into());
+            installed.compatibility = Some(GameCompatibilityPreferences {
+                profile: UmuProfile {
+                    game_id: "umu-existing-fallback".into(),
+                    ..retained.profile.clone()
+                },
+                ..retained.clone()
+            });
+            installed.launch_arguments = vec!["--existing-fallback".into()];
+            installed.primary_executable = Some(installed.installation_directory.join("old.exe"));
+            installed.last_played_at = Some(100);
+            installed.playtime_seconds = 345;
+            installed.created_at = 50;
+            if saved != 0 {
+                store
+                    .upsert_game_preferences(&crate::domain::GamePreferences {
+                        product_id: id,
+                        launch_arguments: if saved == 2 {
+                            vec!["--saved".into()]
+                        } else {
+                            vec![]
+                        },
+                        compatibility: (saved == 2).then_some(retained.clone()),
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+            let before = store.game_preferences(id).unwrap();
+            let plan =
+                prepare_offline_migration_plan(&store, &detail, &installed, &library, &candidate)
+                    .unwrap();
+            assert_eq!(plan.product_id, id);
+            assert_eq!(plan.library_id, library.id);
+            assert_eq!(
+                plan.installation_directory,
+                library.path.join("chosen-folder")
+            );
+            assert_eq!(plan.installer_operating_system.as_deref(), os);
+            assert_eq!(plan.installed_version, candidate.version);
+            assert_eq!(plan.installer_language, candidate.language);
+            assert_eq!(plan.installer_revision_id, candidate.revision_id);
+            assert_eq!(plan.installer_files, candidate.paths);
+            assert_eq!(plan.primary_executable, None);
+            assert_eq!(
+                plan.launch_arguments,
+                match saved {
+                    2 => vec!["--saved"],
+                    1 => vec![],
+                    _ => vec!["--existing-fallback"],
+                }
+            );
+            assert_eq!(
+                plan.compatibility,
+                if os == Some("windows") {
+                    match saved {
+                        2 => Some(retained.clone()),
+                        1 => None,
+                        _ => installed.compatibility.clone(),
+                    }
+                } else {
+                    None
+                }
+            );
+            assert_eq!(plan.last_played_at, installed.last_played_at);
+            assert_eq!(plan.playtime_seconds, installed.playtime_seconds);
+            assert_eq!(plan.created_at, installed.created_at);
+            assert_eq!(store.game_preferences(id).unwrap(), before);
+            assert!(
+                !library.path.exists(),
+                "construction must precede destructive migration"
+            );
+        }
+        let detail = DetailPageModel::game(
+            Game {
+                product_id: 99,
+                slug: "chosen-folder".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        let candidate = crate::installation::InstallerCandidate {
+            product_id: 99,
+            revision_id: None,
+            version: None,
+            operating_system: Some("linux".into()),
+            language: None,
+            paths: vec![],
+            launcher: None,
+            method: crate::installation::InstallationMethod::NativeLinux,
+            total_size: 0,
+            currently_offered: false,
+            complete: true,
+        };
+        let installed = offline_installation_plan(99, &library, "old-folder", &candidate);
+        let no_preferences =
+            prepare_offline_migration_plan(&store, &detail, &installed, &library, &candidate)
+                .unwrap();
+        assert!(no_preferences.compatibility.is_none());
+        assert!(no_preferences.launch_arguments.is_empty());
+        rusqlite::Connection::open(database)
+            .unwrap()
+            .execute("DROP TABLE game_preferences", [])
+            .unwrap();
+        assert!(
+            prepare_offline_migration_plan(&store, &detail, &installed, &library, &candidate)
+                .is_err()
+        );
+        assert!(!library.path.exists());
+    }
 
     #[test]
     #[ignore = "requires isolated HOME/all XDG, private GTK display and D-Bus"]

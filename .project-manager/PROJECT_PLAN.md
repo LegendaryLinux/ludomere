@@ -98,7 +98,7 @@
   Existing StateStore APIs swallow certain row/JSON decode failures; preserve that inherited
   behavior rather than expand state.rs in this change, propagate returned errors and report the
   persistence issue separately. Empty saved artifact lists must remain safe.
-- P355 (in_progress, performance_audit; reviewer file_summary): confirmed cached-offline and source
+- P355 (complete, performance_audit; proposal reviewer file_summary, implementation reviewer ui_critic): confirmed cached-offline and source
   migration preference loss. Approved owned download_chooser.rs/game_settings.rs/executor.rs;
   retain fresh-plan args/full saved runtime by explicit OS, authoritative empty saved rows, no
   old executable/source copying. Keep pending profile without applying it; track cached preparation
@@ -119,9 +119,15 @@
   from in-memory network/token/logout state using weak bounded updates, unchanged wording except
   no authenticated display during logout. Own isolated settings.rs; no wallet/DB/network probes,
   identity/action redesign or navigation. Actual row/state/destruction focused regression required.
-- P360 (in_progress source proposal, performance_audit): assess malformed game-preference JSON
+- P360 (complete assessment, implementation deferred, performance_audit): assess malformed game-preference JSON
   silently becoming defaults, caller fallbacks and safe actionable recovery. No implementation,
   raw private arguments/profile access, queue/catalog/schema changes or new API without review.
+  Strict parsing alone would abort whole reconciliation and leave Properties unable to repair;
+  require separate recoverable per-game policy before changes. Evidence p360-assessment.md.
+- P361 (in_progress, ui_critic; reviewer file_summary): reflect existing Storage Move eligibility
+  before click, including different target, selection, known Windows refusal and active Move.
+  Own isolated ui/settings/storage.rs, explanation tooltip and recompute on input changes;
+  preserve backend/click-time checks and no automatic destination choice. Synthetic controls only.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.

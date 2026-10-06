@@ -1,6 +1,100 @@
 use super::*;
 use crate::config::{GameLibrary, LibraryKind};
 
+pub(super) fn offline_installation_plan(
+    product_id: i64,
+    library: &GameLibrary,
+    slug: &str,
+    candidate: &crate::installation::InstallerCandidate,
+) -> crate::domain::InstalledGame {
+    let now = chrono::Utc::now().timestamp();
+    crate::domain::InstalledGame {
+        product_id,
+        library_id: library.id.clone(),
+        installed_version: candidate.version.clone(),
+        installation_directory: library.path.join(slug),
+        installer_revision_id: candidate.revision_id,
+        installer_job_id: None,
+        installer_files: candidate.paths.clone(),
+        installer_complete: candidate.complete,
+        installer_operating_system: candidate.operating_system.clone(),
+        installer_language: candidate.language.clone(),
+        compatibility: None,
+        primary_executable: None,
+        launch_arguments: Vec::new(),
+        state: crate::domain::InstallationState::Pending,
+        error: None,
+        installed_at: None,
+        verified_at: None,
+        last_played_at: None,
+        playtime_seconds: 0,
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+pub(super) fn retain_offline_launch_preferences(
+    plan: &mut crate::domain::InstalledGame,
+    preferences: Option<&crate::domain::GamePreferences>,
+    previous: Option<&crate::domain::InstalledGame>,
+) {
+    plan.launch_arguments = preferences.map_or_else(
+        || previous.map_or_else(Vec::new, |game| game.launch_arguments.clone()),
+        |preferences| preferences.launch_arguments.clone(),
+    );
+    plan.compatibility = if plan
+        .installer_operating_system
+        .as_deref()
+        .is_some_and(|os| os.eq_ignore_ascii_case("windows"))
+    {
+        preferences.map_or_else(
+            || previous.and_then(|game| game.compatibility.clone()),
+            |preferences| preferences.compatibility.clone(),
+        )
+    } else {
+        None
+    };
+}
+
+fn prepare_cached_offline_installation<T: Send + 'static>(
+    mut plan: crate::domain::InstalledGame,
+    fresh: bool,
+    session: (u64, u64),
+    enqueue: impl FnOnce(crate::domain::InstalledGame) -> anyhow::Result<T> + Send + 'static,
+) -> anyhow::Result<mpsc::Receiver<anyhow::Result<T>>> {
+    anyhow::ensure!(
+        session == (online::account_session(), auth::session()),
+        "Account changed before setup"
+    );
+    let activity = crate::profile_reset::begin_activity("preparing offline installation")?;
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = (|| {
+            let _activity = activity;
+            anyhow::ensure!(
+                session == (online::account_session(), auth::session()),
+                "Account changed before setup"
+            );
+            let store = StateStore::open()?;
+            if fresh {
+                let preferences = store.game_preferences(plan.product_id)?;
+                retain_offline_launch_preferences(&mut plan, preferences.as_ref(), None);
+            }
+            online::with_account_session(session.0, || {
+                anyhow::ensure!(auth::session() == session.1, "Account changed before setup");
+                crate::installation::save_game_preferences(&store, &plan)
+            })?;
+            anyhow::ensure!(
+                session == (online::account_session(), auth::session()),
+                "Account changed before setup"
+            );
+            enqueue(plan)
+        })();
+        let _ = sender.send(result);
+    });
+    Ok(receiver)
+}
+
 #[cfg(test)]
 type CapturedDownloads = (
     Vec<download::DownloadRequest>,
@@ -3539,7 +3633,6 @@ fn populate_install_dialog(
             let Some(library) = libraries.get(library.selected() as usize) else {
                 return;
             };
-            let now = chrono::Utc::now().timestamp();
             let plan = if let Some(mut installed) = existing_installation.clone() {
                 if repair {
                     let Some(candidate) = candidate else { return };
@@ -3553,29 +3646,7 @@ fn populate_install_dialog(
                 installed
             } else {
                 let candidate = candidate.expect("a new installation requires an installer");
-                crate::domain::InstalledGame {
-                    product_id,
-                    library_id: library.id.clone(),
-                    installed_version: candidate.version.clone(),
-                    installation_directory: library.path.join(&slug),
-                    installer_revision_id: candidate.revision_id,
-                    installer_job_id: None,
-                    installer_files: candidate.paths.clone(),
-                    installer_complete: candidate.complete,
-                    installer_operating_system: candidate.operating_system.clone(),
-                    installer_language: candidate.language.clone(),
-                    compatibility: None,
-                    primary_executable: None,
-                    launch_arguments: Vec::new(),
-                    state: crate::domain::InstallationState::Pending,
-                    error: None,
-                    installed_at: None,
-                    verified_at: None,
-                    last_played_at: None,
-                    playtime_seconds: 0,
-                    created_at: now,
-                    updated_at: now,
-                }
+                offline_installation_plan(product_id, library, &slug, candidate)
             };
             {
                 status.remove_css_class("error");
@@ -3616,28 +3687,26 @@ fn populate_install_dialog(
                     .collect::<Vec<_>>();
                 let install_base = repair || existing_installation.is_none();
                 let interactive = interactive_prompts.is_active();
-                let session = online::account_session();
+                let session = action_session;
+                let receiver = match prepare_cached_offline_installation(
+                    plan,
+                    existing_installation.is_none(),
+                    session,
+                    move |plan| {
+                        crate::installation::enqueue_installation_tracked(
+                            plan, additional_installers, install_base, interactive,
+                        ).ok_or_else(|| anyhow::anyhow!("An installation operation is already active, or setup could not be saved"))
+                    },
+                ) {
+                    Ok(receiver) => receiver,
+                    Err(error) => {
+                        status.set_label(&format!("Could not start setup: {error:#}"));
+                        status.add_css_class("error");
+                        return;
+                    }
+                };
                 button.set_sensitive(false);
                 dialog.set_can_close(false);
-                let (sender, receiver) = mpsc::channel();
-                std::thread::spawn(move || {
-                    let result =
-                        (|| -> anyhow::Result<crate::installation::TrackedInstallation> {
-                            anyhow::ensure!(
-                                online::account_session() == session,
-                                "Account changed before setup"
-                            );
-                            let store = StateStore::open()?;
-                            crate::installation::save_game_preferences(&store, &plan)?;
-                            anyhow::ensure!(
-                                online::account_session() == session,
-                                "Account changed before setup"
-                            );
-                            crate::installation::enqueue_installation_tracked(plan,additional_installers,install_base,interactive)
-                                .ok_or_else(|| anyhow::anyhow!("An installation operation is already active, or setup could not be saved"))
-                        })();
-                    let _ = sender.send(result);
-                });
                 let model = action_model.clone();
                 let dialog = dialog.clone();
                 let status = status.clone();
@@ -3645,7 +3714,7 @@ fn populate_install_dialog(
                 glib::timeout_add_local(Duration::from_millis(100), move || {
                     if model.borrow().account_epoch != action_epoch
                         || model.borrow().logout_pending
-                        || online::account_session() != session
+                        || session != (online::account_session(), auth::session())
                     {
                         dialog.set_can_close(true);
                         dialog.close();
@@ -5971,6 +6040,229 @@ mod archive_poll_tests {
 #[cfg(test)]
 mod installer_version_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires isolated HOME/all XDG/TMP under /tmp/ludomere-p355-"]
+    fn cached_offline_preparation_preserves_preferences_before_refused_enqueue() {
+        use crate::compatibility::{
+            CompatibilityBackendKind, GameCompatibilityPreferences, UmuProfile, UmuProfileSource,
+        };
+        use crate::domain::GamePreferences;
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p355-"),
+                "{key}"
+            );
+        }
+        let root = tempfile::tempdir().unwrap();
+        let library = GameLibrary {
+            id: "selected".into(),
+            name: "Selected".into(),
+            path: root.path().join("games"),
+            default: true,
+        };
+        let store = StateStore::open().unwrap();
+        let session = (online::account_session(), auth::session());
+        let retained = GameCompatibilityPreferences {
+            backend: CompatibilityBackendKind::Umu,
+            prefix_slug: "previous-location".into(),
+            profile: UmuProfile {
+                game_id: "umu-active".into(),
+                store: "gog".into(),
+                source: UmuProfileSource::GogProductId,
+            },
+            pending_profile: Some(UmuProfile {
+                game_id: "umu-pending".into(),
+                store: "gog".into(),
+                source: UmuProfileSource::GogProductId,
+            }),
+        };
+        for (index, (os, saved)) in [
+            ("linux", 2),
+            ("windows", 2),
+            ("linux", 1),
+            ("windows", 1),
+            ("linux", 0),
+            ("windows", 0),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let id = index as i64 + 1;
+            if saved != 0 {
+                store
+                    .upsert_game_preferences(&GamePreferences {
+                        product_id: id,
+                        executable_path: Some("old.exe".into()),
+                        launch_arguments: if saved == 2 {
+                            vec!["--retained".into()]
+                        } else {
+                            vec![]
+                        },
+                        compatibility: (saved == 2).then_some(retained.clone()),
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+            store.preserve_product_activity(id, Some(100), 234).unwrap();
+            let candidate = crate::installation::InstallerCandidate {
+                product_id: id,
+                revision_id: Some(81),
+                version: Some("chosen-version".into()),
+                operating_system: Some(os.into()),
+                language: Some("Polish".into()),
+                paths: vec![root.path().join(if os == "linux" {
+                    "chosen.sh"
+                } else {
+                    "chosen.exe"
+                })],
+                launcher: None,
+                method: if os == "linux" {
+                    crate::installation::InstallationMethod::NativeLinux
+                } else {
+                    crate::installation::InstallationMethod::WindowsCompatibility
+                },
+                total_size: 4,
+                currently_offered: true,
+                complete: true,
+            };
+            // Use the exact constructor and worker called by the cached chooser.
+            let plan = offline_installation_plan(id, &library, "chosen-folder", &candidate);
+            let mut expected = plan.clone();
+            expected.launch_arguments = if saved == 2 {
+                vec!["--retained".into()]
+            } else {
+                vec![]
+            };
+            expected.compatibility = (os == "windows" && saved == 2).then_some(retained.clone());
+            let (captured, capture) = mpsc::channel();
+            let (release, waiting) = mpsc::channel();
+            let result = prepare_cached_offline_installation(
+                plan,
+                true,
+                session,
+                move |plan| -> anyhow::Result<()> {
+                    captured.send(plan)?;
+                    waiting.recv()?;
+                    anyhow::bail!("synthetic enqueue refusal")
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                capture.recv_timeout(Duration::from_secs(5)).unwrap(),
+                expected
+            );
+            assert!(
+                crate::profile_reset::reserve()
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("preparing offline installation")
+            );
+            release.send(()).unwrap();
+            assert!(
+                result
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("synthetic enqueue refusal")
+            );
+            assert!(crate::profile_reset::reserve().is_ok());
+            let after = store.game_preferences(id).unwrap().unwrap();
+            assert_eq!(after.launch_arguments, expected.launch_arguments);
+            assert_eq!(
+                after.compatibility,
+                (saved == 2).then_some(retained.clone())
+            );
+            assert_eq!(
+                after.executable_path, None,
+                "old executable must not select the new source launcher"
+            );
+            assert_eq!(store.product_activity(id).unwrap(), (Some(100), 234));
+            assert!(
+                !library.path.exists(),
+                "preparation never creates payloads or prefixes"
+            );
+
+            // Existing repair/DLC plans retain their explicit current choices.
+            expected.launch_arguments = vec!["--current-plan".into()];
+            if let Some(profile) = &mut expected.compatibility {
+                profile.profile.game_id = "umu-current-plan".into();
+            }
+            let result =
+                prepare_cached_offline_installation(expected.clone(), false, session, Ok).unwrap();
+            assert_eq!(
+                result
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap(),
+                expected
+            );
+        }
+        let candidate = crate::installation::InstallerCandidate {
+            product_id: 99,
+            revision_id: None,
+            version: None,
+            operating_system: Some("linux".into()),
+            language: None,
+            paths: vec![],
+            launcher: None,
+            method: crate::installation::InstallationMethod::NativeLinux,
+            total_size: 0,
+            currently_offered: false,
+            complete: true,
+        };
+        let plan = offline_installation_plan(99, &library, "new-native", &candidate);
+        let frozen = crate::profile_reset::reserve().unwrap();
+        assert!(
+            prepare_cached_offline_installation(
+                plan.clone(),
+                true,
+                session,
+                |_| -> anyhow::Result<()> { panic!("reset-frozen preparation enqueued") }
+            )
+            .is_err()
+        );
+        drop(frozen);
+        assert!(
+            prepare_cached_offline_installation(
+                plan.clone(),
+                true,
+                (session.0, session.1.wrapping_add(1)),
+                |_| -> anyhow::Result<()> { panic!("stale preparation enqueued") }
+            )
+            .is_err()
+        );
+        assert!(store.game_preferences(99).unwrap().is_none());
+        rusqlite::Connection::open(crate::identity::database())
+            .unwrap()
+            .execute("DROP TABLE game_preferences", [])
+            .unwrap();
+        let result =
+            prepare_cached_offline_installation(plan, true, session, |_| -> anyhow::Result<()> {
+                panic!("failed preference read enqueued")
+            })
+            .unwrap();
+        assert!(
+            result
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .is_err()
+        );
+        assert!(crate::profile_reset::reserve().is_ok());
+        assert!(!library.path.exists());
+    }
 
     #[test]
     fn library_free_space_checks_never_create_missing_directories() {

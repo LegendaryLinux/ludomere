@@ -76,6 +76,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Fixes
 
+### P355 — retain launch options through cached reinstalls and source migration
+
+- Fresh cached-offline and offline migration plans now retain saved arguments and full Windows
+  runtime preferences while preserving selected source/destination and native independence.
+  Empty saved rows remain authoritative; migration uses installed values only when no row exists.
+  Existing repair/DLC plans keep explicit current options. Windows completion retains pending
+  profile data without applying it or changing active-profile resolution/target-prefix derivation.
+- Cached preparation holds profile activity from admission through hydration/save/enqueue, with
+  original session checks. Migration reads preferences before backup/removal; returned errors stop
+  preparation. No GTK I/O or helper policy change. The shared fresh constructor replaces duplicates.
+- Independent review and eight private actual-constructor/save/refused-handoff/completion/native
+  regressions PASS; formatting, Clippy and build PASS. No actual source migration was exercised
+  by these fixtures. Malformed JSON defaults inside StateStore remain a separate deferred issue.
+
 ### P354 — prepare initial downloaded-file rows off GTK
 
 - Files immediately shows an inspection shell while one tracked worker prepares base/owned-DLC
