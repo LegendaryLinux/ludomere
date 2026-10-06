@@ -16,6 +16,20 @@ struct InstalledStorageItem {
     size: u64,
 }
 
+#[cfg(test)]
+type StorageInspectionResult = anyhow::Result<(
+    Option<(u64, u64)>,
+    Vec<InstalledStorageItem>,
+    u64,
+    u64,
+    Vec<crate::storage::GameDirectoryIssue>,
+)>;
+
+#[cfg(test)]
+thread_local! {
+    static STORAGE_INSPECTIONS: RefCell<Option<Vec<mpsc::Sender<StorageInspectionResult>>>> = const { RefCell::new(None) };
+}
+
 #[derive(Clone)]
 struct StorageListView {
     list: gtk::ListBox,
@@ -171,6 +185,7 @@ fn build_storage_section(
             .unwrap_or(0) as u32,
     );
     let library_menu = gtk::MenuButton::new();
+    library_menu.set_widget_name("storage-library-menu");
     library_menu.set_hexpand(true);
     library_menu.add_css_class("storage-library-menu");
     let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -181,6 +196,7 @@ fn build_storage_section(
     selected_mount.add_css_class("storage-library-path");
     toolbar.append(&selected_mount);
     let capacity = gtk::Label::new(Some("Calculating storage…"));
+    capacity.set_widget_name("storage-capacity");
     capacity.add_css_class("storage-capacity-label");
     toolbar.append(&capacity);
     toolbar.append(&gtk::Image::from_icon_name("pan-down-symbolic"));
@@ -208,6 +224,7 @@ fn build_storage_section(
             let mut labels = Vec::new();
             for (index, entry) in libraries.borrow().iter().cloned().enumerate() {
                 let row = gtk::Button::new();
+                row.set_widget_name(&format!("storage-library-choice-{index}"));
                 row.add_css_class("flat");
                 row.add_css_class("storage-library-choice");
                 let content = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -241,6 +258,10 @@ fn build_storage_section(
                 choices.append(&row);
             }
             choices.append(&add);
+            #[cfg(test)]
+            if STORAGE_INSPECTIONS.with_borrow(Option::is_some) {
+                return;
+            }
             let config = model.borrow().config.clone();
             let epoch = model.borrow().account_epoch;
             let (sender, receiver) = mpsc::channel();
@@ -289,6 +310,7 @@ fn build_storage_section(
     rebuild_library_choices();
 
     let path_label = gtk::Label::new(None);
+    path_label.set_widget_name("storage-inspection-status");
     path_label.set_xalign(0.0);
     path_label.add_css_class("storage-path-label");
     root.append(&path_label);
@@ -296,6 +318,7 @@ fn build_storage_section(
     path_label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
     path_label.set_selectable(true);
     let recheck = gtk::Button::with_label("Recheck library");
+    recheck.set_widget_name("storage-recheck");
     recheck.set_halign(gtk::Align::Start);
     root.append(&recheck);
     let game_issues = gtk::Box::new(gtk::Orientation::Vertical, 10);
@@ -497,8 +520,21 @@ fn build_storage_section(
         let recheck = recheck.downgrade();
         Rc::new(move || {
             request.set(request.get().wrapping_add(1));
+            if let Some(recheck) = recheck.upgrade() {
+                recheck.set_sensitive(false);
+                recheck.set_label("Checking library…");
+            }
             footer.set_sensitive(false);
             *usage_values.borrow_mut() = StorageBreakdown::default();
+            for label in [
+                &games_size,
+                &installers_size,
+                &extras_size,
+                &others_size,
+                &free_size,
+            ] {
+                label.set_label("—");
+            }
             usage.queue_draw();
             while let Some(child) = game_issues.first_child() {
                 game_issues.remove(&child);
@@ -507,6 +543,9 @@ fn build_storage_section(
             let Some(selected_library) =
                 libraries.borrow().get(library.selected() as usize).cloned()
             else {
+                if let Some(recheck) = recheck.upgrade() {
+                    recheck.set_label("Recheck library");
+                }
                 manage_library.set_sensitive(false);
                 selected_mount.set_label("Choose or add a directory");
                 path_label
@@ -543,78 +582,91 @@ fn build_storage_section(
             let epoch = model.borrow().account_epoch;
             let generation = request.get();
             let (sender, receiver) = mpsc::channel();
-            std::thread::spawn(move || {
-                let result = (|| -> anyhow::Result<_> {
-                    let inspection = crate::storage::inspect_library_status(
-                        &config,
-                        kind,
-                        &selected_library.id,
-                    )?;
-                    match inspection.compatibility {
-                        crate::storage::LibraryCompatibility::Compatible => {}
-                        crate::storage::LibraryCompatibility::Incompatible(reason)
-                        | crate::storage::LibraryCompatibility::Unavailable(reason) => {
-                            anyhow::bail!(reason)
-                        }
-                    }
-                    let storage = filesystem_storage(&selected_library.path);
-                    let store = StateStore::open()?;
-                    let games = if kind == crate::config::LibraryKind::GameFiles {
-                        crate::installation::reconcile_installed_games(&store, &all_libraries)?
-                            .into_iter()
-                            .filter_map(|mut game| {
-                                let (library_id, directory) =
-                                    crate::installation::resolve_installation_directory(
-                                        &game,
-                                        &all_libraries,
-                                    )?;
-                                if library_id != selected_library.id {
-                                    return None;
-                                }
-                                game.library_id = library_id;
-                                game.installation_directory = directory;
-                                let (title, artwork) =
-                                    titles.get(&game.product_id).cloned().unwrap_or_else(|| {
-                                        (format!("Product {}", game.product_id), None)
-                                    });
-                                let size = directory_size(&game.installation_directory);
-                                Some(InstalledStorageItem {
-                                    game,
-                                    title,
-                                    artwork,
-                                    size,
-                                })
-                            })
-                            .collect::<Vec<_>>()
-                    } else {
-                        Vec::new()
-                    };
-                    let managed = store.managed_files()?;
-                    let installers = managed
-                        .iter()
-                        .filter(|file| {
-                            file.present
-                                && matches!(
-                                    file.kind,
-                                    ArtifactKind::Installer | ArtifactKind::Patch
-                                )
-                                && file.path.starts_with(&selected_library.path)
-                        })
-                        .map(|file| file.size)
-                        .sum::<u64>();
-                    let extras = managed
-                        .iter()
-                        .filter(|file| {
-                            file.present
-                                && file.kind == ArtifactKind::Extra
-                                && file.path.starts_with(&selected_library.path)
-                        })
-                        .map(|file| file.size)
-                        .sum::<u64>();
-                    Ok((storage, games, installers, extras, inspection.game_issues))
-                })();
-                let _ = sender.send(result);
+            #[cfg(test)]
+            let captured = STORAGE_INSPECTIONS.with_borrow_mut(|requests| {
+                if let Some(requests) = requests {
+                    requests.push(sender.clone());
+                    true
+                } else {
+                    false
+                }
             });
+            #[cfg(not(test))]
+            let captured = false;
+            if !captured {
+                std::thread::spawn(move || {
+                    let result = (|| -> anyhow::Result<_> {
+                        let inspection = crate::storage::inspect_library_status(
+                            &config,
+                            kind,
+                            &selected_library.id,
+                        )?;
+                        match inspection.compatibility {
+                            crate::storage::LibraryCompatibility::Compatible => {}
+                            crate::storage::LibraryCompatibility::Incompatible(reason)
+                            | crate::storage::LibraryCompatibility::Unavailable(reason) => {
+                                anyhow::bail!(reason)
+                            }
+                        }
+                        let storage = filesystem_storage(&selected_library.path);
+                        let store = StateStore::open()?;
+                        let games = if kind == crate::config::LibraryKind::GameFiles {
+                            crate::installation::reconcile_installed_games(&store, &all_libraries)?
+                                .into_iter()
+                                .filter_map(|mut game| {
+                                    let (library_id, directory) =
+                                        crate::installation::resolve_installation_directory(
+                                            &game,
+                                            &all_libraries,
+                                        )?;
+                                    if library_id != selected_library.id {
+                                        return None;
+                                    }
+                                    game.library_id = library_id;
+                                    game.installation_directory = directory;
+                                    let (title, artwork) =
+                                        titles.get(&game.product_id).cloned().unwrap_or_else(
+                                            || (format!("Product {}", game.product_id), None),
+                                        );
+                                    let size = directory_size(&game.installation_directory);
+                                    Some(InstalledStorageItem {
+                                        game,
+                                        title,
+                                        artwork,
+                                        size,
+                                    })
+                                })
+                                .collect::<Vec<_>>()
+                        } else {
+                            Vec::new()
+                        };
+                        let managed = store.managed_files()?;
+                        let installers = managed
+                            .iter()
+                            .filter(|file| {
+                                file.present
+                                    && matches!(
+                                        file.kind,
+                                        ArtifactKind::Installer | ArtifactKind::Patch
+                                    )
+                                    && file.path.starts_with(&selected_library.path)
+                            })
+                            .map(|file| file.size)
+                            .sum::<u64>();
+                        let extras = managed
+                            .iter()
+                            .filter(|file| {
+                                file.present
+                                    && file.kind == ArtifactKind::Extra
+                                    && file.path.starts_with(&selected_library.path)
+                            })
+                            .map(|file| file.size)
+                            .sum::<u64>();
+                        Ok((storage, games, installers, extras, inspection.game_issues))
+                    })();
+                    let _ = sender.send(result);
+                });
+            }
             let capacity = capacity.clone();
             let usage = usage.clone();
             let usage_values = usage_values.clone();
@@ -637,7 +689,14 @@ fn build_storage_section(
                 if model.borrow().account_epoch != epoch || request.get() != generation {
                     return glib::ControlFlow::Break;
                 }
-                match receiver.try_recv() {
+                let result = receiver.try_recv();
+                if !matches!(&result, Err(mpsc::TryRecvError::Empty))
+                    && let Some(recheck) = recheck.upgrade()
+                {
+                    recheck.set_label("Recheck library");
+                    recheck.set_sensitive(true);
+                }
+                match result {
                     Ok(Ok((storage, games, installers, extras, issues))) => {
                         path_label.set_label(if issues.is_empty() { "Compatible" } else { "Library available. Some game folders need attention; other games remain usable." });
                         game_issues.set_visible(!issues.is_empty());
@@ -1225,6 +1284,7 @@ fn storage_legend_item(title: &str, color_class: &str) -> (gtk::Box, gtk::Label)
     title.add_css_class("storage-legend-title");
     item.append(&title);
     let size = gtk::Label::new(Some("0 B"));
+    size.set_widget_name(color_class);
     size.add_css_class("storage-legend-size");
     item.append(&size);
     (item, size)
@@ -1584,6 +1644,224 @@ fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    #[ignore = "requires private HOME/all XDG, GTK and D-Bus; inspection results are synthetic"]
+    fn recheck_feedback_tracks_current_request_and_clears_stale_totals() {
+        for key in [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(
+                std::env::var(key)
+                    .unwrap()
+                    .starts_with("/tmp/ludomere-p350-")
+            );
+        }
+        adw::init().unwrap();
+        gtk::Settings::default()
+            .unwrap()
+            .set_gtk_enable_animations(false);
+        install_css();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.StorageFeedbackTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let config = Config {
+            game_libraries: (0..2)
+                .map(|index| GameLibrary {
+                    id: index.to_string(),
+                    name: format!("Fixture {index}"),
+                    path: std::env::temp_dir().join(format!("synthetic-library-{index}")),
+                    default: index == 0,
+                })
+                .collect(),
+            ..Config::default()
+        };
+        let w = Rc::new(window::create_widgets(&app, &config));
+        let model = Rc::new(RefCell::new(AppModel {
+            config,
+            ..AppModel::default()
+        }));
+        STORAGE_INSPECTIONS.with_borrow_mut(|requests| {
+            assert!(requests.is_none());
+            *requests = Some(Vec::new());
+        });
+        let page = build_storage_page(
+            &w.window,
+            &w,
+            &model,
+            crate::config::LibraryKind::GameFiles,
+            "Game Library",
+        );
+        w.window.set_content(Some(&page));
+        w.window.present();
+        let recheck = find_named_descendant(page.upcast_ref(), "storage-recheck")
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+        let menu = find_named_descendant(page.upcast_ref(), "storage-library-menu")
+            .and_downcast::<gtk::MenuButton>()
+            .unwrap();
+        let status = find_named_descendant(page.upcast_ref(), "storage-inspection-status")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        let capacity = find_named_descendant(page.upcast_ref(), "storage-capacity")
+            .and_downcast::<gtk::Label>()
+            .unwrap();
+        let totals = [
+            "storage-games",
+            "storage-installers",
+            "storage-extras",
+            "storage-others",
+            "storage-free",
+        ]
+        .map(|name| {
+            find_named_descendant(page.upcast_ref(), name)
+                .and_downcast::<gtk::Label>()
+                .unwrap()
+        });
+        wait(|| recheck.is_mapped());
+        assert!(!recheck.is_sensitive());
+        assert_eq!(recheck.label().as_deref(), Some("Checking library…"));
+        assert!(totals.iter().all(|label| label.text() == "—"));
+        assert!(menu.is_sensitive());
+        assert!(menu.grab_focus());
+        let focus = gtk::prelude::GtkWindowExt::focus(&w.window);
+        let generation = model.borrow().detail_generation;
+        assert_eq!(
+            STORAGE_INSPECTIONS.with_borrow(|requests| requests.as_ref().unwrap().len()),
+            1
+        );
+        let stale = STORAGE_INSPECTIONS
+            .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap());
+        // Changing libraries remains possible while the old inspection is pending.
+        find_named_descendant(
+            menu.popover().unwrap().upcast_ref(),
+            "storage-library-choice-1",
+        )
+        .and_downcast::<gtk::Button>()
+        .unwrap()
+        .emit_clicked();
+        let current = STORAGE_INSPECTIONS
+            .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap());
+        stale
+            .send(Ok((Some((9000, 1)), vec![], 8000, 0, vec![])))
+            .unwrap();
+        // Receiver closure proves the old generation was rejected, without a disk/timing race.
+        wait(|| {
+            stale
+                .send(Err(anyhow::anyhow!("stale inspection")))
+                .is_err()
+        });
+        assert!(!recheck.is_sensitive());
+        assert_eq!(recheck.label().as_deref(), Some("Checking library…"));
+        assert!(totals.iter().all(|label| label.text() == "—"));
+        current
+            .send(Ok((Some((1000, 600)), vec![], 120, 40, vec![])))
+            .unwrap();
+        wait(|| recheck.is_sensitive());
+        assert_eq!(recheck.label().as_deref(), Some("Recheck library"));
+        assert_eq!(status.text(), "Compatible");
+        assert_eq!(
+            capacity.text(),
+            format!("{} free of {}", human_size(600), human_size(1000))
+        );
+        for (label, bytes) in totals.iter().zip([0, 120, 40, 240, 600]) {
+            assert_eq!(label.text(), human_size(bytes));
+        }
+        assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focus);
+        assert_eq!(model.borrow().detail_generation, generation);
+        assert_eq!(w.window.content().as_ref(), Some(page.upcast_ref()));
+
+        recheck.emit_clicked();
+        assert!(!recheck.is_sensitive());
+        assert!(totals.iter().all(|label| label.text() == "—"));
+        STORAGE_INSPECTIONS
+            .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap())
+            .send(Err(anyhow::anyhow!("Synthetic unavailable library")))
+            .unwrap();
+        wait(|| recheck.is_sensitive());
+        assert!(status.text().contains("Synthetic unavailable library"));
+        assert!(totals.iter().all(|label| label.text() == "—"));
+
+        recheck.emit_clicked();
+        drop(
+            STORAGE_INSPECTIONS
+                .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap()),
+        );
+        wait(|| recheck.is_sensitive());
+        assert!(status.text().contains("inspection stopped unexpectedly"));
+        assert!(totals.iter().all(|label| label.text() == "—"));
+
+        recheck.emit_clicked();
+        STORAGE_INSPECTIONS
+            .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap())
+            .send(Ok((None, vec![], 120, 40, vec![])))
+            .unwrap();
+        wait(|| recheck.is_sensitive());
+        assert_eq!(capacity.text(), "Storage information unavailable");
+        assert!(totals.iter().all(|label| label.text() == "—"));
+
+        recheck.emit_clicked();
+        let old_account = STORAGE_INSPECTIONS
+            .with_borrow_mut(|requests| requests.as_mut().unwrap().pop().unwrap());
+        model.borrow_mut().account_epoch += 1;
+        wait(|| {
+            old_account
+                .send(Err(anyhow::anyhow!("old account")))
+                .is_err()
+        });
+        assert!(!recheck.is_sensitive());
+        assert!(!status.text().contains("old account"));
+        assert!(totals.iter().all(|label| label.text() == "—"));
+
+        let empty_model = Rc::new(RefCell::new(AppModel {
+            config: Config {
+                game_libraries: vec![],
+                ..Config::default()
+            },
+            ..AppModel::default()
+        }));
+        let empty = build_storage_page(
+            &w.window,
+            &w,
+            &empty_model,
+            crate::config::LibraryKind::GameFiles,
+            "Game Library",
+        );
+        w.window.set_content(Some(&empty));
+        let empty_recheck = find_named_descendant(empty.upcast_ref(), "storage-recheck")
+            .and_downcast::<gtk::Button>()
+            .unwrap();
+        wait(|| empty_recheck.is_mapped());
+        assert!(!empty_recheck.is_sensitive());
+        assert_eq!(empty_recheck.label().as_deref(), Some("Recheck library"));
+        assert!(
+            find_named_descendant(empty.upcast_ref(), "storage-inspection-status")
+                .and_downcast::<gtk::Label>()
+                .unwrap()
+                .text()
+                .contains("No library configured")
+        );
+        assert!(STORAGE_INSPECTIONS.with_borrow(|requests| requests.as_ref().unwrap().is_empty()));
+        STORAGE_INSPECTIONS.with_borrow_mut(|requests| *requests = None);
+        w.window.destroy();
+    }
 
     #[test]
     fn directory_size_and_copy_preserve_nested_files() {

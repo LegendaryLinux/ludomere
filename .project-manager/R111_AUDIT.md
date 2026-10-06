@@ -284,6 +284,14 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Remaining gates and live evidence
 
+### P350 — visible Storage recheck state
+
+- Disable/relabel Recheck while its selected inspection is pending; clear old legend totals with
+  the old chart. Restore only current request outcomes; keep library switching available and no-
+  library Recheck disabled. Preserve worker/reconciliation semantics and recovery actions.
+- Independent review, actual-receiver private GTK success/error/disconnect/stale/account/switch/
+  empty regression, formatting/all-target Clippy/build PASS. No real filesystem workers in fixture.
+
 ### P349 — bound repeated grid-scroll work
 
 - Coalesce adjustment notifications into one75ms trailing pass reading the latest viewport;

@@ -4,6 +4,11 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P349 committed8a5f7e8 exact postbuildPASS. P350 integrated, fmt/Clippy/build PASS; mapped gate
+  running. Live native Gungeon download/auto-install finishes but writes schema2 UMU marker over a
+  native start.sh/EtG.x86_64 payload (old EtG.exe absent); Play wrongly offers Windows repair.
+  Root declined repair. P352 isolated diagnosis assigned; do not claim native launch success.
+
 - P349 strict500-card mapped regression, independent review, formatting/Clippy/build PASS;
   preparing separate commit. Live native Gungeon offline download started via unified chooser,
   visible blue Pause/list status, separate archive/game destinations. Reserve8GB of40GB aggregate.

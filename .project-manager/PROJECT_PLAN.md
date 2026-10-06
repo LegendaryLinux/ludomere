@@ -73,13 +73,16 @@
   scans, skip filtered/unmapped rows and retain latest viewport/lifetime safeguards. Own library.rs
   in isolated checkout; source work-count evidence and strict mapped equivalence/lifecycle fixture.
   No grid virtualization, backend queue redesign, real data or main edits before review.
-- P350 (in_progress, ui_critic; reviewer file_summary): prevent duplicate Recheck and stale Storage
+- P350 (complete, ui_critic; reviewer file_summary): prevent duplicate Recheck and stale Storage
   totals; label busy/current results without navigation or changed scan semantics. Own storage.rs
   isolated with deterministic GTK regression. Drive-scope wording, Move enablement and Collections
   keyboard parity are separate pending proposals, not silently bundled into this correction.
 - P351 (review, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
+- P352 (in_progress, performance_audit): diagnose live Windows→native Linux offline reinstall
+  writing schema2/UMU compatibility despite native payload and no Windows executable. Proposal
+  before changes; preserve durable preferences and native independence, root alone reads real data.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.
