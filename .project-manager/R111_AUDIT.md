@@ -33,12 +33,56 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P380 missing-fixture-status diagnosis confirmed: production initialize_library_loading was not
+  called in P325. Independently reviewed one-line fixture initialization retains every assertion;
+  final exact P325 PASS (/tmp/ludomere-p325-s1h1rbzf). Prior P340/P334/P337 remain PASS.
+- Gungeon macOS archive completes (~261MB actual), giving3local installers/900.7MB total archives
+  and Extras. Active-download capture shows additional action-row width pressure. By the next
+  attempted Pause click transfer had completed and button had changed to Play, launching the
+  already-authorized native Gungeon. Root closes its game window normally; no macOS install
+  occurred. Screenshot detail-width-paused-download.png is actually running-game state, not Pause.
+
+- Reserve14GB of40GB for another bounded Gungeon archive transfer (macOS installer catalog260MB),
+  solely to inspect active/paused presentation; no additional game or macOS installation admitted.
+  Existing native/Windows installers and game remain in place. Live preview remainsbb20ed0+P381.
+
+- P381 preview improves narrow Overview: primary/gear/favorite are inside viewport and horizontal
+  scrolling reveals final tab. Selecting Offline Installers exposes a remaining active-page width
+  issue and clips favorite again. Keyboard focus-scrolling not yet established. No acceptance or
+  commit yet; author reviews active header minima. Preview patch temporarily removed from main
+  (retained isolated/artifact, running preview unchanged) to verify P379 independently.
+- P379 independent source review GO after neutral malformed-row messages (Choose can be disabled)
+  and valid Error-status fixture correction. Compile/fmt PASS; actual SQLite reservation merge,
+  backend effective-return/error and existing round-trip private tests PASS; GTK gates pending.
+  New GTK gate fails whole-page weak release (/tmp/ludomere-p379-etgkqz8_); retained P372 fails
+  old Retry-sensitive completion sentinel when resolved availability now disables hidden Retry
+  (/tmp/ludomere-p372-0h0fab2z). P369 loader passes (/tmp/ludomere-p369-bm08jemk). Corrections
+  under independent review; no lifetime assertion silently dropped or P379 commit yet.
+- P380 compile/fmt PASS; extended P340 accessibility/renderer and retained P334/P337 PASS
+  (p340-vkynb3k0,p334-ubibeg1o,p337-sgvlkwh3). Extended P325 fails missing fixture status label
+  (p325-kltfe2_0); author investigates narrow fixture construction. No product regression inferred.
+
+- Onbb20ed0 small Gungeon wallpaper transfer completes normally; new Disk write rate label
+  fits actual Downloads header, thin section dividers/compact empty queue visible. File remains
+  in Extras (about1.7MB), two offline installers/game untouched;13GB reservation retained.
+  Empty zero-rate graph after this fast transfer and disabled Update on Up-to-date modal are
+  P382 source-only feedback assessment. P381 minimal native tabviewport preview built, live
+  precommit verification starts; no complete responsive-layout claim yet.
+
+- Gungeon manual Check for Updates returns No update available without queuing work. Modal
+  retains a disabled Update button (minor feedback follow-up); root closes normally. Actual
+  narrow window1150x700 including decorations clips detail gear/favorite/right tabs on both
+  Overview and Patch Notes; P381 source proposal isolates tab-width pressure, no guessed fix yet.
+- Livea3641c1 closes normally through tray; aggregate log check shows0 panics/RefCell/GTK or
+  Adwaita criticals for this run. Restarted verifiedbb20ed0 for Downloads layout live verification.
+
 - P378 independent correction review and exact private fixture PASS
   (/tmp/ludomere-p378-60rgtjrj), compile/fmt/Clippy PASS. Initial failure is retained: box-drawing
   glyph has1px negative ink bearing with visible overflow; revised assertion keeps logical bounds
   strict and tests transformed ink against actual clipping ancestors/window, without tolerance
   or product padding. Normal/enlarged text, divider thickness, compact empty queue, ordered history,
   nonempty queue and paused Resume eligibility verified. No action/network worker launched.
+  Commitbb20ed0 and exact post-commit build PASS;50 separate local audit commits built.
 
 - Gungeon Achievements loads four unlocked entries; explicit Refresh visibly shows Loading
   achievements and disables the action, then restores Up to date/current cache time and the

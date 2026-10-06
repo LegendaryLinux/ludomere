@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADefa4410. Root alone uses the actual wallet,
+  improvement/interactive-ux-audit-2026-10-06; HEADbb20ed0. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Delivered49 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
+- Delivered50 separate commits, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS ata3641c1: fmt, all-target Clippy-Dwarnings,
   572 library tests, six integration tests, five Python helper tests and build.80 library tests
@@ -19,13 +19,13 @@ Last meaningful update: 2026-10-06.
   settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound
   metadata Retry; P373 temporary Windows-check feedback; P374 consistent Downloads counters.
   Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
-- Active: P378 independently approved Downloads spacing/labels correction isolated with
-  ui_critic, reviewer file_summary. P379 performance_audit assesses Cloud folder override
-  GTK writes/stale-discovery persistence, proposal only. P375 synthetic handoff passes after
+- Active: P378 Downloads spacing/labels correction passes private geometry gates and build.
+  P379 performance_audit implements reviewed Cloud folder override persistence fix in isolation.
+  P380 copy and P381 narrow detail layout assessments pending. P375 synthetic handoff passes after
   strict mapping wait but clientless display limits invalidate live-animation coverage; warning
   remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
-- Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve13GB of40GB, covering
+- Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve14GB of40GB, covering
   payloads/prefixes/cache/staging/repeats; BIT.TRIP official requirement100MB, measured payload
   56.7MB/prefix409MB. All three rendered game screens and exited normally. Gungeon native
   offline reinstall writes correct schema1 and retains two archives; Coffee Depot repair succeeds.
@@ -35,7 +35,8 @@ Last meaningful update: 2026-10-06.
   files; corrected repair consent fits, cancelled before work. Extras-only Gungeon wallpaper
   download lands in correct root, updates row/totals/notifications; local deletion restores single
   Download and preserves game/two installers. First Delete click was ignored, repeat succeeded;
-  cause remains unknown. Newly restarted a3641c1 will test fresh BIT.TRIP reinstall/progress.
+  cause remains unknown. Livea3641c1 fresh BIT.TRIP reinstall/title/exit succeeds; screenshot
+  keyboard navigation and Gungeon achievement refresh succeed. Narrow detail layout clips actions.
 - Open evidence/limits: one repeated nonfatal GTK ancestor critical around Repair-to-components
   transition (P375); earlier paused archive first trash click unexplained (P358); full stale
   Properties installed identity deferred beyond P365a; malformed preference JSON recovery

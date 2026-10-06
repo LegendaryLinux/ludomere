@@ -222,7 +222,11 @@ fn refresh_sidebar_visibility(w: &Widgets, model: &AppModel) -> usize {
             }
             let collapsed = model.collapsed_activity_sections.contains(&section.key);
             let state = if collapsed { "collapsed" } else { "expanded" };
-            let accessible = format!("{}, {matching} games, {state}", section.label);
+            let accessible = format!(
+                "{}, {matching} {}, {state}",
+                section.label,
+                if matching == 1 { "game" } else { "games" }
+            );
             row.update_property(&[gtk::accessible::Property::Label(&accessible)]);
             row.update_state(&[gtk::accessible::State::Expanded(Some(!collapsed))]);
             if let Some(label) = find_named_descendant(&row.upcast(), "activity-disclosure")
@@ -1734,6 +1738,89 @@ fn home_native_activation_preserves_filters_and_accessible_titles() {
         w.search.emit_by_name::<()>("search-changed", &[]);
         assert_eq!(w.content.visible_child_name().as_deref(), Some("home"));
     }
+    // Reuse this fixture's real detail renderer; these paths need not exist.
+    for configured in [None, Some(false), Some(true)] {
+        model.borrow_mut().config.offline_libraries = configured
+            .map(|default| crate::config::GameLibrary {
+                id: "synthetic-archives".into(),
+                name: "Archives".into(),
+                path: std::path::PathBuf::from(std::env::var_os("HOME").unwrap())
+                    .join("absent-archives"),
+                default,
+            })
+            .into_iter()
+            .collect();
+        for dlc in [false, true] {
+            let mut game = DetailPageModel::game(model.borrow().games[0].clone(), false);
+            game.location = model
+                .borrow()
+                .config
+                .default_library(crate::config::LibraryKind::OfflineInstallers)
+                .map(|library| library.path.join("synthetic-game"))
+                .unwrap_or_default();
+            if dlc {
+                game.parent_id = Some(2);
+                game.parent_title = Some("Synthetic parent".into());
+                game.location = game.location.join("dlc/synthetic-addon");
+            }
+            let expected = if configured.is_some() {
+                game.location.display().to_string()
+            } else {
+                "Not configured".into()
+            };
+            assert!(
+                model
+                    .borrow()
+                    .config
+                    .game_libraries
+                    .iter()
+                    .all(|library| !game.location.starts_with(&library.path))
+            );
+            render_detail_page(&w, &model, game);
+            let mut pending = vec![w.details.clone().upcast::<gtk::Widget>()];
+            let mut facts = None;
+            while let Some(widget) = pending.pop() {
+                if let Some(label) = widget.downcast_ref::<gtk::Label>()
+                    && label.text().contains("Default offline installer folder:")
+                {
+                    assert!(label.is_selectable() && label.wraps());
+                    facts = Some(label.text());
+                }
+                pending.extend(std::iter::successors(widget.first_child(), |child| {
+                    child.next_sibling()
+                }));
+            }
+            assert!(
+                facts
+                    .unwrap()
+                    .ends_with(&format!("Default offline installer folder: {expected}"))
+            );
+        }
+    }
+    model.borrow_mut().activity_sections = vec![SidebarSection {
+        key: ActivitySectionKey::NeverPlayed,
+        label: "Never played".into(),
+        members: vec![1, 2, 3],
+    }];
+    let row = activity_section_row(&model.borrow().activity_sections[0]);
+    w.game_list.append(&row);
+    for (query, expected) in [
+        ("absent", "Never played, 0 games, expanded"),
+        ("Other", "Never played, 1 game, expanded"),
+        ("Target", "Never played, 2 games, expanded"),
+    ] {
+        model.borrow_mut().query = query.into();
+        refresh_sidebar_visibility(&w, &model.borrow());
+        let expected = std::ffi::CString::new(expected).unwrap();
+        let mismatch: Option<glib::GString> = unsafe {
+            glib::translate::from_glib_full(gtk::ffi::gtk_test_accessible_check_property(
+                row.as_ptr().cast(),
+                gtk::ffi::GTK_ACCESSIBLE_PROPERTY_LABEL,
+                expected.as_ptr(),
+            ))
+        };
+        assert_eq!(mismatch, None);
+    }
     w.window.destroy();
 }
 
@@ -1812,7 +1899,7 @@ fn home_empty_results_preserve_filters_and_other_pages() {
     assert_eq!(gtk::prelude::GtkWindowExt::focus(&w.window), focus);
     search("Alpha");
     assert!(!w.home_no_results.is_visible());
-    assert_eq!(w.count.text(), "1 games");
+    assert_eq!(w.count.text(), "1 game");
     w.favorite_filter.set_active(true);
     assert!(w.home_no_results.is_visible());
     model.borrow_mut().favorites.insert(1);
@@ -1974,6 +2061,7 @@ fn filter_controls_preserve_search_and_intersect_in_either_order() {
     update_metadata_filter_options(&w, &model);
     organization::rebuild_filters(&w, &model);
     window::connect_actions(&w, &model);
+    initialize_library_loading(&w, &model);
     w.window.present();
     while glib::MainContext::default().iteration(false) {}
     let original_row = find_list_row(&w, "1").unwrap();
@@ -1990,7 +2078,14 @@ fn filter_controls_preserve_search_and_intersect_in_either_order() {
         assert_eq!(w.search.text(), "Needle");
         assert_eq!(model.borrow().query, "Needle");
         assert!(w.search.is_visible() && w.search.is_sensitive());
-        assert_eq!(w.count.label(), format!("{} games", expected.len()));
+        assert_eq!(
+            w.count.label(),
+            format!(
+                "{} {}",
+                expected.len(),
+                if expected.len() == 1 { "game" } else { "games" }
+            )
+        );
         for id in 1..=3 {
             assert_eq!(
                 find_list_row(&w, &id.to_string())
@@ -2071,6 +2166,71 @@ fn filter_controls_preserve_search_and_intersect_in_either_order() {
     assert_results(&[1, 2]);
     assert!(model.borrow().section_queue.is_empty());
     assert!(model.borrow().section_active.is_empty());
+    // Exercise the actual count/status expressions with unknown metadata retained.
+    for id in [1, 2] {
+        model
+            .borrow_mut()
+            .section_states
+            .remove(&(id, online::DetailSection::Metadata));
+    }
+    for (query, games, candidates) in [
+        ("absent", "0 games", "0 candidates"),
+        ("Needle match", "1 game", "1 candidate"),
+        ("Needle", "2 games", "2 candidates"),
+    ] {
+        for metadata_filter in [false, true] {
+            {
+                let mut state = model.borrow_mut();
+                state.query = query.into();
+                state.cloud_saves_only = metadata_filter;
+            }
+            refresh_filters(&w, &model.borrow());
+            assert_eq!(
+                w.count.text(),
+                if metadata_filter {
+                    format!("{candidates} · results incomplete")
+                } else {
+                    format!("{games} · metadata search incomplete")
+                }
+            );
+        }
+    }
+    let status = find_named_descendant(
+        w.filter_button.popover().unwrap().upcast_ref(),
+        "filter-data-status",
+    )
+    .and_downcast::<gtk::Label>()
+    .unwrap();
+    assert_eq!(
+        status.text(),
+        "Loading filter data for 2 games. Results are incomplete."
+    );
+    model
+        .borrow_mut()
+        .section_states
+        .insert((2, online::DetailSection::Metadata), SectionState::Ready);
+    refresh_filters(&w, &model.borrow());
+    assert_eq!(
+        status.text(),
+        "Loading filter data for 1 game. Results are incomplete."
+    );
+    for (id, expected) in [
+        (
+            1,
+            "Filter data incomplete for 1 game; 1 failed. Unknown games remain candidates.",
+        ),
+        (
+            2,
+            "Filter data incomplete for 2 games; 2 failed. Unknown games remain candidates.",
+        ),
+    ] {
+        model.borrow_mut().section_states.insert(
+            (id, online::DetailSection::Metadata),
+            SectionState::Failed("Synthetic".into()),
+        );
+        refresh_filters(&w, &model.borrow());
+        assert_eq!(status.text(), expected);
+    }
     assert!(!crate::identity::database().exists());
     w.window.destroy();
 }
@@ -2416,11 +2576,21 @@ pub(super) fn refresh_filters(w: &Widgets, model: &AppModel) {
         || !model.property_filters.is_empty();
     w.count
         .set_label(&if incomplete > 0 && metadata_filter_active {
-            format!("{count} candidates · results incomplete")
+            format!(
+                "{count} {} · results incomplete",
+                if count == 1 {
+                    "candidate"
+                } else {
+                    "candidates"
+                }
+            )
         } else if incomplete > 0 && !model.query.is_empty() {
-            format!("{count} games · metadata search incomplete")
+            format!(
+                "{count} {} · metadata search incomplete",
+                if count == 1 { "game" } else { "games" }
+            )
         } else {
-            format!("{count} games")
+            format!("{count} {}", if count == 1 { "game" } else { "games" })
         });
     if let Some(popover) = w.filter_button.popover() {
         for name in [
@@ -2453,7 +2623,14 @@ pub(super) fn refresh_filters(w: &Widgets, model: &AppModel) {
         if let Some(label) = find_named_descendant(popover.upcast_ref(), "filter-data-status")
             .and_downcast::<gtk::Label>()
         {
-            label.set_label(&if incomplete == 0 { String::new() } else if failed > 0 { format!("Filter data incomplete for {incomplete} games; {failed} failed. Unknown games remain candidates.") } else { format!("Loading filter data for {incomplete} games. Results are incomplete.") });
+            let games = if incomplete == 1 { "game" } else { "games" };
+            label.set_label(&if incomplete == 0 {
+                String::new()
+            } else if failed > 0 {
+                format!("Filter data incomplete for {incomplete} {games}; {failed} failed. Unknown games remain candidates.")
+            } else {
+                format!("Loading filter data for {incomplete} {games}. Results are incomplete.")
+            });
             label.set_visible(incomplete > 0);
         }
         if let Some(retry) = find_named_descendant(popover.upcast_ref(), "filter-data-retry")

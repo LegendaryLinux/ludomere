@@ -1034,7 +1034,7 @@ pub(super) fn render_detail_page(
     ));
     {
         let facts = format!(
-            "{}Slug: {}\nLanguages: {}\nFeatures: {}\nLocation: {}",
+            "{}Slug: {}\nLanguages: {}\nFeatures: {}\nDefault offline installer folder: {}",
             game.parent_title
                 .as_ref()
                 .map(|title| format!("Parent game: {title}\n"))
@@ -1042,7 +1042,16 @@ pub(super) fn render_detail_page(
             game.slug,
             empty_dash(&game.languages.join(", ")),
             empty_dash(&game.features.join(", ")),
-            game.location.display()
+            if model
+                .borrow()
+                .config
+                .default_library(crate::config::LibraryKind::OfflineInstallers)
+                .is_some()
+            {
+                game.location.display().to_string()
+            } else {
+                "Not configured".into()
+            }
         );
         overview.append(&section("Library information", &facts));
         overview.append(&detail_section(
@@ -3631,7 +3640,7 @@ mod installation_progress_tests {
             assert_eq!(state.detail_target, Some((2, None)));
             assert_eq!(state.detail_generation, 7);
             assert_eq!(w.search.text(), "Coffee Talk");
-            assert_eq!(w.count.text(), "1 games");
+            assert_eq!(w.count.text(), "1 game");
             assert_eq!(
                 w.game_list.selected_row(),
                 selected_row,

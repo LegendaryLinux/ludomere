@@ -201,15 +201,30 @@
   preservation plus committed effective return and tracked local saves; Choose/Retry share pending
   admission through picker/save/receiver retirement, preserving offline local editing and reentry.
   Own isolated state.rs/cloud_saves/mod.rs/game_settings.rs; root runs private tests after review.
-- P380 (in_progress assessment, ui_critic): live installed native Gungeon Overview labels its
+- P380 (complete, ui_critic; reviewer file_summary): live installed native Gungeon Overview labels its
   Offline Installers path simply Location; determine intended semantics and a bounded truthful
   presentation. Also assess singular sidebar count (1 games). Source-only proposal, no data,
-  schema, destination changes or implementation; preserve reactive detail state and avoid IO.
-- P381 (in_progress assessment, file_summary): actual app at minimum-width window clips gear/
+  schema or destination changes. Reviewed smallest optionA: label Default offline installer
+  folder, typed configuration presence for Not configured (base/DLC), direct singular wording.
+  Own isolated details.rs/library.rs existing expectations only; no new installed-folder feature.
+- P381 (in_progress implementation, performance_audit; proposal file_summary/reviewer ui_critic): actual app at minimum-width window clips gear/
   favorite controls and right-side detail tabs while wide hero/status strip remains. Approved
   app-only screenshot gungeon-narrow-window.png and source review; propose bounded responsive
-  presentation preserving primary actions/tabs/keyboard/scroll behavior. No implementation,
-  real profile access, unrelated screenshots, dependency or backend changes before review.
+  presentation preserving primary actions/tabs/keyboard/scroll behavior. Independently approved
+  initial detail-only native tab viewport/local hhomogeneous=false; require measured action-row
+  reachability before acceptance, stop for review if more layout is needed. Own isolated details.rs;
+  no real profile/desktop/other screenshots/dependency/backend/global stack changes.
+  Verification refinement: full synthetic detail renderer starts unrelated workers. Do not extract
+  production action assembly or add a broad test controller only for this presentation change.
+  Root will test actual narrow/wide action/tab reachability before commit; retain proportional
+  source/compile checks and existing safe regressions. Any remaining clipping still blocks acceptance.
+- P382 (reviewed proposal, ui_critic; reviewer file_summary): after tiny transfer Downloads retains a blank zero-rate
+  graph; manual Up-to-date modal keeps a disabled Update button. Assess bounded visibility/terminal
+  feedback corrections from source and named root screenshots only; no implementation, backend,
+  account policy, destructive actions or broader styling changes before review.
+  P382a(in_progress, ui_critic): independently approved idle-fallback positive-network-or-disk
+  sample predicate only, existing renderer variants; own isolated downloads.rs. Preserve featured
+  active/paused/error controls and sampling/history. P382b modal change remains unimplemented.
 - P378 (complete, ui_critic; reviewer file_summary): human-style critique of root-approved app-only
   downloads-real-history.png plus Downloads source. Assess idle/history readability, spacing,
   action affordances and keyboard/accessibility. Proposed scoped natural-thickness dividers,
