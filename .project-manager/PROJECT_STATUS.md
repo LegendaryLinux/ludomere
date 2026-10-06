@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEAD3faa2d1. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEAD695d738. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered37 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered38 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -59,7 +59,9 @@ Last meaningful update: 2026-10-06.
   regression, formatting/Clippy/compilation PASS. Clippy module placement and initial fixture's
   effective visibility assumption corrected without production changes or weakened sentinel checks.
   P365 full identity design rejected for unrelated-download blocking and unknown-marker lockout;
-  narrower atomic launch-only persistence/unchanged-save fix approved, full stale context deferred.
+  narrower P365a atomic launch-only persistence/unchanged-save fix passes independent review,
+  four focused private DB/entry/branch regressions, formatting/Clippy/compilation. It preserves
+  unrelated editing during downloads and tracks queued activity; full stale context stays deferred.
   P366 Account empty feedback gap independently reviewed; mapped long-feedback/scroll/collapse
   and retained Account lifecycle fixture, formatting/Clippy/compilation PASS;
   P367 live repair chooser clipping confirmed and assigned. P368 repair inspection lifecycle

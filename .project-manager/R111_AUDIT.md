@@ -24,6 +24,9 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- On695d738 the Account Factory Reset-to-Connection gap is visibly corrected; Connection remains
+  Online and authenticated. No reset, sign-in exchange or settings mutation performed.
+
 - Native Gungeon Repair offers reinstall/Browse/reset instead of Depot repair; no files changed.
   Review Reinstallation then remains in420x180 dialog, visibly clipping installer choices while
   Install stays available. Rechecked after loading, cancelled without installing. P367 assigned
@@ -104,6 +107,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P365a — save launch fields without overwriting unrelated preferences
+
+- Atomic partial SQL updates only executable/arguments/updated timestamp, preserving raw runtime
+  and pending-profile JSON, update policies, original creation timestamp and activity. Absent rows
+  receive launch defaults and retain marker-based Windows runtime fallback; no schema change.
+- Seed initial submitted text so unchanged Enter/focus/unmap does not save. Actual edits and
+  failures remain retryable. Register profile activity before queued work and reject old session
+  before filesystem/database access. No global operation lock or unrelated-download restriction.
+- Independent review, four focused private SQL/actual-entry/old-signal/branch regressions,
+  formatting, Clippy and compilation PASS. Evidence p365-qjlangm4, p365-4111ep92,
+  p365-9774kct8, p363-w2ixj27h. No real profile changes for these tests.
+- Full P365 design was rejected: its global gate would block editing during unrelated downloads,
+  and unknown marker data would disable new windows until reopened. Stale installation-specific
+  launch fields and broader Properties refresh still need a separate non-disruptive design.
 
 ### P366 — collapse unused Factory Reset feedback space
 

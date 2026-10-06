@@ -144,7 +144,7 @@
   Review rejects shared main progress clearing: keep pending feedback local and main terminal
   notification policy unchanged. Already-running must not promise a notification. Synthetic actual
   dispatch/lifecycle/redaction/order tests required; no backend policy/queue/cancel/timeout changes.
-- P365 (full identity fix deferred; narrowed P365a pending, file_summary; reviewer ui_critic):
+- P365 (full identity fix deferred; narrowed P365a complete, file_summary; reviewer ui_critic):
   full design rejected because global gate blocks launch edits for unrelated full downloads and
   initially unknown marker forces close/reopen. P365a limited to atomic launch-only SQL preserving
   unrelated raw preferences, plus unchanged initial autosave suppression. Own game_settings.rs/state.rs

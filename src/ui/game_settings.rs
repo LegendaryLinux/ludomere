@@ -1042,7 +1042,10 @@ pub(super) fn show_game_settings(
 
     if let Some(installed) = installed {
         let installed = Rc::new(RefCell::new(installed));
-        let save_state = Rc::new(LaunchSaveState::default());
+        let save_state = Rc::new(LaunchSaveState {
+            submitted: RefCell::new(Some((executable.text(), launch_options.text()))),
+            ..Default::default()
+        });
         for entry in [&executable, &launch_options] {
             let executable = executable.downgrade();
             let launch_options = launch_options.downgrade();
@@ -2582,11 +2585,23 @@ fn persist_launch_settings(
     updated.primary_executable = (!relative.as_os_str().is_empty()).then_some(full_path);
     updated.launch_arguments = arguments;
     updated.updated_at = chrono::Utc::now().timestamp();
+    let activity = match crate::profile_reset::begin_activity("saving launch settings") {
+        Ok(activity) => activity,
+        Err(error) => {
+            status.set_label(&format!("Could not save: {error}"));
+            status.add_css_class("error");
+            return;
+        }
+    };
     *save_state.submitted.borrow_mut() = Some(submitted.clone());
     status.remove_css_class("error");
     status.set_label("Saving launch settings…");
     let receiver = update_policies::policy_request(move || {
-        let _activity = crate::profile_reset::begin_activity("saving launch settings")?;
+        let _activity = activity;
+        anyhow::ensure!(
+            online::account_session() == session,
+            "The account changed before saving launch settings"
+        );
         if let Some(path) = &updated.primary_executable {
             anyhow::ensure!(
                 path.is_file()
@@ -2597,7 +2612,11 @@ fn persist_launch_settings(
             );
         }
         online::with_account_session(session, || {
-            crate::installation::save_game_preferences(&StateStore::open()?, &updated)
+            StateStore::open()?.set_game_launch_preferences(
+                updated.product_id,
+                (!relative.as_os_str().is_empty()).then_some(relative.as_path()),
+                &updated.launch_arguments,
+            )
         })?;
         Ok(updated)
     });
@@ -2670,6 +2689,243 @@ fn info_row(title: &str, value: &str) -> adw::ActionRow {
 #[cfg(test)]
 mod control_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires private p365 HOME/all XDG/TMP, GTK and D-Bus; inert files only"]
+    fn launch_field_saves_skip_unchanged_signals_and_preserve_retry_admission() {
+        let home = std::env::var("HOME").unwrap();
+        assert!(home.starts_with("/tmp/ludomere-p365-"));
+        let root = std::path::Path::new(&home).parent().unwrap();
+        for key in [
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "XDG_STATE_HOME",
+            "XDG_RUNTIME_DIR",
+            "TMPDIR",
+        ] {
+            assert!(std::path::Path::new(&std::env::var_os(key).unwrap()).starts_with(root));
+        }
+        assert!(
+            crate::identity::database().starts_with(std::env::var_os("XDG_DATA_HOME").unwrap())
+        );
+        adw::init().unwrap();
+        #[track_caller]
+        fn wait(check: impl Fn() -> bool) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !check() && std::time::Instant::now() < deadline {
+                while glib::MainContext::default().iteration(false) {}
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(check());
+        }
+        let directory = root.join("inert-game");
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(directory.join("game.exe"), b"inert test file").unwrap();
+        let installed = Rc::new(RefCell::new(serde_json::from_value::<crate::domain::InstalledGame>(serde_json::json!({
+            "product_id": 9265001, "library_id": "synthetic", "installation_directory": directory,
+            "primary_executable": directory.join("game.exe"), "installer_files": [],
+            "installer_complete": true, "installer_operating_system": "windows",
+            "launch_arguments": ["--initial"], "state": "installed", "playtime_seconds": 0,
+            "created_at": 10, "updated_at": 20
+        })).unwrap()));
+        let store = StateStore::open().unwrap();
+        let retained_compatibility = crate::compatibility::GameCompatibilityPreferences {
+            backend: crate::compatibility::CompatibilityBackendKind::Umu,
+            prefix_slug: "current-profile".into(),
+            profile: crate::compatibility::UmuProfile::fallback(),
+            pending_profile: Some(crate::compatibility::UmuProfile::fallback()),
+        };
+        store
+            .upsert_game_preferences(&crate::domain::GamePreferences {
+                product_id: 9265001,
+                executable_path: Some("game.exe".into()),
+                launch_arguments: vec!["--initial".into()],
+                compatibility: Some(retained_compatibility.clone()),
+                created_at: 10,
+                updated_at: 20,
+                ..Default::default()
+            })
+            .unwrap();
+        let executable = adw::EntryRow::new();
+        executable.set_text("game.exe");
+        let arguments = adw::EntryRow::new();
+        arguments.set_text("--initial");
+        let status = gtk::Label::new(None);
+        let state = Rc::new(LaunchSaveState {
+            submitted: RefCell::new(Some((executable.text(), arguments.text()))),
+            ..Default::default()
+        });
+        let refreshed = Rc::new(std::cell::Cell::new(0));
+        let refresh: Rc<dyn Fn()> = Rc::new({
+            let refreshed = refreshed.clone();
+            move || refreshed.set(refreshed.get() + 1)
+        });
+        let session = online::account_session();
+        let save: Rc<dyn Fn()> = Rc::new({
+            let executable = executable.downgrade();
+            let arguments = arguments.downgrade();
+            let status = status.clone();
+            let installed = installed.clone();
+            let state = state.clone();
+            move || {
+                let (Some(executable), Some(arguments)) =
+                    (executable.upgrade(), arguments.upgrade())
+                else {
+                    return;
+                };
+                persist_launch_settings(
+                    &executable,
+                    &arguments,
+                    &installed,
+                    &status,
+                    &refresh,
+                    session,
+                    &state,
+                );
+            }
+        });
+        connect_launch_save(&executable, save.clone());
+        connect_launch_save(&arguments, save);
+        let app = adw::Application::builder()
+            .application_id("io.github.ludomere.LaunchFieldsTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(gio::Cancellable::NONE).unwrap();
+        let window = adw::ApplicationWindow::new(&app);
+        let group = adw::PreferencesGroup::new();
+        group.add(&executable);
+        group.add(&arguments);
+        group.add(&status);
+        window.set_content(Some(&group));
+        window.present();
+        wait(|| arguments.is_mapped());
+        let focus = arguments
+            .observe_controllers()
+            .iter::<glib::Object>()
+            .filter_map(Result::ok)
+            .find_map(|object| object.downcast::<gtk::EventControllerFocus>().ok())
+            .unwrap();
+        focus.emit_by_name::<()>("leave", &[]);
+        arguments.emit_by_name::<()>("entry-activated", &[]);
+        window.set_visible(false);
+        assert_eq!(
+            state.revision.get(),
+            0,
+            "unchanged signals must submit no work"
+        );
+        assert_eq!(
+            store.game_preferences(9265001).unwrap().unwrap().updated_at,
+            20
+        );
+        assert_eq!(refreshed.get(), 0);
+        window.present();
+        wait(|| arguments.is_mapped());
+
+        let unrelated_operation = crate::operation_gate::try_acquire().unwrap();
+        arguments.set_text("--superseded");
+        arguments.set_text("--latest 'two words'");
+        wait(|| refreshed.get() == 1);
+        assert_eq!(
+            store
+                .game_preferences(9265001)
+                .unwrap()
+                .unwrap()
+                .compatibility,
+            Some(retained_compatibility)
+        );
+        assert_eq!(
+            store
+                .game_preferences(9265001)
+                .unwrap()
+                .unwrap()
+                .launch_arguments,
+            ["--latest", "two words"]
+        );
+        drop(unrelated_operation);
+        arguments.set_text("--enter");
+        arguments.emit_by_name::<()>("entry-activated", &[]);
+        wait(|| refreshed.get() == 2);
+        arguments.set_text("--focus");
+        focus.emit_by_name::<()>("leave", &[]);
+        wait(|| refreshed.get() == 3);
+        arguments.set_text("--unmap");
+        window.set_visible(false);
+        wait(|| refreshed.get() == 4);
+        assert_eq!(
+            store
+                .game_preferences(9265001)
+                .unwrap()
+                .unwrap()
+                .launch_arguments,
+            ["--unmap"]
+        );
+        window.present();
+        wait(|| arguments.is_mapped());
+
+        arguments.set_text("'");
+        arguments.emit_by_name::<()>("entry-activated", &[]);
+        assert!(status.text().starts_with("Invalid launch options:"));
+        arguments.set_text("--retry");
+        executable.set_text("../outside.exe");
+        executable.emit_by_name::<()>("entry-activated", &[]);
+        assert!(status.text().contains("path inside the game directory"));
+        executable.set_text("missing.exe");
+        executable.emit_by_name::<()>("entry-activated", &[]);
+        wait(|| status.text().starts_with("Could not save:"));
+        assert!(state.submitted.borrow().is_none());
+        assert_eq!(refreshed.get(), 4);
+        std::fs::write(directory.join("missing.exe"), b"inert retry target").unwrap();
+        executable.emit_by_name::<()>("entry-activated", &[]);
+        wait(|| refreshed.get() == 5);
+        assert_eq!(
+            store
+                .game_preferences(9265001)
+                .unwrap()
+                .unwrap()
+                .executable_path,
+            Some("missing.exe".into())
+        );
+
+        // Queue behind real policy work: admission must already prevent profile reset.
+        let (entered, ready) = mpsc::channel();
+        let (release, held) = mpsc::channel();
+        let blocker = update_policies::policy_request(move || {
+            entered.send(()).unwrap();
+            held.recv().unwrap();
+            Ok(())
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        arguments.set_text("--obsolete-session");
+        arguments.emit_by_name::<()>("entry-activated", &[]);
+        assert!(
+            crate::profile_reset::reserve()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("saving launch settings")
+        );
+        drop(store);
+        std::fs::remove_file(crate::identity::database()).unwrap();
+        online::invalidate_library_session();
+        release.send(()).unwrap();
+        blocker
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        update_policies::policy_request(|| Ok(()))
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        assert!(
+            !crate::identity::database().exists(),
+            "stale queued save must not recreate the profile"
+        );
+        wait(|| status.text().contains("account changed"));
+        assert_eq!(refreshed.get(), 5);
+        drop(crate::profile_reset::reserve().unwrap());
+        window.destroy();
+    }
 
     #[test]
     #[ignore = "requires private p363 HOME/all XDG, GTK and D-Bus; no branch workers or keyring"]

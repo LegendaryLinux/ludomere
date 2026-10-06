@@ -1081,6 +1081,29 @@ impl StateStore {
         Ok(())
     }
 
+    pub fn set_game_launch_preferences(
+        &self,
+        product_id: i64,
+        executable_path: Option<&std::path::Path>,
+        launch_arguments: &[String],
+    ) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO game_preferences(
+                product_id, executable_path, launch_arguments_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, unixepoch(), unixepoch())
+             ON CONFLICT(product_id) DO UPDATE SET
+                executable_path = excluded.executable_path,
+                launch_arguments_json = excluded.launch_arguments_json,
+                updated_at = excluded.updated_at",
+            params![
+                product_id,
+                executable_path.map(|path| path.to_string_lossy().into_owned()),
+                serde_json::to_string(launch_arguments)?,
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn set_game_update_preferences(
         &self,
         product_id: i64,
@@ -5276,6 +5299,100 @@ mod tests {
         assert_eq!(version, CURRENT_SCHEMA_VERSION);
         drop(store);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn launch_preferences_preserve_unrelated_columns_and_activity() {
+        let root = tempfile::tempdir().unwrap();
+        let store = StateStore::open_at(&root.path().join("state.db")).unwrap();
+        let compatibility = crate::compatibility::GameCompatibilityPreferences {
+            backend: crate::compatibility::CompatibilityBackendKind::Umu,
+            prefix_slug: "synthetic".into(),
+            profile: crate::compatibility::UmuProfile::fallback(),
+            pending_profile: Some(crate::compatibility::UmuProfile::fallback()),
+        };
+        let preserved = |id| {
+            store.connection.query_row(
+                "SELECT compatibility_json, created_at, auto_update_galaxy,
+                        auto_download_offline_installer, prune_superseded_installers, galaxy_language
+                 FROM game_preferences WHERE product_id = ?1",
+                [id],
+                |row| (0..6).map(|column| row.get::<_, rusqlite::types::Value>(column)).collect::<rusqlite::Result<Vec<_>>>(),
+            ).unwrap()
+        };
+        let activity = |id| {
+            store.connection.query_row(
+                "SELECT product_id, last_played_at, playtime_seconds, updated_at, last_activity_at
+                 FROM product_activity WHERE product_id = ?1",
+                [id],
+                |row| (0..5).map(|column| row.get::<_, rusqlite::types::Value>(column)).collect::<rusqlite::Result<Vec<_>>>(),
+            ).unwrap()
+        };
+        for (id, raw) in [
+            serde_json::to_string_pretty(&compatibility).unwrap(),
+            " { \"future_profile\": true, \"pending_profile\": [1, 2] } ".into(),
+            "uninterpreted compatibility bytes".into(),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let id = id as i64 + 1;
+            store.connection.execute(
+                "INSERT INTO game_preferences(product_id, executable_path, launch_arguments_json,
+                    compatibility_json, created_at, updated_at, auto_update_galaxy,
+                    auto_download_offline_installer, prune_superseded_installers, galaxy_language)
+                 VALUES (?1, 'old.exe', '[\"--old\"]', ?2, 10, 20, 1, 0, 1, 'fr')",
+                params![id, raw],
+            ).unwrap();
+            store.preserve_product_activity(id, Some(123), 456).unwrap();
+            let old_activity = activity(id);
+            let before = preserved(id);
+            store
+                .set_game_launch_preferences(
+                    id,
+                    Some(std::path::Path::new("bin/new.exe")),
+                    &["--new".into(), "two words".into()],
+                )
+                .unwrap();
+            let updated = store.game_preferences(id).unwrap().unwrap();
+            assert_eq!(updated.executable_path, Some(PathBuf::from("bin/new.exe")));
+            assert_eq!(updated.launch_arguments, ["--new", "two words"]);
+            assert!(updated.updated_at > 20);
+            assert_eq!(preserved(id), before, "unrelated raw columns changed");
+            assert_eq!(activity(id), old_activity);
+            if id == 1 {
+                assert_eq!(updated.compatibility, Some(compatibility.clone()));
+            }
+            store.set_game_launch_preferences(id, None, &[]).unwrap();
+            let cleared = store.game_preferences(id).unwrap().unwrap();
+            assert!(cleared.executable_path.is_none());
+            assert!(cleared.launch_arguments.is_empty());
+            assert_eq!(preserved(id), before);
+            assert_eq!(activity(id), old_activity);
+        }
+        store
+            .set_game_launch_preferences(10, None, &["--fresh".into()])
+            .unwrap();
+        let fresh = store.game_preferences(10).unwrap().unwrap();
+        assert_eq!(fresh.launch_arguments, ["--fresh"]);
+        assert!(fresh.executable_path.is_none());
+        assert!(fresh.compatibility.is_none());
+        assert!(fresh.auto_update_galaxy.is_none());
+        assert!(fresh.auto_download_offline_installer.is_none());
+        assert!(fresh.prune_superseded_installers.is_none());
+        assert!(fresh.galaxy_language.is_none());
+        assert!(fresh.created_at > 0);
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM product_activity WHERE product_id = 10",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
     }
 
     #[test]
