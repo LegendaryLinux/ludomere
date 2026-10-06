@@ -8,35 +8,21 @@ Last meaningful update: 2026-10-06.
   improvement/interactive-ux-audit-2026-10-06. Root alone uses the actual wallet,
   profile, desktop and game data. Normal cloud sync allowed; no deliberate cloud deletion.
   No push, PR, version/schema change or package build/install. Quota reset cannot be controlled.
-- Verified72 separate audit commits through37aa551, each exact post-commit cargo build PASS. Outcomes and failures
+- Verified73 separate audit commits through9acdda6, each exact post-commit cargo build PASS. Outcomes and failures
   are retained in R111_AUDIT.md, task plan and git history. No exhaustive UI readiness claim.
 - Latest consolidated private build PASS at37aa551: fmt, all-target Clippy-Dwarnings,
   574 library tests, six integration tests, five Python helper tests and build.93 library tests
   ignored by default; affected GTK gates run separately. Log:
   /tmp/ludomere-r111-full-build-9gwc2kj3/build.log. No real account/helpers/network in gate.
-- Latest verified fixes: P365a narrow launch-preference persistence; P366 Account spacing;
-  P367 repair chooser layout; P368 tracked repair inspection; P369 asynchronous cached Cloud
-  settings; P370a component consent alignment; P370b truthful setup counters; P372 session-bound
-  metadata Retry; P373 temporary Windows-check feedback; P374 consistent Downloads counters.
-  Independent source reviews, focused actual-control/private backend tests, fmt/Clippy/build pass.
-- Active: P378–P384 committed with focused gates and exact builds PASS; responsive details
-  now retain primary/alternate/gear/favorite controls, including completed-download status.
-  P385 popup handoff committed, private and real pointer gates PASS. P386 component cycles and
-  P387 singular copy committed/built. P388 native scrollbar candidate failed live narrow labels,
-  reverted without commit; existing tab navigation remains verified. P389 tray startup and P390
-  Maintenance refresh feedback simplified draft under review; P391 tag validation committed/built.
-  P389 tray startup committed with private lifecycle and real KDE hide/Open/Close gates PASS.
-  P390 final private and actual Settings refresh gates PASS; local progress and duplicate
-  prevention verified, fixture-only row-focus warning corrected. P392 tray profile-work passes
-  private menu, strict foreground and real Gungeon tray launch gates. P394/P395 committed/built;
-  P396 folder-origin private gates PASS. P393 component-release assertion failed, candidate removed
-  pending ownership diagnostics. P397 operation-log admission, P398 folder eligibility and P399
-  persistent folder-error feedback committed/built. P401 General-first real window gates pass;
-  P402 singular file-count real summary/confirmation gates pass. P393 dropping retained owners did not release popup;
-  original strict gate remains unmet and all temporary candidate changes removed from main.
-  P375 synthetic handoff passes after
-  strict mapping wait but clientless display limits invalidate live-animation coverage; warning
-  remains deferred, diagnostic not integrated. P376 Branch Forget gates/commit/build PASS.
+- Latest verified fixes: responsive detail controls, first-click archive popups, tray startup/
+  shutdown and session admission, Maintenance progress, tag keyboard/validation, folder-origin
+  guards, operation-log activity, persistent log-folder errors, General-first Properties and
+  singular archive copy. P404 removes explicit unopened-menu capture cycles: same strict test
+  fails before/passes after, and mapped actions retain behavior. Each task's evidence is in plan/audit.
+- Active: P403 chooser polling lifecycle patch independently reviewed and under root private
+  gates; I/O was already worker-side. P405 full-path Properties row reviewed, actual allocation
+  check pending. P393 native mapped-popup retention is deferred/unmet; all temporary diagnostic
+  code removed. P404 is a separately approved narrower fix, not a pass of that old gate.
   Root alone owns sequential Cargo/build/commit gates, actual-data access and records.
 - Actual test games: Gungeon, Coffee Talk, BIT.TRIP Runner only. Reserve14GB of40GB, covering
   payloads/prefixes/cache/staging/repeats; BIT.TRIP official requirement100MB, measured payload

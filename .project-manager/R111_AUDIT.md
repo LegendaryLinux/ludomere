@@ -48,6 +48,19 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P405 actual full-path row passes950px,680px and enforced561px minimum allocation; at561px
+  path wraps across two lines with no ellipsis and Browse remains accessible. Focused Ctrl+A
+  selects the complete displayed path; clipboard untouched. Screenshots p405-path-{normal,
+  narrow,wrapped,selected}.png. Native word-char wrapping/source independently reviewed, fmt/
+  build PASS. No actual path containing markup was created. Test app normal Close, no panic or
+  Gtk-/GLib-GIO-CRITICAL in app-installed-path-preview.log. P404 menu→Properties also worked live.
+
+- P403 first private run p403-6w0np3zf fails fixture epoch==1 at6060. Confirmed fixture had no
+  usable library, causing real renderer to write count then missing-library guidance (two
+  notifications). Minimal synthetic compatible-library fixture correction under independent
+  review; strict assertions unchanged, production patch removed from main pending rerun.
+  P404 commit9acdda6 exact post-build and retained P385 popup test p385-fh4xdgnt PASS.
+
 - P404 actual unopened-builder negative/positive gate proves explicit Rust capture-cycle
   removal: old code fails strict weak-release at files.rs7363 in p404-ixo6aymj; identical
   fixture passes with three weak-capture blocks in p404-pbsnm7lk. Retained harmless actions/

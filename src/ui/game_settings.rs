@@ -276,10 +276,12 @@ pub(super) fn show_game_settings(
     let files_group = adw::PreferencesGroup::new();
     files_group.set_title("Local installation");
     if let Some(installed) = &installed {
-        files_group.add(&info_row(
-            "Installation directory",
-            &installed.installation_directory.to_string_lossy(),
-        ));
+        let directory = adw::ActionRow::new();
+        directory.set_title("Installation directory");
+        directory.set_use_markup(false);
+        directory.set_subtitle(&installed.installation_directory.to_string_lossy());
+        directory.set_subtitle_selectable(true);
+        files_group.add(&directory);
         files_group.add(&info_row(
             "Installed version",
             installed.installed_version.as_deref().unwrap_or("Unknown"),

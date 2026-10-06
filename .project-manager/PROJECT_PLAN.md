@@ -2,12 +2,14 @@
 
 ## R111 interactive audit
 
-- P405 (in_progress, ui_critic; reviewer performance_audit): show Installation directory as a
+- P405 (complete, ui_critic; reviewer file_summary): show Installation directory as a
   full-width selectable ActionRow subtitle instead of ellipsized suffix, matching existing
   destination rows. Isolated game_settings.rs one-row presentation only; markup disabled,
   native wrapping, no file I/O/identity/callback/generic-info-row change. Root actual normal/
   narrow screenshot gate and source native wrapping check; stop if layout fails, no geometry
   framework. Old label already selectable; claim improved readability, not newly enabled copy.
+  Independent native-resource/source review, fmt/build and actual950/680/561px layout PASS.
+  Full path wraps at enforced561px minimum and selects with Ctrl+A; Browse remains reachable.
 
 - P404 (complete, file_summary; reviewer ui_critic): distinct narrower successor to deferred
   P393: remove explicit Rust ownership cycles in three management popup capture blocks. Strict
