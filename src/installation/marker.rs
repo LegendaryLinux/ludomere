@@ -45,6 +45,17 @@ impl InstallationMarker {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if self.compatibility.is_some()
+            && self
+                .base
+                .operating_system
+                .as_deref()
+                .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
+        {
+            bail!(
+                "Linux installation marker contains Windows runtime settings; reinstall the selected Linux version to repair this conflicting marker"
+            );
+        }
         let expected_schema = if self.compatibility.is_some() { 2 } else { 1 };
         if self.schema_version != expected_schema {
             bail!("installation marker schema does not match its platform runtime");
@@ -133,7 +144,7 @@ pub fn load(installation_directory: &Path) -> Result<Option<InstallationMarker>>
     if !path.is_file() {
         return Ok(None);
     }
-    let marker: InstallationMarker = serde_json::from_slice(
+    let mut marker: InstallationMarker = serde_json::from_slice(
         &fs::read(&path).with_context(|| format!("could not read {}", path.display()))?,
     )
     .with_context(|| format!("could not parse {}", path.display()))?;
@@ -142,6 +153,31 @@ pub fn load(installation_directory: &Path) -> Result<Option<InstallationMarker>>
             "installation marker uses unsupported schema version {}",
             marker.schema_version
         );
+    }
+    // Older native completion copied retained Windows preferences into this
+    // exact offline marker shape. Recover its view without rewriting user files.
+    if marker.schema_version == 2
+        && marker
+            .base
+            .operating_system
+            .as_deref()
+            .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
+        && marker.source == InstallationSource::OfflineInstaller
+        && marker.galaxy_depot.is_none()
+        && marker.launch.is_none()
+        && marker.dependencies.is_empty()
+        && installation_directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            == Some(marker.slug.as_str())
+        && marker.compatibility.as_ref().is_some_and(|runtime| {
+            runtime.backend == crate::compatibility::CompatibilityBackendKind::Umu
+                && runtime.managed_by_ludomere
+                && runtime.prefix_slug == marker.slug
+        })
+    {
+        marker.compatibility = None;
+        marker.schema_version = 1;
     }
     marker.validate()?;
     Ok(Some(marker))
@@ -186,8 +222,14 @@ pub fn write(marker: &InstallationMarker, installation_directory: &Path) -> Resu
 }
 
 pub fn from_game(game: &InstalledGame, dlc: Vec<InstalledDlc>) -> InstallationMarker {
+    let compatibility = game.compatibility.as_ref().filter(|_| {
+        !game
+            .installer_operating_system
+            .as_deref()
+            .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
+    });
     InstallationMarker {
-        schema_version: if game.compatibility.is_some() {
+        schema_version: if compatibility.is_some() {
             MARKER_SCHEMA_VERSION
         } else {
             1
@@ -207,15 +249,12 @@ pub fn from_game(game: &InstalledGame, dlc: Vec<InstalledDlc>) -> InstallationMa
             installed_at: game.installed_at.unwrap_or(game.updated_at),
         },
         dlc,
-        compatibility: game
-            .compatibility
-            .as_ref()
-            .map(|value| InstalledCompatibility {
-                backend: value.backend,
-                managed_by_ludomere: true,
-                prefix_slug: value.prefix_slug.clone(),
-                profile: value.profile.clone(),
-            }),
+        compatibility: compatibility.map(|value| InstalledCompatibility {
+            backend: value.backend,
+            managed_by_ludomere: true,
+            prefix_slug: value.prefix_slug.clone(),
+            profile: value.profile.clone(),
+        }),
         source: InstallationSource::OfflineInstaller,
         galaxy_depot: None,
         launch: None,
@@ -410,6 +449,92 @@ mod tests {
                 entitlement_only_marker: false,
             }],
         }
+    }
+
+    #[test]
+    fn known_native_writer_record_recovers_in_memory_only() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("example");
+        fs::create_dir_all(marker_path(&directory).parent().unwrap()).unwrap();
+        fs::write(directory.join("start.sh"), b"inert native payload").unwrap();
+        let mut mixed = example_marker();
+        mixed.schema_version = 2;
+        mixed.base.operating_system = Some("linux".into());
+        mixed.base.language = Some("English".into());
+        mixed.base.version = Some("2.1.9".into());
+        mixed.base.revision_id = None;
+        mixed.base.installed_at = 1_791_283_470;
+        mixed.compatibility = Some(InstalledCompatibility {
+            backend: crate::compatibility::CompatibilityBackendKind::Umu,
+            managed_by_ludomere: true,
+            prefix_slug: mixed.slug.clone(),
+            profile: crate::compatibility::UmuProfile::fallback(),
+        });
+        let bytes = serde_json::to_vec(&mixed).unwrap();
+        fs::write(marker_path(&directory), &bytes).unwrap();
+        let recovered = load(&directory).unwrap().unwrap();
+        let mut expected = mixed.clone();
+        expected.compatibility = None;
+        expected.schema_version = 1;
+        assert_eq!(recovered, expected);
+        assert_eq!(fs::read(marker_path(&directory)).unwrap(), bytes);
+        assert_eq!(
+            fs::read(directory.join("start.sh")).unwrap(),
+            b"inert native payload"
+        );
+        write(&recovered, &directory).unwrap();
+        assert_eq!(load(&directory).unwrap(), Some(expected));
+
+        for variant in 0..10 {
+            let mut marker = mixed.clone();
+            match variant {
+                0 => marker.schema_version = 3,
+                1 => marker.compatibility.as_mut().unwrap().managed_by_ludomere = false,
+                2 => marker.compatibility.as_mut().unwrap().prefix_slug = "other".into(),
+                3 => marker.slug = "other".into(),
+                4 => marker.galaxy_depot = Some(depot_provenance()),
+                5 => {
+                    marker.source = InstallationSource::GalaxyDepot;
+                    marker.galaxy_depot = Some(depot_provenance());
+                }
+                6 => marker.dependencies.push("dotnet".into()),
+                7 => {
+                    marker.launch = Some(InstalledLaunch {
+                        executable: "start.sh".into(),
+                        arguments: vec![],
+                        working_directory: None,
+                    })
+                }
+                8 => marker.schema_version = 1,
+                9 => marker.schema_version = 0,
+                _ => unreachable!(),
+            }
+            let bytes = serde_json::to_vec(&marker).unwrap();
+            fs::write(marker_path(&directory), &bytes).unwrap();
+            let error = load(&directory).unwrap_err().to_string();
+            assert!(
+                error.contains(if variant == 0 {
+                    "unsupported schema"
+                } else {
+                    "reinstall"
+                }),
+                "{variant}: {error}"
+            );
+            assert_eq!(fs::read(marker_path(&directory)).unwrap(), bytes);
+        }
+        for os in [Some("windows"), Some("unknown"), None] {
+            let mut marker = mixed.clone();
+            marker.base.operating_system = os.map(str::to_owned);
+            write(&marker, &directory).unwrap();
+            assert_eq!(load(&directory).unwrap(), Some(marker.clone()));
+            let game = game_from_marker(&marker, "test".into(), directory.clone(), None);
+            assert_eq!(from_game(&game, vec![]).compatibility, marker.compatibility);
+            assert_eq!(from_game(&game, vec![]).schema_version, 2);
+        }
+        let game = game_from_marker(&mixed, "test".into(), directory, None);
+        assert!(game.compatibility.is_some());
+        assert!(from_game(&game, vec![]).compatibility.is_none());
+        assert_eq!(from_game(&game, vec![]).schema_version, 1);
     }
 
     #[test]

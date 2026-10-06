@@ -596,13 +596,8 @@ fn run_installation(
             responses,
         )?;
         let executable = discover_linux_executable(&plan.installation_directory);
-        let mut completed = plan.clone();
         let now = chrono::Utc::now().timestamp();
-        completed.state = InstallationState::Installed;
-        completed.error = None;
-        completed.primary_executable = executable;
-        completed.installed_at = Some(now);
-        completed.updated_at = now;
+        let completed = native_completion(plan, executable, now);
         let store = StateStore::open()?;
         super::save_game_preferences(&store, &completed)?;
         let marker = super::marker::from_game(&completed, Vec::new());
@@ -638,18 +633,30 @@ fn run_installation(
         .clone()
         .filter(|path| path.is_file())
         .or_else(|| discover_linux_executable(&plan.installation_directory));
-    let mut completed = plan.clone();
     let now = chrono::Utc::now().timestamp();
-    completed.state = InstallationState::Installed;
-    completed.error = None;
-    completed.primary_executable = executable.clone();
-    completed.installed_at = Some(now);
-    completed.updated_at = now;
+    let completed = native_completion(plan, executable.clone(), now);
     let store = StateStore::open()?;
     super::save_game_preferences(&store, &completed)?;
     store.record_product_activity(completed.product_id, now)?;
     events.send(InstallationEvent::Complete { executable }).ok();
     Ok(())
+}
+
+fn native_completion(plan: &InstalledGame, executable: Option<PathBuf>, now: i64) -> InstalledGame {
+    let mut completed = plan.clone();
+    completed.state = InstallationState::Installed;
+    completed.error = None;
+    completed.primary_executable = executable;
+    completed.installed_at = Some(now);
+    completed.updated_at = now;
+    if completed
+        .installer_operating_system
+        .as_deref()
+        .is_some_and(|os| os.eq_ignore_ascii_case("linux"))
+    {
+        completed.compatibility = None;
+    }
+    completed
 }
 
 fn run_windows_installation(
@@ -1438,6 +1445,62 @@ mod tests {
         installation::marker::{InstallationMarker, InstalledCompatibility, InstalledComponent},
     };
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn native_completion_drops_stale_runtime_at_each_checkpoint() {
+        let marker = InstallationMarker {
+            schema_version: 2,
+            product_id: 7,
+            slug: "game".into(),
+            base: InstalledComponent {
+                operating_system: Some("LiNuX".into()),
+                language: Some("English".into()),
+                version: Some("2.1.9".into()),
+                revision_id: None,
+                installed_at: 1,
+            },
+            dlc: vec![],
+            compatibility: Some(InstalledCompatibility {
+                backend: crate::compatibility::CompatibilityBackendKind::Umu,
+                managed_by_ludomere: true,
+                prefix_slug: "game".into(),
+                profile: crate::compatibility::UmuProfile::fallback(),
+            }),
+            source: InstallationSource::OfflineInstaller,
+            galaxy_depot: None,
+            launch: None,
+            dependencies: vec![],
+        };
+        let mut plan = super::super::marker::game_from_marker(
+            &marker,
+            "test".into(),
+            PathBuf::from("/synthetic/game"),
+            None,
+        );
+        plan.state = InstallationState::Pending;
+        plan.error = Some("previous attempt".into());
+        plan.launch_arguments = vec!["--retained".into()];
+        plan.last_played_at = Some(10);
+        plan.playtime_seconds = 123;
+        let original = plan.clone();
+        for now in [20, 30] {
+            let executable = Some(plan.installation_directory.join("start.sh"));
+            let completed = native_completion(&plan, executable.clone(), now);
+            assert_eq!(completed.state, InstallationState::Installed);
+            assert_eq!(completed.error, None);
+            assert_eq!(completed.primary_executable, executable);
+            assert_eq!(completed.installed_at, Some(now));
+            assert_eq!(completed.updated_at, now);
+            assert_eq!(completed.compatibility, None);
+            assert_eq!(completed.launch_arguments, original.launch_arguments);
+            assert_eq!(completed.last_played_at, original.last_played_at);
+            assert_eq!(completed.playtime_seconds, original.playtime_seconds);
+            let marker = super::super::marker::from_game(&completed, vec![]);
+            marker.validate().unwrap();
+            assert_eq!(marker.schema_version, 1);
+        }
+        assert_eq!(plan, original);
+    }
 
     #[test]
     fn umu_log_tail_reads_only_appends_and_bounds_incomplete_lines() {

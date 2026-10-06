@@ -19,6 +19,12 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P351 live Collections Tab shows a clear game-card focus ring and Enter opens its detail view.
+  Gungeon's temporary favorite was restored; screenshot favorite-restored confirms Removed from
+  favorites and an empty star. P353 Storage wording fits the990x700 settings window; normal outer
+  scroll reaches lower controls. P350 Recheck completed too quickly to capture its busy appearance;
+  deterministic fixture, not the live screenshot, establishes the pending state.
+
 - Additional live controls: Comet manual check shows immediate checking/disabled button and
   returns to up-to-date; downloaded-file index reports one indexed/matched archive without changing
   payloads. Metadata refresh shows Game list500/569 and completes with Library synchronized in
@@ -57,6 +63,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P352 — separate native installs from retained Windows preferences
+
+- Real Linux Gungeon reinstall inherited a saved UMU profile, wrote a contradictory marker and
+  incorrectly offered Windows prefix repair. Explicit Linux preparation, completion, marker
+  construction and reconciliation now keep native runtime state independent of Windows settings.
+- Preserve complete durable Windows preferences, including pending profile, when native executable
+  discovery saves preferences. Windows marker fallback and missing-prefix installedness remain.
+  Recover only the identified native/offline/managed-UMU marker shape in memory; future and other
+  contradictory markers stay strict. No prefix deletion, on-read rewrite or schema change.
+- Independent source review and four private regressions PASS, covering multipart preparation,
+  both native completion points, exact recovery/rejected counterexamples and repeated full/targeted
+  reconciliation with activity/preferences/raw-file preservation. Formatting/Clippy/build PASS.
+  Live native retry remains pending; original failed marker is retained for that check.
 
 ### P325 — retain search while changing library filters
 

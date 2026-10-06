@@ -4,6 +4,16 @@ Last meaningful update: 2026-10-06.
 
 ## R111 active — interactive audit
 
+- P352 four focused private native/Windows preparation, marker, completion and reconciliation
+  regressions PASS; independent implementation review, fmt/Clippy/build PASS. Commit next, then
+  live native Gungeon retry. P354 isolated implementation; P355/P356 source follow-up reviews.
+
+- At11:06 UTC, P352 independent implementation review PASS; four-file integration and focused
+  gates next. P354 approved for isolated initial Files worker implementation under reviewed
+  lifecycle/profile-reset and honest loading/error constraints. Live Collections Tab/Enter works;
+  temporary Gungeon favorite restored. P353 drive/library wording fits and footer is reachable.
+  Native Gungeon remains unlaunched pending P352; no Windows repair accepted for native files.
+
 - P353 independent copy/layout review and fmt/Clippy/build PASS; no test added for wording-only
   change. P352 prevention/recovery implementation isolated. P354 source audit confirms initial
   Files construction performs more GTK I/O than summary alone; bounded snapshot proposal pending,

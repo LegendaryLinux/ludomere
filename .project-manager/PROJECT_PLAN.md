@@ -80,7 +80,7 @@
 - P351 (complete, performance_audit; reviewer ui_critic): native keyboard activation/accessibility for
   individual Collections game tiles, preserving collection membership and index-button behavior.
   Isolated collections.rs and minimal style only; synthetic mapped lifecycle/accessibility gate.
-- P352 (in_progress, performance_audit; reviewer file_summary): approved explicit-Linux suppression
+- P352 (complete, performance_audit; reviewer file_summary): approved explicit-Linux suppression
   across auto-install/native completion/reconciliation and native-save Windows-preference retention.
   Normalize only identified schema2/Linux/offline matching-managed-UMU/no-provenance shape in memory;
   future/unknown shapes stay strict, Windows missing-prefix stays installed, unknown OS policy stays.
@@ -88,9 +88,15 @@
 - P353 (complete, ui_critic; reviewer file_summary): clarify that Storage capacity bar covers the
   containing drive while managed category totals cover the selected library. Wording/layout only
   in isolated storage.rs; preserve arithmetic/workers and P350 feedback; verify narrow layout.
-- P354 (pending proposal, ui_critic): inspect initial Files page GTK database/filesystem work and
-  propose bounded loading/worker conversion using existing request/session guards. No edits before
-  review; retain usable actions and avoid new general UI/state frameworks or duplicate workers.
+- P354 (in_progress, ui_critic; reviewer file_summary): reviewed initial Files worker conversion,
+  own isolated files.rs and necessary mod.rs summary seam. One scoped data preparation reused for
+  rows/totals, immediate loading and retryable failures, no initial GTK I/O or false empty actions.
+  Preserve session/auth/detail/local-revision/weak lifetime and pre-spawn profile guards; private
+  held-lock/heartbeat/state/lifecycle tests required. No later action-policy or generic framework.
+- P355 (in_progress, performance_audit): source-only native/Windows launch and operation boundary
+  audit following P352; concrete defects and bounded proposals only, no implementation/data access.
+- P356 (in_progress, file_summary): source-only remaining Settings/account/file-control no-op and
+  busy feedback review; exclude P354 initial Files worker. Report proposals before changes.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.
