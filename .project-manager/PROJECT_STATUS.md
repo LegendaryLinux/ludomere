@@ -5,10 +5,10 @@ Last meaningful update: 2026-10-06.
 ## R111 active — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
-  improvement/interactive-ux-audit-2026-10-06; HEADc3bc9ef. Root alone uses real wallet/profile/
+  improvement/interactive-ux-audit-2026-10-06; HEAD9eb5cf4. Root alone uses real wallet/profile/
   desktop/game data. Normal cloud sync allowed, no deliberate cloud deletion. Reserve9GB of40GB
   test allowance for Gungeon/Coffee Talk. No push, PR, package, version or schema change.
-- Delivered35 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
+- Delivered36 separate commits, each with exact post-commit cargo build PASS. Detailed outcomes,
   focused evidence, limitations and live tests are in R111_AUDIT.md; git history retains each set.
   Latest P352 prevents native installs inheriting saved Windows runtime state and preserves those
   durable preferences. Its follow-up shares narrow read normalization with protected Storage
@@ -55,9 +55,17 @@ Last meaningful update: 2026-10-06.
   P360 malformed preference decoding assessment deferred: a strict-reader-only patch would abort
   whole reconciliation and cannot be repaired from current Properties. Needs separate safe
   per-game recovery/writer protection; no malformed actual user data was inspected or claimed.
+- P364 verified: independent review, actual inert-dispatch GTK fixture and existing stale-backend
+  regression, formatting/Clippy/compilation PASS. Clippy module placement and initial fixture's
+  effective visibility assumption corrected without production changes or weakened sentinel checks.
+  P365 full identity design rejected for unrelated-download blocking and unknown-marker lockout;
+  narrower atomic launch-only persistence/unchanged-save fix approved, full stale context deferred.
+  P366 Account empty feedback gap reviewed; P367 live repair chooser clipping confirmed and assigned.
 - Use normal windowquit for game windows and app tray Close; X11 windowclose destroys a window
   without proving process exit. Live client b3f9227: native Gungeon removal completed and retained
-  both registered archives; Download/arrow updated in place. Cached Linux reinstall next.
+  both registered archives; Download/arrow updated in place. Cached Linux reinstall writes native
+  schema1 with no compatibility data; game renders menu, normal exit restores Play/search.
+  Coffee Talk installed-Master branch no-op reproduced without branch/password change; P363 fixed.
   Actual game markers/data remain private; subagents receive only normalized diagnostic facts.
 
 ## R110 complete — 0.3.2 release and new PR

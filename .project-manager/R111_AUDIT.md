@@ -24,6 +24,21 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- Native Gungeon Repair offers reinstall/Browse/reset instead of Depot repair; no files changed.
+  Review Reinstallation then remains in420x180 dialog, visibly clipping installer choices while
+  Install stays available. Rechecked after loading, cancelled without installing. P367 assigned
+  concrete handoff-size/layout fix; do not claim native repair end-to-end PASS from this flow.
+
+- Settings Proton shows full selected runtime path, automatically reports Steam Linux Runtime
+  found and disables its unnecessary download action. Public Load releases populates choices and
+  enables download selection without changing the installed default or downloading a runtime.
+  Account Connection shows Online and authenticated. No sign-out/reset or runtime change tested.
+
+- Coffee Talk Properties onb3f9227 reproduced Switch-on-installed-Master refusal without changing
+  branch/password; P363 addresses the verified pointless action. Read-only Cloud storage Check now
+  completes with No remote save files/0B, in place. Normal sync setting remains enabled; no export,
+  forced sync, cloud deletion or other settings change. Properties closed normally.
+
 - Onb3f9227 initial Offline Installers shows both retained Gungeon archives/checkmarks/638MB.
   Confirmed native removal with archive deletion unchecked reports one game directory removed,
   zero prefixes and two archives retained. Detail changes to Download without reopening; arrow
@@ -89,6 +104,20 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
   deletion or real uninstall performed. Installation used the application's normal helper flow.
 
 ## Fixes
+
+### P364 — show update-check progress and results inside Settings
+
+- Immediately disable duplicate check activation and show local pending/result/refusal/error text.
+  Keep full redacted diagnostics selectable/wrapping, restore deliberate retry after terminal or
+  stale sessions, and release weak page controls on close. Background work retains normal behavior.
+- Keep pending feedback local so automatic/duplicate checks cannot clear unrelated main progress.
+  Main result notifications retain existing policy; already-running does not promise a notification.
+  Original click-time epoch/auth/online checks reject stale UI results, not already-queued work.
+- Independent review, actual production-dispatch/inert-outcome mapped fixture (p364-17h3duxl),
+  existing backend stale test (p364-fls7izo3), formatting/Clippy/compilation PASS. Fixture covers both
+  duplicate orderings, reentrant retry, session changes, long redacted errors and destruction; no
+  real batch updates run. Initial lint test placement and hidden-main effective-visibility assertion
+  corrected in tests only, preserving main sentinel own visibility/text and mapped Settings checks.
 
 ### P363 — explain unavailable branch actions
 

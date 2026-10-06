@@ -139,15 +139,30 @@
   and preserve preparation/success handoff state across selection changes. Forget stays disabled
   during preparation that may save a password. No credential probe or real data; synthetic actual
   controls regression required, existing handlers/session/password semantics unchanged.
-- P364 (in_progress, performance_audit; reviewer ui_critic): Settings-local check busy/result feedback,
+- P364 (complete, performance_audit; reviewer ui_critic): Settings-local check busy/result feedback,
   guarded duplicate clicks and weak click-time session-bound completion. Own isolated update_policies.rs.
   Review rejects shared main progress clearing: keep pending feedback local and main terminal
   notification policy unchanged. Already-running must not promise a notification. Synthetic actual
   dispatch/lifecycle/redaction/order tests required; no backend policy/queue/cancel/timeout changes.
-- P365 (in_progress diagnosis, file_summary): assess reused Properties snapshots after installation
-  changes, including stale launch/profile persistence on focus leave/unmap. Source-only proposal
-  before edits; require stale-save rejection, no blind close/rebuild that flushes obsolete data.
-  Exclude P363 branch eligibility ownership and any actual profile/account inspection.
+- P365 (full identity fix deferred; narrowed P365a pending, file_summary; reviewer ui_critic):
+  full design rejected because global gate blocks launch edits for unrelated full downloads and
+  initially unknown marker forces close/reopen. P365a limited to atomic launch-only SQL preserving
+  unrelated raw preferences, plus unchanged initial autosave suppression. Own game_settings.rs/state.rs
+  only after reviewer acceptance; no sections field, new lock, marker/body invalidation or claim
+  that stale installation identity is fully fixed. No real data; preserve changed-save retries.
+- P366 (in_progress, file_summary; reviewer performance_audit): hide Account's empty reset-status
+  scroller with one-way own-visible binding to label. Own isolated settings.rs and existing P359
+  fixture: synthetic long error mapping/scroll/collapse, no actual Factory Reset or private screenshot.
+- P367 (in_progress, ui_critic; reviewer performance_audit): live native Repair fallback has edge-touching generic
+  text/blank title; Review Reinstallation reuses tiny inspection dialog and clips installer rows
+  while Install stays visible. Reviewed fix owns isolated download_chooser.rs; preserve
+  actual repair/reinstall/reset/Browse consent and data flow. Only specifically named app screenshots
+  authorized for critic, no profile access. Root cancelled without starting another installation.
+  Standard full-chooser dimensions/title, padded scrolling fallback and hidden terminal spinner;
+  require actual source-row viewport intersection/reachable controls, not only requested sizes.
+- P368 (in_progress diagnosis, performance_audit): root finds repair inspection worker opens/reconciles StateStore without
+  pre-spawn activity/original-session guard; receiver alone checks epoch. Separate lifecycle review
+  needed after P367 ownership clears, no unreviewed worker edits mixed into layout fix.
 - Root owns real authenticated desktop testing, the transfer/disk budget, findings records,
   task assignments, review and per-change commits. Any implementation gets bounded ownership;
   other agents independently review changes. Do not duplicate shared-file work or run real helpers.
