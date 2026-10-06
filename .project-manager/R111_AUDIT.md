@@ -38,6 +38,18 @@ Main fast-forwarded to `5c0d5cb`; no upstream merge, push or new PR.
 
 ## Live testing
 
+- P394 private actual editor/SQLite gate PASS p270-o18ygr8z: empty/whitespace/cleared eligibility,
+  Entry activation trims and saves once, effective parent sensitivity blocks programmatic duplicate
+  signals, refusal restores correct eligibility and preserves tags. Prior Manage/visibility/session
+  regressions retained. Independent source GO, fmt/compile/Clippy PASS; only known private
+  GSettings warnings. No actual personal tags changed; signal test is not physical keyboard proof.
+
+- P392 commit7654459 exact post-build PASS (64 built audit commits). P393 first actual-builder
+  fixture fails its component weak-release wait (p393-0yxu5614, files.rs7353), after earlier
+  action ordering assertions; retained P385 passes p385-n8oy19t9. Compilation/fmt/Clippy pass.
+  Candidate removed from main pending author ownership diagnosis; no lifecycle assertion waived.
+  No product commit for P393 yet. P394 tag interaction gates proceed independently.
+
 - P392 strict launch gate PASS p392-dlgfz8zp under independently reviewed root-only X11
   wrapper: private profile/bus and inert backend, real desktop focus only for its verified PID/
   title. Original active/post-Starting assertions unchanged; Broadway failure retained. Only

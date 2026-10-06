@@ -2,6 +2,13 @@
 
 ## R111 interactive audit
 
+- P398 (in_progress, ui_critic; reviewer performance_audit): Downloads folder-button eligibility
+  uses nonempty path, not a GTK-thread directory stat; existing off-thread validation/launcher
+  reports missing/inaccessible paths on explicit click. Own isolated details.rs helper expression
+  and any already-existing pertinent fixture only, no new worker/cache/test framework. Empty
+  path stays disabled; all path safety preserved. Root accepts actionable error vs silent disabled
+  for nonempty missing destinations as bounded R111 feedback/performance improvement.
+
 - P397 (in_progress, performance_audit; reviewer file_summary): operation-log refresh registers
   activity before spawn and retains original session through profile I/O/publication. Own
   isolated details.rs log worker and existing focused fixture only. Preserve partial results,
@@ -14,10 +21,11 @@
   signed-out local use and error handling. No profile-activity redesign or new chooser; no real
   file manager by agents. Root gates. Source-backed R111 unwanted delayed-focus finding.
 
-- P394 (in_progress, ui_critic; reviewer performance_audit): Add tag disabled for empty/whitespace,
+- P394 (complete, ui_critic; reviewer performance_audit): Add tag disabled for empty/whitespace,
   native Enter submits same eligible action. Own organization.rs and existing synthetic fixture
   in isolated checkout; retain backend/session guards, parent-busy refusal and tag semantics.
   No actual tag changes by agents; root focused gates/build. Source-backed R111 UI no-op finding.
+  Actual private editor/SQLite regression p270-o18ygr8z PASS; fmt/Clippy/compile PASS.
 - P395 (in_progress, file_summary; reviewer ui_critic): clarify retired Achievements/Logs guidance to Home then reopen, matching
   actual detail identity reset. Copy only, no automatic navigation or account rebinding.
   Isolated achievements.rs/logs.rs strings and necessary exact expectation only; no extra fixture.
