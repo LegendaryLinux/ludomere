@@ -1,5 +1,12 @@
 # Project specification
 
+## R112 version 0.4.0 and audit publication — 2026-10-06
+
+User requests version 0.4.0 and a new upstream PR explaining all changes and improvements.
+The preceding request authorized pushing the completed audit branch, now published through
+19d64fa. Authorize consistent release metadata, verification, commit/push and PR creation;
+no additional product features, package installation or real-account testing are requested.
+
 ## R111 interactive UX, reliability and performance audit (2026-10-06)
 
 Additional user direction during live testing: Ludomere should find and attempt to use the

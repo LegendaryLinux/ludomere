@@ -2,6 +2,20 @@
 
 Last meaningful update: 2026-10-06.
 
+## R112 in progress — release 0.4.0 and PR
+
+- Audit branch pushed through19d64fa under the preceding explicit user request.
+- User now authorizes0.4.0 metadata and new upstream PR with all changes explained.
+- Upstream fetch remainsf4bee36; PR includes0.3.2 root-tolerance changes and82 audit fixes.
+- Version worker release_040 and independent inventory reviewer pr_inventory assigned.
+  Root owns isolated verification, records, commit/push and publication.
+- Four-file version change independently reviewed; root diff check and fresh isolated0.4.0
+  gate PASS: fmt, all-target Clippy-Dwarnings,574 library tests, six integration tests,
+  five Python tests and cargo build --locked.95 library tests remain opt-in; affected GTK
+  gates were exercised during the audit. Log:/tmp/ludomere-r111-full-build-y46dprrk/build.log.
+- Complete hash-covered change inventory reviewed at/tmp/ludomere-040-pr-inventory.md.
+  Publication pending; no additional product changes or actual-account tests were needed.
+
 ## R111 complete within the authorized window — interactive audit
 
 - Authorized window08:13:55–20:13:55 UTC on2026-10-06, or interruption/quota. Branch
