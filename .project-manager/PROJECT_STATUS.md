@@ -2,7 +2,7 @@
 
 Last meaningful update: 2026-10-06.
 
-## R112 in progress — release 0.4.0 and PR
+## R112 complete — release 0.4.0 and PR
 
 - Audit branch pushed through19d64fa under the preceding explicit user request.
 - User now authorizes0.4.0 metadata and new upstream PR with all changes explained.
@@ -14,7 +14,10 @@ Last meaningful update: 2026-10-06.
   five Python tests and cargo build --locked.95 library tests remain opt-in; affected GTK
   gates were exercised during the audit. Log:/tmp/ludomere-r111-full-build-y46dprrk/build.log.
 - Complete hash-covered change inventory reviewed at/tmp/ludomere-040-pr-inventory.md.
-  Publication pending; no additional product changes or actual-account tests were needed.
+  Released metadata commit d011c07 pushed with an exact post-commit build pass.
+  Upstream/main PR: https://github.com/KonoTyran/ludomere/pull/9. Grouped description covers
+  all delivered behavior, verification and outstanding manual/deferred work. No additional
+  product changes or actual-account tests were needed. This closeout changes records only.
 
 ## R111 complete within the authorized window — interactive audit
 

@@ -7,8 +7,8 @@
   the exact diff; isolated full build passes.
 - P414 (complete, pr_inventory): hash-covered inventory of every upstream-diff behavior
   reviewed for the PR, with delivered fixes distinguished from remaining manual coverage.
-- Root: review metadata, verification and inventory, commit/push, then create the requested
-  PR against upstream/main. No package build/install or additional real-profile operations.
+- Root (complete): reviewed metadata, verification and inventory, committed/pushed d011c07,
+  and created upstream/main PR9. No package build/install or additional real-profile operations.
 
 ## R111 interactive audit
 
